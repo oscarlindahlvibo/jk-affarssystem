@@ -8,7 +8,7 @@ import { useStore } from "../../data/store";
 import { PROJECT_TEMPLATES, TEMPLATE_DESCRIPTIONS, TEMPLATE_TASKS } from "../../data/templates";
 import { evaluateTransportRules, suggestedFollowVehicleTask, RULE_SOURCE_NOTE } from "../../lib/transportRules";
 import { TransportRuleList } from "./TransportRuleList";
-import type { TransportType, ProjectTemplateKey, Project, Location } from "../../types";
+import { INVOICE_STATUSES, type TransportType, type ProjectTemplateKey, type Project, type Location, type InvoiceStatus } from "../../types";
 
 const TRANSPORT_TYPES: TransportType[] = [
   "Specialtransport",
@@ -69,6 +69,9 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
   const [customerReference, setCustomerReference] = useState(project?.customer_reference ?? "");
   const [sourceDocumentRef, setSourceDocumentRef] = useState(project?.source_document_ref ?? "");
   const [carrierOrderNumber, setCarrierOrderNumber] = useState(project?.carrier_order_number ?? "");
+  const [price, setPrice] = useState(project?.price?.toString() ?? "");
+  const [cost, setCost] = useState(project?.cost?.toString() ?? "");
+  const [invoiceStatus, setInvoiceStatus] = useState<InvoiceStatus>(project?.invoice_status ?? "Ej fakturerad");
 
   const [cargoDescription, setCargoDescription] = useState(existingCargo?.description ?? "");
   const [length, setLength] = useState(existingCargo?.length_m?.toString() ?? "");
@@ -232,6 +235,9 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
       planned_loading_date: loadingDate || null,
       planned_delivery_date: deliveryDate || null,
       supplier_id: supplierId || null,
+      price: numOrNull(price),
+      cost: numOrNull(cost),
+      invoice_status: invoiceStatus,
       customer_reference: customerReference || null,
       source_document_ref: sourceDocumentRef || null,
       vehicle: vehicle || null,
@@ -251,9 +257,6 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
     const created = addProject({
       project_number: nextProjectNumber(projects),
       status: "Ny",
-      price: null,
-      cost: null,
-      invoice_status: "Ej fakturerad",
       ...sharedFields,
     });
 
@@ -459,6 +462,25 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
           <Field label="Särskilda krav">
             <textarea rows={2} className={`mt-4 ${inputClass}`} value={specialRequirements ?? ""} onChange={(e) => setSpecialRequirements(e.target.value)} placeholder="t.ex. kräver dispens och följebil" />
           </Field>
+        </div>
+
+        <div className="border-t border-border pt-4">
+          <h3 className="mb-3 text-sm font-semibold text-slate-700">Ekonomi</h3>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Field label="Pris / offert (kr)">
+              <input inputMode="decimal" className={inputClass} value={price} onChange={(e) => setPrice(e.target.value)} />
+            </Field>
+            <Field label="Kostnad (kr)">
+              <input inputMode="decimal" className={inputClass} value={cost} onChange={(e) => setCost(e.target.value)} />
+            </Field>
+            <Field label="Faktureringsstatus">
+              <select className={inputClass} value={invoiceStatus} onChange={(e) => setInvoiceStatus(e.target.value as InvoiceStatus)}>
+                {INVOICE_STATUSES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
         </div>
 
         <div className="border-t border-border pt-4">

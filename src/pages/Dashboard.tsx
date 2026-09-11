@@ -73,25 +73,29 @@ export function Dashboard() {
   }, [projects]);
 
   const cards = [
-    { label: "Nya förfrågningar", value: stats.nya, icon: Inbox, color: "bg-slate-100 text-slate-600" },
-    { label: "Under planering", value: stats.planering, icon: ClipboardList, color: "bg-cyan-100 text-cyan-700" },
-    { label: "Transporter denna vecka", value: stats.transporterVecka, icon: Truck, color: "bg-orange-100 text-orange-700" },
-    { label: "Väntar på kund", value: stats.vantarKund, icon: Clock, color: "bg-amber-100 text-amber-700" },
-    { label: "Väntar på tillstånd", value: stats.vantarTillstand, icon: FileWarning, color: "bg-rose-100 text-rose-700" },
-    { label: "Klara för fakturering", value: stats.klarFakturering, icon: CheckCircle2, color: "bg-green-100 text-green-700" },
+    { label: "Nya förfrågningar", value: stats.nya, icon: Inbox, color: "bg-slate-100 text-slate-600", to: "/projekt?filter=nya" },
+    { label: "Under planering", value: stats.planering, icon: ClipboardList, color: "bg-cyan-100 text-cyan-700", to: "/projekt?filter=planering" },
+    { label: "Transporter denna vecka", value: stats.transporterVecka, icon: Truck, color: "bg-orange-100 text-orange-700", to: "/projekt?filter=denna-vecka" },
+    { label: "Väntar på kund", value: stats.vantarKund, icon: Clock, color: "bg-amber-100 text-amber-700", to: "/projekt?filter=vantar-kund" },
+    { label: "Väntar på tillstånd", value: stats.vantarTillstand, icon: FileWarning, color: "bg-rose-100 text-rose-700", to: "/projekt?filter=vantar-tillstand" },
+    { label: "Klara för fakturering", value: stats.klarFakturering, icon: CheckCircle2, color: "bg-green-100 text-green-700", to: "/projekt?filter=klar-fakturering" },
   ];
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-        {cards.map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="rounded-xl border border-border bg-panel p-4 shadow-sm">
+        {cards.map(({ label, value, icon: Icon, color, to }) => (
+          <Link
+            key={label}
+            to={to}
+            className="group rounded-xl border border-border bg-panel p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-orange-100"
+          >
             <div className={`mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg ${color}`}>
               <Icon size={18} />
             </div>
-            <div className="text-2xl font-semibold text-slate-800">{value}</div>
+            <div className="text-2xl font-semibold text-slate-800 group-hover:text-orange-600">{value}</div>
             <div className="text-xs text-slate-500">{label}</div>
-          </div>
+          </Link>
         ))}
       </div>
 

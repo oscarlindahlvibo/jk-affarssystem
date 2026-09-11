@@ -20,6 +20,7 @@ type QuickFilter =
   | "ruttkontroll"
   | "denna-vecka"
   | "vantar-kund"
+  | "vantar-tillstand"
   | "klar-fakturering"
   | "saknar-uppgifter"
   | "kraver-foljebil";
@@ -31,6 +32,7 @@ const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
   { key: "ruttkontroll", label: "Ruttkontroll" },
   { key: "denna-vecka", label: "Denna vecka" },
   { key: "vantar-kund", label: "Väntar på kund" },
+  { key: "vantar-tillstand", label: "Väntar på tillstånd" },
   { key: "klar-fakturering", label: "Klar för fakturering" },
   { key: "saknar-uppgifter", label: "Saknar uppgifter" },
   { key: "kraver-foljebil", label: "Kräver följebil" },
@@ -65,13 +67,15 @@ function matchesQuickFilter(p: Project, filter: QuickFilter): boolean {
     case "nya":
       return p.status === "Ny";
     case "planering":
-      return ["Planering", "Order", "Under kalkylering", "Offert skickad"].includes(p.status);
+      return ["Planering", "Ruttkontroll", "Order"].includes(p.status);
     case "ruttkontroll":
       return p.status === "Ruttkontroll";
     case "denna-vecka":
       return isThisWeek(p.planned_loading_date) || isThisWeek(p.planned_delivery_date);
     case "vantar-kund":
       return p.status === "Väntar på kund";
+    case "vantar-tillstand":
+      return p.status === "Tillstånd";
     case "klar-fakturering":
       return p.status === "Klar för fakturering";
     case "saknar-uppgifter":
@@ -115,6 +119,7 @@ export function ProjectList() {
       ruttkontroll: 0,
       "denna-vecka": 0,
       "vantar-kund": 0,
+      "vantar-tillstand": 0,
       "klar-fakturering": 0,
       "saknar-uppgifter": 0,
       "kraver-foljebil": 0,

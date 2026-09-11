@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, MapPin, Building2, User, AlertTriangle, Printer, Pencil } from "lucide-react";
+import { ArrowLeft, MapPin, Building2, User, AlertTriangle, Printer, Pencil, Save } from "lucide-react";
 import { useStore } from "../data/store";
 import { Panel } from "../components/ui/Panel";
 import { StatusBadge } from "../components/ui/StatusBadge";
@@ -17,6 +17,8 @@ import { TransportRuleList } from "../components/projects/TransportRuleList";
 import { getMissingFields } from "../lib/validation";
 import { evaluateTransportRules, RULE_SOURCE_NOTE } from "../lib/transportRules";
 import { usePermissions } from "../lib/usePermissions";
+import { inputClass } from "../components/ui/Field";
+import type { Project } from "../types";
 
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -24,6 +26,84 @@ function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
       <div className="text-xs text-slate-500">{label}</div>
       <div className="break-words text-sm font-medium text-slate-800">{value ?? "–"}</div>
     </div>
+  );
+}
+
+function numOrNull(v: string): number | null {
+  if (!v.trim()) return null;
+  const n = parseFloat(v.replace(",", "."));
+  return Number.isNaN(n) ? null : n;
+}
+
+function money(value: number | null) {
+  return value !== null ? `${value.toLocaleString("sv-SE")} kr` : undefined;
+}
+
+function FinancePanel({
+  project,
+  canEdit,
+  onSave,
+}: {
+  project: Project;
+  canEdit: boolean;
+  onSave: (patch: Pick<Project, "price" | "cost" | "invoice_status">) => void;
+}) {
+  const [price, setPrice] = useState(project.price?.toString() ?? "");
+  const [cost, setCost] = useState(project.cost?.toString() ?? "");
+  const [invoiceStatus, setInvoiceStatus] = useState(project.invoice_status);
+
+  const parsedPrice = numOrNull(price);
+  const parsedCost = numOrNull(cost);
+  const hasChanges =
+    parsedPrice !== project.price ||
+    parsedCost !== project.cost ||
+    invoiceStatus !== project.invoice_status;
+
+  if (!canEdit) {
+    return (
+      <Panel title="Ekonomi">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <InfoItem label="Pris / offert" value={money(project.price)} />
+          <InfoItem label="Kostnad" value={money(project.cost)} />
+          {project.price !== null && project.cost !== null && <InfoItem label="Vinst" value={money(project.price - project.cost)} />}
+          <InfoItem label="Faktureringsstatus" value={project.invoice_status} />
+        </div>
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel title="Ekonomi">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <label className="block text-sm">
+          <span className="mb-1 block text-xs text-slate-500">Pris / offert</span>
+          <input inputMode="decimal" className={inputClass} value={price} onChange={(e) => setPrice(e.target.value)} placeholder="kr" />
+        </label>
+        <label className="block text-sm">
+          <span className="mb-1 block text-xs text-slate-500">Kostnad</span>
+          <input inputMode="decimal" className={inputClass} value={cost} onChange={(e) => setCost(e.target.value)} placeholder="kr" />
+        </label>
+        <InfoItem label="Vinst" value={parsedPrice !== null && parsedCost !== null ? money(parsedPrice - parsedCost) : undefined} />
+        <label className="block text-sm">
+          <span className="mb-1 block text-xs text-slate-500">Faktureringsstatus</span>
+          <select className={inputClass} value={invoiceStatus} onChange={(e) => setInvoiceStatus(e.target.value as typeof project.invoice_status)}>
+            {INVOICE_STATUSES.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="mt-4 flex justify-end">
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={!hasChanges}
+          onClick={() => onSave({ price: parsedPrice, cost: parsedCost, invoice_status: invoiceStatus })}
+        >
+          <Save size={14} /> Spara ekonomi
+        </Button>
+      </div>
+    </Panel>
   );
 }
 
@@ -209,31 +289,12 @@ export function ProjectDetail() {
         </div>
 
         <div className="space-y-6">
-          <Panel title="Ekonomi">
-            <div className="grid grid-cols-2 gap-4">
-              <InfoItem label="Pris / offert" value={project.price !== null ? `${project.price.toLocaleString("sv-SE")} kr` : undefined} />
-              <InfoItem label="Kostnad" value={project.cost !== null ? `${project.cost.toLocaleString("sv-SE")} kr` : undefined} />
-              {project.price !== null && project.cost !== null && (
-                <InfoItem label="Vinst" value={`${(project.price - project.cost).toLocaleString("sv-SE")} kr`} />
-              )}
-              <div>
-                <div className="text-xs text-slate-500">Faktureringsstatus</div>
-                {permissions.canEditProjectFinance ? (
-                  <select
-                    value={project.invoice_status}
-                    onChange={(e) => updateProjectFinance(project.id, { invoice_status: e.target.value as typeof project.invoice_status })}
-                    className="mt-0.5 rounded-lg border border-border bg-white px-2 py-1 text-sm"
-                  >
-                    {INVOICE_STATUSES.map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <div className="text-sm font-medium text-slate-800">{project.invoice_status}</div>
-                )}
-              </div>
-            </div>
-          </Panel>
+          <FinancePanel
+            key={`${project.id}-${project.updated_at}`}
+            project={project}
+            canEdit={permissions.canEditProjectFinance}
+            onSave={(patch) => updateProjectFinance(project.id, patch)}
+          />
           <TasksSection projectId={project.id} tasks={project.tasks ?? []} />
           <MeasurementPanel link={project.measurement_link} />
         </div>
