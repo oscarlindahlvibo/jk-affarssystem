@@ -24,17 +24,17 @@ export function DocumentsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative">
+      <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-center">
+        <div className="relative min-w-0">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Sök dokument..."
-            className="w-72 rounded-lg border border-border bg-white py-2 pl-8 pr-3 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+            className="w-full rounded-lg border border-border bg-white py-2 pl-8 pr-3 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
           />
         </div>
-        <select value={category} onChange={(e) => setCategory(e.target.value as DocumentCategory | "")} className="rounded-lg border border-border bg-white px-3 py-2 text-sm">
+        <select value={category} onChange={(e) => setCategory(e.target.value as DocumentCategory | "")} className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm sm:w-auto">
           <option value="">Alla kategorier</option>
           {categories.map((c) => (
             <option key={c} value={c}>{c}</option>
@@ -42,7 +42,29 @@ export function DocumentsPage() {
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border bg-panel shadow-sm">
+      <div className="space-y-3 md:hidden">
+        {filtered.map((d) => (
+          <Link key={d.id} to={`/projekt/${d.project.id}`} className="block rounded-xl border border-border bg-panel p-4 shadow-sm">
+            <div className="flex items-start gap-3">
+              <FileText size={18} className="mt-0.5 shrink-0 text-slate-400" />
+              <div className="min-w-0 flex-1">
+                <div className="break-words text-sm font-semibold text-slate-800">{d.file_name}</div>
+                <div className="mt-1 text-xs text-slate-500">{d.project.project_number} · {d.category}</div>
+                <div className="mt-1 text-xs text-slate-500">{formatDateTime(d.uploaded_at)} · {d.uploaded_by}</div>
+                <div className="mt-2 flex items-center gap-1 text-xs text-slate-500">
+                  {d.visibility === "internal" ? <Lock size={12} /> : <Eye size={12} />}
+                  {d.visibility === "internal" ? "Internt" : "Kundsynligt"}
+                </div>
+              </div>
+            </div>
+          </Link>
+        ))}
+        {filtered.length === 0 && (
+          <div className="rounded-xl border border-border bg-panel px-4 py-10 text-center text-sm text-slate-500">Inga dokument matchar.</div>
+        )}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-xl border border-border bg-panel shadow-sm md:block">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-slate-50 text-xs uppercase tracking-wide text-slate-500">

@@ -28,7 +28,7 @@ export function CustomerList() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Sök kund, org.nr..."
-            className="w-72 rounded-lg border border-border bg-white py-2 pl-8 pr-3 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+            className="w-full rounded-lg border border-border bg-white py-2 pl-8 pr-3 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
           />
         </div>
         {canCreate && (

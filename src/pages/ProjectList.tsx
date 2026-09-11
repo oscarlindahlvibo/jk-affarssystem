@@ -183,17 +183,17 @@ export function ProjectList() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative w-full lg:w-auto">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Sök projektnummer, namn, kund..."
-            className="w-72 rounded-lg border border-border bg-white py-2 pl-8 pr-3 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+            className="w-full rounded-lg border border-border bg-white py-2 pl-8 pr-3 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 lg:w-72"
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {canCreate && (
             <Link to="/importera">
               <Button variant="secondary">
@@ -212,12 +212,12 @@ export function ProjectList() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
         {QUICK_FILTERS.map((f) => (
           <button
             key={f.key}
             onClick={() => setQuickFilter(f.key)}
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
               quickFilter === f.key
                 ? "border-orange-500 bg-orange-500 text-white"
                 : "border-border bg-white text-slate-600 hover:bg-slate-50"
@@ -231,33 +231,33 @@ export function ProjectList() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-3 rounded-xl border border-border bg-panel p-4 shadow-sm">
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-lg border border-border bg-white px-3 py-2 text-sm">
+      <div className="grid grid-cols-1 gap-3 rounded-xl border border-border bg-panel p-4 shadow-sm sm:grid-cols-2 xl:flex xl:flex-wrap">
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm xl:w-auto">
           <option value="">Alla statusar</option>
           {PROJECT_STATUSES.map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
-        <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className="rounded-lg border border-border bg-white px-3 py-2 text-sm">
+        <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm xl:w-auto">
           <option value="">Alla kunder</option>
           {customers.map((c) => (
             <option key={c.id} value={c.id}>{c.company_name}</option>
           ))}
         </select>
-        <select value={responsible} onChange={(e) => setResponsible(e.target.value)} className="rounded-lg border border-border bg-white px-3 py-2 text-sm">
+        <select value={responsible} onChange={(e) => setResponsible(e.target.value)} className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm xl:w-auto">
           <option value="">Alla ansvariga</option>
           {responsibleNames.map((r) => (
             <option key={r} value={r}>{r}</option>
           ))}
         </select>
-        <select value={measurement} onChange={(e) => setMeasurement(e.target.value as typeof measurement)} className="rounded-lg border border-border bg-white px-3 py-2 text-sm">
+        <select value={measurement} onChange={(e) => setMeasurement(e.target.value as typeof measurement)} className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm xl:w-auto">
           <option value="">Ruttmätning – alla</option>
           <option value="finns">Ruttmätning finns</option>
           <option value="saknas">Ruttmätning saknas</option>
         </select>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-500">Lastning från</span>
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-border bg-white px-3 py-2 text-sm" />
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 text-sm text-slate-500">Lastning från</span>
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-border bg-white px-3 py-2 text-sm xl:flex-none" />
         </div>
         {(status || customerId || responsible || measurement || dateFrom || search) && (
           <button
@@ -269,7 +269,62 @@ export function ProjectList() {
         )}
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-border bg-panel shadow-sm">
+      <div className="space-y-3 md:hidden">
+        {filtered.map((p) => {
+          const cargo = p.cargo_items?.[0];
+          const loading = p.locations?.find((l) => l.type === "lastning");
+          const unloading = p.locations?.find((l) => l.type === "lossning");
+          const missing = getMissingFields(p);
+          return (
+            <Link
+              key={p.id}
+              to={`/projekt/${p.id}`}
+              className={`block rounded-xl border border-border bg-panel p-4 shadow-sm ${missing.length > 0 ? "border-amber-200 bg-amber-50/50" : ""}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-slate-800">{p.project_number}</div>
+                  <div className="mt-0.5 line-clamp-2 text-sm text-slate-600">{p.name}</div>
+                  <div className="mt-1 text-xs text-slate-500">{p.customer?.company_name ?? "Kund saknas"}</div>
+                </div>
+                <StatusBadge status={p.status} />
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-slate-600">
+                <div className="min-w-0">
+                  <div className="text-slate-400">Från</div>
+                  <div className="truncate">{loading?.name ?? "–"}</div>
+                </div>
+                <div className="min-w-0">
+                  <div className="text-slate-400">Till</div>
+                  <div className="truncate">{unloading?.name ?? "–"}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400">Lastning</div>
+                  <div>{formatDate(p.planned_loading_date)}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400">Ansvarig</div>
+                  <div>{p.responsible?.full_name ?? "–"}</div>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                {cargo?.height_m && <span>H {cargo.height_m} m</span>}
+                {cargo?.width_m && <span>B {cargo.width_m} m</span>}
+                {cargo?.weight_ton && <span>{cargo.weight_ton} t</span>}
+                <span>{p.invoice_status}</span>
+              </div>
+              {missing.length > 0 && <div className="mt-3"><MissingFieldsBadge missing={missing} /></div>}
+            </Link>
+          );
+        })}
+        {filtered.length === 0 && (
+          <div className="rounded-xl border border-border bg-panel px-4 py-10 text-center text-sm text-slate-500">
+            Inga projekt matchar filtren.
+          </div>
+        )}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-xl border border-border bg-panel shadow-sm md:block">
         <table className="w-full min-w-[1400px] text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-slate-50 text-xs uppercase tracking-wide text-slate-500">

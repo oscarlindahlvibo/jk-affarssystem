@@ -287,7 +287,7 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
           <input required className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder="t.ex. Transformator Tingsryd till Växjö" />
         </Field>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Kund *">
             {!showNewCustomer ? (
               <div className="flex gap-2">
@@ -315,7 +315,7 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
                   </button>
                 </div>
                 <input className={inputClass} placeholder="Företagsnamn *" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} />
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <input className={inputClass} placeholder="Telefon" value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} />
                   <input className={inputClass} placeholder="E-post" value={newCustomerEmail} onChange={(e) => setNewCustomerEmail(e.target.value)} />
                 </div>
@@ -355,7 +355,7 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
                 </div>
                 <input className={inputClass} placeholder="Namn *" value={newContactName} onChange={(e) => setNewContactName(e.target.value)} />
                 <input className={inputClass} placeholder="Titel/roll" value={newContactRole} onChange={(e) => setNewContactRole(e.target.value)} />
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <input className={inputClass} placeholder="Telefon" value={newContactPhone} onChange={(e) => setNewContactPhone(e.target.value)} />
                   <input className={inputClass} placeholder="Mobil" value={newContactMobile} onChange={(e) => setNewContactMobile(e.target.value)} />
                 </div>
@@ -368,7 +368,7 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
           </Field>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Ansvarig hos JK">
             <select className={inputClass} value={responsibleId} onChange={(e) => setResponsibleId(e.target.value)}>
               <option value="">Välj ansvarig</option>
@@ -400,14 +400,14 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
 
         <div className="border-t border-border pt-4">
           <h3 className="mb-3 text-sm font-semibold text-slate-700">Transport</h3>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Lastningsplats">
               <input className={inputClass} value={loadingPlace} onChange={(e) => setLoadingPlace(e.target.value)} placeholder="Ort / adress" />
             </Field>
             <Field label="Lossningsplats">
               <input className={inputClass} value={unloadingPlace} onChange={(e) => setUnloadingPlace(e.target.value)} placeholder="Ort / adress" />
             </Field>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Field label="Kontakt vid lastning">
                 <input className={inputClass} value={loadingContactName ?? ""} onChange={(e) => setLoadingContactName(e.target.value)} placeholder="Namn" />
               </Field>
@@ -415,7 +415,7 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
                 <input className={inputClass} value={loadingContactPhone ?? ""} onChange={(e) => setLoadingContactPhone(e.target.value)} />
               </Field>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Field label="Kontakt vid lossning">
                 <input className={inputClass} value={unloadingContactName ?? ""} onChange={(e) => setUnloadingContactName(e.target.value)} placeholder="Namn" />
               </Field>
@@ -505,7 +505,7 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
               <input inputMode="numeric" className={inputClass} value={quantity} onChange={(e) => setQuantity(e.target.value)} />
             </Field>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-4">
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Lyftpunkter">
               <input className={inputClass} value={liftPoints ?? ""} onChange={(e) => setLiftPoints(e.target.value)} />
             </Field>

@@ -83,12 +83,12 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {cards.map(({ label, value, icon: Icon, color, to }) => (
           <Link
             key={label}
             to={to}
-            className="group rounded-xl border border-border bg-panel p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-orange-100"
+            className="group rounded-xl border border-border bg-panel p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-orange-100 sm:p-4"
           >
             <div className={`mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg ${color}`}>
               <Icon size={18} />
@@ -103,7 +103,7 @@ export function Dashboard() {
         <Panel title="Senaste aktivitet" className="lg:col-span-2">
           <ul className="divide-y divide-border">
             {recentActivity.map((p) => (
-              <li key={p.id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+              <li key={p.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <Link to={`/projekt/${p.id}`} className="text-sm font-medium text-slate-800 hover:text-orange-600">
                     {p.project_number} · {p.name}
@@ -112,7 +112,7 @@ export function Dashboard() {
                     {p.customer?.company_name} · uppdaterad {timeAgo(p.updated_at)}
                   </div>
                 </div>
-                <StatusBadge status={p.status} />
+                <div className="shrink-0"><StatusBadge status={p.status} /></div>
               </li>
             ))}
           </ul>
@@ -154,7 +154,7 @@ export function Dashboard() {
       >
         <ul className="divide-y divide-border">
           {incompleteProjects.map(({ project, missing }) => (
-            <li key={project.id} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
+              <li key={project.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
               <div className="min-w-0">
                 <Link to={`/projekt/${project.id}`} className="text-sm font-medium text-slate-800 hover:text-orange-600">
                   {project.project_number} · {project.name}
@@ -164,7 +164,7 @@ export function Dashboard() {
                   Saknar: {missing.map((m) => m.label).join(", ")}
                 </div>
               </div>
-              <StatusBadge status={project.status} />
+              <div className="shrink-0"><StatusBadge status={project.status} /></div>
             </li>
           ))}
           {incompleteProjects.length === 0 && (

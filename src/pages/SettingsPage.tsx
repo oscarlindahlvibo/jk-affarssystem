@@ -12,11 +12,11 @@ export function SettingsPage() {
   return (
     <div className="space-y-6">
       <Panel title="Anslutningar">
-        <div className="flex items-center gap-3 rounded-lg border border-border p-4">
+        <div className="flex flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-center">
           <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${isSupabaseConfigured ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
             <Database size={18} />
           </div>
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <div className="text-sm font-medium text-slate-800">Supabase (kunder, projekt, statusar)</div>
             <div className="text-xs text-slate-500">
               {isSupabaseConfigured
@@ -35,11 +35,11 @@ export function SettingsPage() {
           redo att köras direkt i ett Supabase-projekt.
         </p>
 
-        <div className="mt-4 flex items-center gap-3 rounded-lg border border-border p-4">
+        <div className="mt-4 flex flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-center">
           <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${drive.isConnected ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
             <HardDrive size={18} />
           </div>
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <div className="text-sm font-medium text-slate-800">Google Drive (dokumentfiler)</div>
             <div className="text-xs text-slate-500">
               {!drive.isConfigured
@@ -68,7 +68,16 @@ export function SettingsPage() {
       </Panel>
 
       <Panel title="Användare / roller">
-        <table className="w-full text-left text-sm">
+        <div className="space-y-3 md:hidden">
+          {profiles.map((p) => (
+            <div key={p.id} className="rounded-lg border border-border p-3">
+              <div className="font-medium text-slate-800">{p.full_name}</div>
+              <div className="mt-0.5 break-all text-xs text-slate-500">{p.email}</div>
+              <span className="status-pill mt-2 bg-navy-900/5 text-navy-900">{p.role}</span>
+            </div>
+          ))}
+        </div>
+        <table className="hidden w-full text-left text-sm md:table">
           <thead>
             <tr className="border-b border-border text-xs uppercase tracking-wide text-slate-500">
               <th className="py-2 font-medium">Namn</th>

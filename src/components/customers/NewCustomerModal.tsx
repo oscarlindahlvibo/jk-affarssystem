@@ -45,7 +45,7 @@ export function NewCustomerModal({ open, onClose }: { open: boolean; onClose: ()
         <Field label="Företagsnamn *">
           <input required className={inputClass} value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
         </Field>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Organisationsnummer">
             <input className={inputClass} value={orgNumber} onChange={(e) => setOrgNumber(e.target.value)} placeholder="XXXXXX-XXXX" />
           </Field>
@@ -56,7 +56,7 @@ export function NewCustomerModal({ open, onClose }: { open: boolean; onClose: ()
         <Field label="Fakturaadress">
           <input className={inputClass} value={invoiceAddress} onChange={(e) => setInvoiceAddress(e.target.value)} />
         </Field>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Telefon">
             <input className={inputClass} value={phone} onChange={(e) => setPhone(e.target.value)} />
           </Field>

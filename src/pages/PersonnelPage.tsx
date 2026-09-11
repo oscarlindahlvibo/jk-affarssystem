@@ -35,7 +35,7 @@ export function PersonnelPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-slate-500">
           Hantera vilka personer i bolaget som får använda systemet och vad de har behörighet till.
         </p>
@@ -52,7 +52,46 @@ export function PersonnelPage() {
       )}
 
       <Panel>
-        <table className="w-full text-left text-sm">
+        <div className="space-y-3 md:hidden">
+          {sorted.map((p) => (
+            <div key={p.id} className="rounded-lg border border-border p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-navy-900 text-xs font-semibold text-white">
+                    {p.initials}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate font-medium text-slate-800">
+                      {p.full_name} {p.id === currentProfile?.id && <span className="text-xs text-slate-400">(du)</span>}
+                    </div>
+                    <div className="break-all text-xs text-slate-500">{p.email}</div>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <button onClick={() => setEditing(p)} title="Redigera" className="text-slate-400 hover:text-orange-600">
+                    <Pencil size={15} />
+                  </button>
+                  {p.status === "inaktiverad" ? (
+                    <button onClick={() => handleReactivate(p.id)} title="Aktivera" className="text-slate-400 hover:text-green-600">
+                      <UserCheck size={15} />
+                    </button>
+                  ) : (
+                    p.id !== currentProfile?.id && (
+                      <button onClick={() => handleDeactivate(p.id)} title="Inaktivera" className="text-slate-400 hover:text-red-600">
+                        <UserX size={15} />
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span className="status-pill bg-navy-900/5 text-navy-900">{ROLE_LABELS[p.role]}</span>
+                <span className={`status-pill ${STATUS_BADGE[p.status]}`}>{USER_STATUS_LABELS[p.status]}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <table className="hidden w-full text-left text-sm md:table">
           <thead>
             <tr className="border-b border-border text-xs uppercase tracking-wide text-slate-500">
               <th className="py-2 font-medium">Namn</th>

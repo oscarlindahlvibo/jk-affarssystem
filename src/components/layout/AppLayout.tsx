@@ -1,4 +1,5 @@
 import { Outlet, useLocation } from "react-router-dom";
+import { useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
@@ -37,12 +38,14 @@ function matchPath(pattern: string, pathname: string) {
 
 export function AppLayout() {
   const title = useTitle();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
-    <div className="flex h-screen bg-surface">
-      <Sidebar />
+    <div className="flex min-h-screen bg-surface">
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar title={title} />
-        <main className="flex-1 overflow-y-auto p-6">
+        <Topbar title={title} onMenuClick={() => setSidebarOpen(true)} />
+        <main className="min-w-0 flex-1 p-4 sm:p-6">
           <Outlet />
         </main>
       </div>

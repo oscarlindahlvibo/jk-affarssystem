@@ -216,7 +216,7 @@ function EditCustomerForm({
       <Field label="Företagsnamn *">
         <input required className={inputClass} value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} />
       </Field>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Organisationsnummer">
           <input className={inputClass} value={form.org_number} onChange={(e) => setForm({ ...form, org_number: e.target.value })} />
         </Field>
@@ -227,7 +227,7 @@ function EditCustomerForm({
           </select>
         </Field>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Fakturaadress">
           <input className={inputClass} value={form.invoice_address} onChange={(e) => setForm({ ...form, invoice_address: e.target.value })} />
         </Field>
@@ -314,7 +314,7 @@ function NewContactForm({
       <Field label="Titel/roll">
         <input className={inputClass} value={role} onChange={(e) => setRole(e.target.value)} />
       </Field>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Telefon">
           <input className={inputClass} value={phone} onChange={(e) => setPhone(e.target.value)} />
         </Field>

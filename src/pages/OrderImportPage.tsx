@@ -283,7 +283,7 @@ export function OrderImportPage() {
 
             <div>
               <h3 className="mb-3 text-sm font-semibold text-slate-700">Transport</h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Lastningsplats"><input className={inputClass} value={loadingPlace} onChange={(e) => setLoadingPlace(e.target.value)} /></Field>
                 <Field label="Lossningsplats"><input className={inputClass} value={unloadingPlace} onChange={(e) => setUnloadingPlace(e.target.value)} /></Field>
                 <Field label="Kontakt vid lossning"><input className={inputClass} value={unloadingContactName} onChange={(e) => setUnloadingContactName(e.target.value)} /></Field>

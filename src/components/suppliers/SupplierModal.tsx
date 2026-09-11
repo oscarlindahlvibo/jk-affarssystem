@@ -72,7 +72,7 @@ export function SupplierModal({
         <Field label="Företagsnamn *">
           <input required className={inputClass} value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} />
         </Field>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Typ">
             <select className={inputClass} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as SupplierType })}>
               {SUPPLIER_TYPES.map((t) => (
@@ -87,7 +87,7 @@ export function SupplierModal({
         <Field label="Kontaktperson">
           <input className={inputClass} value={form.contact_person} onChange={(e) => setForm({ ...form, contact_person: e.target.value })} />
         </Field>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Telefon">
             <input className={inputClass} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           </Field>

@@ -194,7 +194,7 @@ export function ProjectDetail() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Panel title="Grundinformation">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 sm:grid-cols-3">
               <InfoItem label="Projektnummer" value={project.project_number} />
               <InfoItem label="Kund" value={project.customer?.company_name} />
               <InfoItem label="Kontaktperson" value={project.contact_person?.name} />
@@ -206,7 +206,7 @@ export function ProjectDetail() {
           </Panel>
 
           <Panel title="Transportinformation">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 sm:grid-cols-3">
               <InfoItem
                 label="Lastningsplats"
                 value={
@@ -253,7 +253,7 @@ export function ProjectDetail() {
 
           <Panel title="Gods">
             {cargo ? (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 sm:grid-cols-4">
                 <InfoItem label="Beskrivning" value={cargo.description} />
                 <InfoItem label="Längd" value={cargo.length_m ? `${cargo.length_m} m` : undefined} />
                 <InfoItem label="Bredd" value={cargo.width_m ? `${cargo.width_m} m` : undefined} />
