@@ -1,0 +1,75 @@
+// Exempeldata som motsvarar en typisk export från JK:s nuvarande Excel-ark.
+// Används av importvyn när ingen fil laddas upp, för att visa hur importen fungerar.
+
+export const MOCK_IMPORT_HEADERS = [
+  "Projektnr",
+  "Kund",
+  "Kontaktperson",
+  "Telefon",
+  "E-post",
+  "Från",
+  "Till",
+  "Via",
+  "Lastdatum",
+  "Leveransdatum",
+  "Gods",
+  "Längd (m)",
+  "Bredd (m)",
+  "Höjd (m)",
+  "Vikt (ton)",
+  "Antal",
+  "Typ",
+  "Status",
+  "Ansvarig",
+  "Transportör",
+  "Pris",
+  "Kostnad",
+  "Kommentar",
+  "Dokument",
+  "Fakturering",
+];
+
+export const MOCK_IMPORT_ROWS: string[][] = [
+  [
+    "JK-2026-0147", "Holtab AB", "Anna Bergström", "070-123 45 67", "anna.bergstrom@holtab.se",
+    "Tingsryd", "Växjö", "", "2026-09-22", "2026-09-23",
+    "Transformatorstation", "8,2", "3,4", "3,9", "42", "1",
+    "Specialtransport", "Tillstånd", "Maria Lind", "Sydtransport AB", "68000", "41000",
+    "Elledning vid Rv25 måste hanteras.", "Ritning_transformator.pdf", "Ej fakturerad",
+  ],
+  [
+    "JK-2026-0161", "Boliden Mineral AB", "Karin Ström", "070-889 12 34", "karin.strom@boliden.com",
+    "Skellefteå", "Boliden", "", "2026-10-02", "2026-10-03",
+    "Gruvmaskin", "9,1", "3,1", "3,6", "38", "1",
+    "Maskintransport", "Ny", "", "", "", "",
+    "Förfrågan inkommen via telefon.", "", "Ej fakturerad",
+  ],
+  [
+    "JK-2026-0162", "Holtab AB", "Erik Nilsson", "070-234 56 78", "erik.nilsson@holtab.se",
+    "Tingsryd", "Karlskrona", "Växjö", "2026-10-05", "2026-10-06",
+    "Transformatorstation", "7,8", "3,2", "3,7", "39", "1",
+    "Specialtransport", "Under kalkylering", "Peter Sund", "", "", "",
+    "", "", "Ej fakturerad",
+  ],
+  [
+    "JK-2026-0163", "Nordic Cranes AB", "Tobias Frank", "070-345 67 12", "tobias.frank@nordiccranes.se",
+    "Göteborg", "Borås", "", "", "",
+    "Mobilkran 70 ton", "13,5", "3,0", "3,9", "52", "1",
+    "Krantransport", "Order", "Jens Karlsson", "", "62000", "",
+    "Kund vill ha bekräftelse innan lastning.", "", "Ej fakturerad",
+  ],
+  [
+    "JK-2026-0164", "ABB", "Marcus Holm", "070-456 78 90", "marcus.holm@abb.com",
+    "Västerås", "", "", "2026-10-12", "",
+    "Industrimaskin", "6,0", "2,8", "", "25", "1",
+    "Maskintransport", "Ny", "", "", "", "",
+    "Mått ej klara, väntar på underlag från kund.", "", "Ej fakturerad",
+  ],
+  [
+    "JK-2026-0165", "", "LindaÅs", "070-567 12 34", "linda.as@example.se",
+    "Malmö", "Helsingborg", "", "2026-10-08", "2026-10-08",
+    "Pallgods", "", "", "", "4,2", "8",
+    "Styckegods", "Order", "Maria Lind", "Sverigeexpressen", "9500", "6200",
+    "Kund saknas i underlaget, komplettera.", "", "Ej fakturerad",
+  ],
+];
