@@ -56,12 +56,18 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
   const [loadingDate, setLoadingDate] = useState(project?.planned_loading_date ?? "");
   const [deliveryDate, setDeliveryDate] = useState(project?.planned_delivery_date ?? "");
   const [loadingPlace, setLoadingPlace] = useState(existingLoading?.name ?? "");
+  const [loadingContactName, setLoadingContactName] = useState(existingLoading?.contact_name ?? "");
+  const [loadingContactPhone, setLoadingContactPhone] = useState(existingLoading?.contact_phone ?? "");
   const [unloadingPlace, setUnloadingPlace] = useState(existingUnloading?.name ?? "");
+  const [unloadingContactName, setUnloadingContactName] = useState(existingUnloading?.contact_name ?? "");
+  const [unloadingContactPhone, setUnloadingContactPhone] = useState(existingUnloading?.contact_phone ?? "");
   const [waypoint, setWaypoint] = useState(existingWaypoint?.name ?? "");
   const [specialRequirements, setSpecialRequirements] = useState(project?.special_requirements ?? "");
+  const [deliveryTerms, setDeliveryTerms] = useState(project?.delivery_terms ?? "");
   const [vehicle, setVehicle] = useState(project?.vehicle ?? "");
   const [driverName, setDriverName] = useState(project?.driver_name ?? "");
   const [customerReference, setCustomerReference] = useState(project?.customer_reference ?? "");
+  const [sourceDocumentRef, setSourceDocumentRef] = useState(project?.source_document_ref ?? "");
   const [carrierOrderNumber, setCarrierOrderNumber] = useState(project?.carrier_order_number ?? "");
 
   const [cargoDescription, setCargoDescription] = useState(existingCargo?.description ?? "");
@@ -140,9 +146,29 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
 
   function buildLocations(): Location[] {
     const locations: Location[] = [];
-    if (loadingPlace) locations.push({ id: existingLoading?.id ?? "loc-lastning", project_id: "", type: "lastning", name: loadingPlace, address: null, order_index: 0 });
+    if (loadingPlace)
+      locations.push({
+        id: existingLoading?.id ?? "loc-lastning",
+        project_id: "",
+        type: "lastning",
+        name: loadingPlace,
+        address: null,
+        contact_name: loadingContactName || null,
+        contact_phone: loadingContactPhone || null,
+        order_index: 0,
+      });
     if (waypoint) locations.push({ id: existingWaypoint?.id ?? "loc-mellan", project_id: "", type: "mellanpunkt", name: waypoint, address: null, order_index: 1 });
-    if (unloadingPlace) locations.push({ id: existingUnloading?.id ?? "loc-lossning", project_id: "", type: "lossning", name: unloadingPlace, address: null, order_index: 2 });
+    if (unloadingPlace)
+      locations.push({
+        id: existingUnloading?.id ?? "loc-lossning",
+        project_id: "",
+        type: "lossning",
+        name: unloadingPlace,
+        address: null,
+        contact_name: unloadingContactName || null,
+        contact_phone: unloadingContactPhone || null,
+        order_index: 2,
+      });
     return locations;
   }
 
@@ -202,10 +228,12 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
       responsible_id: responsibleId || null,
       transport_type: transportType,
       special_requirements: specialRequirements || null,
+      delivery_terms: deliveryTerms || null,
       planned_loading_date: loadingDate || null,
       planned_delivery_date: deliveryDate || null,
       supplier_id: supplierId || null,
       customer_reference: customerReference || null,
+      source_document_ref: sourceDocumentRef || null,
       vehicle: vehicle || null,
       driver_name: driverName || null,
       carrier_order_number: carrierOrderNumber || null,
@@ -376,6 +404,22 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
             <Field label="Lossningsplats">
               <input className={inputClass} value={unloadingPlace} onChange={(e) => setUnloadingPlace(e.target.value)} placeholder="Ort / adress" />
             </Field>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Kontakt vid lastning">
+                <input className={inputClass} value={loadingContactName ?? ""} onChange={(e) => setLoadingContactName(e.target.value)} placeholder="Namn" />
+              </Field>
+              <Field label="Telefon">
+                <input className={inputClass} value={loadingContactPhone ?? ""} onChange={(e) => setLoadingContactPhone(e.target.value)} />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Kontakt vid lossning">
+                <input className={inputClass} value={unloadingContactName ?? ""} onChange={(e) => setUnloadingContactName(e.target.value)} placeholder="Namn" />
+              </Field>
+              <Field label="Telefon">
+                <input className={inputClass} value={unloadingContactPhone ?? ""} onChange={(e) => setUnloadingContactPhone(e.target.value)} />
+              </Field>
+            </div>
             <Field label="Mellanpunkt / via">
               <input className={inputClass} value={waypoint} onChange={(e) => setWaypoint(e.target.value)} placeholder="Valfritt" />
             </Field>
@@ -402,8 +446,14 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
             <Field label="Kundens ordernummer">
               <input className={inputClass} value={customerReference ?? ""} onChange={(e) => setCustomerReference(e.target.value)} />
             </Field>
+            <Field label="Källdokument (LTC-/bokningsnr)">
+              <input className={inputClass} value={sourceDocumentRef ?? ""} onChange={(e) => setSourceDocumentRef(e.target.value)} />
+            </Field>
             <Field label="Transportörens ordernummer">
               <input className={inputClass} value={carrierOrderNumber ?? ""} onChange={(e) => setCarrierOrderNumber(e.target.value)} />
+            </Field>
+            <Field label="Leveransvillkor (Incoterms)">
+              <input className={inputClass} value={deliveryTerms ?? ""} onChange={(e) => setDeliveryTerms(e.target.value)} placeholder="t.ex. DPU Incoterms 2020" />
             </Field>
           </div>
           <Field label="Särskilda krav">

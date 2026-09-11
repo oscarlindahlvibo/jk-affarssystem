@@ -127,8 +127,28 @@ export function ProjectDetail() {
 
           <Panel title="Transportinformation">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <InfoItem label="Lastningsplats" value={loading ? <span className="flex items-center gap-1"><MapPin size={13} />{loading.name}</span> : undefined} />
-              <InfoItem label="Lossningsplats" value={unloading ? <span className="flex items-center gap-1"><MapPin size={13} />{unloading.name}</span> : undefined} />
+              <InfoItem
+                label="Lastningsplats"
+                value={
+                  loading ? (
+                    <span className="flex items-center gap-1"><MapPin size={13} />{loading.name}</span>
+                  ) : undefined
+                }
+              />
+              <InfoItem
+                label="Lossningsplats"
+                value={
+                  unloading ? (
+                    <span className="flex items-center gap-1"><MapPin size={13} />{unloading.name}</span>
+                  ) : undefined
+                }
+              />
+              {(loading?.contact_name || loading?.contact_phone) && (
+                <InfoItem label="Kontakt vid lastning" value={[loading?.contact_name, loading?.contact_phone].filter(Boolean).join(" · ")} />
+              )}
+              {(unloading?.contact_name || unloading?.contact_phone) && (
+                <InfoItem label="Kontakt vid lossning" value={[unloading?.contact_name, unloading?.contact_phone].filter(Boolean).join(" · ")} />
+              )}
               <InfoItem label="Planerat lastningsdatum" value={formatDate(project.planned_loading_date)} />
               <InfoItem label="Planerat leveransdatum" value={formatDate(project.planned_delivery_date)} />
               <InfoItem label="Transporttyp" value={project.transport_type} />
@@ -139,7 +159,9 @@ export function ProjectDetail() {
               <InfoItem label="Fordon" value={project.vehicle} />
               <InfoItem label="Chaufför" value={project.driver_name} />
               <InfoItem label="Kundens ordernummer" value={project.customer_reference} />
+              <InfoItem label="Källdokument (LTC-/bokningsnr)" value={project.source_document_ref} />
               <InfoItem label="Transportörens ordernummer" value={project.carrier_order_number} />
+              <InfoItem label="Leveransvillkor" value={project.delivery_terms} />
             </div>
             {project.special_requirements && (
               <p className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">

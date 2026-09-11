@@ -14,6 +14,7 @@ const TITLE_BY_PATH: { pattern: string; title: string }[] = [
   { pattern: "/dokument", title: "Dokument" },
   { pattern: "/kontakter/:id", title: "Kontaktperson" },
   { pattern: "/importera", title: "Importera Excel" },
+  { pattern: "/importera-order", title: "Importera order (LTC)" },
   { pattern: "/personal", title: "Personal" },
   { pattern: "/installningar", title: "Inställningar" },
 ];

@@ -213,6 +213,8 @@ export function ImportPage() {
         cost: d.cost,
         invoice_status: invoiceStatus,
         customer_reference: d.customerReference || null,
+        source_document_ref: null,
+        delivery_terms: null,
         vehicle: d.vehicle || null,
         driver_name: d.driver || null,
         carrier_order_number: d.carrierOrderNumber || null,

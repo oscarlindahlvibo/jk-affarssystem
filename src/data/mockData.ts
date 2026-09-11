@@ -179,7 +179,7 @@ export const measurementPointsByLink: Record<string, MeasurementPoint[]> = {
 
 const rawProjects: Omit<
   Project,
-  "org_id" | "supplier_id" | "price" | "cost" | "invoice_status" | "customer_reference" | "vehicle" | "driver_name" | "carrier_order_number"
+  "org_id" | "supplier_id" | "price" | "cost" | "invoice_status" | "customer_reference" | "source_document_ref" | "delivery_terms" | "vehicle" | "driver_name" | "carrier_order_number"
 >[] = [
   {
     id: "pr1",
@@ -445,6 +445,8 @@ export const projects: Project[] = rawProjects.map((p) => ({
   cost: null,
   invoice_status: "Ej fakturerad",
   customer_reference: null,
+  source_document_ref: null,
+  delivery_terms: null,
   vehicle: null,
   driver_name: null,
   carrier_order_number: null,

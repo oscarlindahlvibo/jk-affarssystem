@@ -18,6 +18,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { PersonnelPage } from "./pages/PersonnelPage";
 import { MyTasksPage } from "./pages/MyTasksPage";
 import { ImportPage } from "./pages/ImportPage";
+import { OrderImportPage } from "./pages/OrderImportPage";
 import { ProjectPrint } from "./pages/ProjectPrint";
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
@@ -68,6 +69,7 @@ function AppRoutes() {
           <Route path="/leverantorer" element={<SuppliersPage />} />
           <Route path="/dokument" element={<DocumentsPage />} />
           <Route path="/importera" element={<ImportPage />} />
+          <Route path="/importera-order" element={<OrderImportPage />} />
           <Route path="/personal" element={<RequireAdmin><PersonnelPage /></RequireAdmin>} />
           <Route path="/installningar" element={<RequireAdmin><SettingsPage /></RequireAdmin>} />
         </Route>

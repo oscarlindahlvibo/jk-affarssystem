@@ -112,6 +112,10 @@ export interface Location {
   type: LocationType;
   name: string;
   address: string | null;
+  // Kontaktperson på plats (t.ex. mottagare vid lossning) – vanligt förekommande på
+  // kundens fraktorder (LTC/bokningsblad) men skild från projektets huvudkontakt.
+  contact_name?: string | null;
+  contact_phone?: string | null;
   order_index: number;
 }
 
@@ -305,6 +309,10 @@ export interface Project {
   cost: number | null;
   invoice_status: InvoiceStatus;
   customer_reference: string | null;
+  // Referensnummer på källdokumentet (t.ex. Holtabs LTC-nr) som hela ordern/bokningen
+  // skapades från – skilt från customer_reference som är per kolli/gods (Order-nr).
+  source_document_ref: string | null;
+  delivery_terms: string | null;
   vehicle: string | null;
   driver_name: string | null;
   carrier_order_number: string | null;

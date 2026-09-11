@@ -10,6 +10,7 @@ import {
   Truck,
   Boxes,
   Upload,
+  FileUp,
   UserCog,
   LogOut,
 } from "lucide-react";
@@ -30,6 +31,12 @@ const NAV_ITEMS = [
     to: "/importera",
     label: "Importera Excel",
     icon: Upload,
+    show: (p: ReturnType<typeof usePermissions>) => p.can("projects", "create"),
+  },
+  {
+    to: "/importera-order",
+    label: "Importera order (LTC)",
+    icon: FileUp,
     show: (p: ReturnType<typeof usePermissions>) => p.can("projects", "create"),
   },
   { to: "/personal", label: "Personal", icon: UserCog, show: (p: ReturnType<typeof usePermissions>) => p.isAdmin },
