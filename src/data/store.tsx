@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type {
   Customer,
   ContactPerson,
@@ -9,12 +9,36 @@ import type {
   ProjectDocument,
   ProjectStatus,
   Supplier,
+  TransportType,
   UserRole,
 } from "../types";
 import * as mock from "./mockData";
 import { useAuth } from "../lib/auth";
 import { usePersonnel } from "./personnel";
 import { can, canEditProjectFinance, type Action, type Resource } from "../lib/permissions";
+
+export interface CustomerBookingInput {
+  name: string;
+  transport_type: TransportType;
+  planned_loading_date: string;
+  planned_delivery_date: string;
+  loading_name: string;
+  loading_address: string;
+  loading_contact_name: string;
+  loading_contact_phone: string;
+  unloading_name: string;
+  unloading_address: string;
+  unloading_contact_name: string;
+  unloading_contact_phone: string;
+  cargo_description: string;
+  length_m: number | null;
+  width_m: number | null;
+  height_m: number | null;
+  weight_ton: number | null;
+  quantity: number | null;
+  customer_reference: string;
+  special_requirements: string;
+}
 
 interface StoreShape {
   customers: Customer[];
@@ -33,6 +57,9 @@ interface StoreShape {
   updateSupplier: (id: string, patch: Partial<Supplier>) => void;
   deleteSupplier: (id: string) => { ok: boolean; reason?: string };
   addProject: (p: Omit<Project, "id" | "org_id" | "created_at" | "updated_at">) => Project;
+  submitCustomerBooking: (data: CustomerBookingInput) => Project;
+  approveCustomerBooking: (projectId: string, data: { responsible_id: string | null; status: ProjectStatus }) => void;
+  rejectCustomerBooking: (projectId: string, reason: string) => void;
   updateProjectStatus: (projectId: string, status: ProjectStatus) => void;
   updateProject: (projectId: string, patch: Partial<Project>) => void;
   updateProjectFinance: (projectId: string, patch: Partial<Pick<Project, "price" | "cost" | "invoice_status">>) => void;
@@ -56,23 +83,42 @@ interface StoreShape {
 }
 
 const StoreContext = createContext<StoreShape | null>(null);
+const PROJECTS_STORAGE_KEY = "jk-mock-projects";
 
-let idCounter = 1000;
+let idCounter = 2000;
 function nextId(prefix: string) {
   idCounter += 1;
   return `${prefix}${idCounter}`;
 }
 
+function loadProjects(): Project[] {
+  if (typeof window === "undefined") return mock.projects;
+  const stored = window.localStorage.getItem(PROJECTS_STORAGE_KEY);
+  if (!stored) return mock.projects;
+  try {
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return mock.projects;
+    const storedIds = new Set(parsed.map((p: Project) => p.id));
+    return [...parsed, ...mock.projects.filter((p) => !storedIds.has(p.id))];
+  } catch {
+    return mock.projects;
+  }
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const { currentProfile } = useAuth();
+  const { currentProfile, currentCustomerUser } = useAuth();
   const personnel = usePersonnel();
-  const orgId = currentProfile?.org_id ?? "";
+  const orgId = currentProfile?.org_id ?? currentCustomerUser?.org_id ?? "";
   const role = currentProfile?.role ?? null;
 
   const [allCustomers, setAllCustomers] = useState<Customer[]>(mock.customers);
   const [allContactPersons, setAllContactPersons] = useState<ContactPerson[]>(mock.contactPersons);
-  const [allProjects, setAllProjects] = useState<Project[]>(mock.projects);
+  const [allProjects, setAllProjects] = useState<Project[]>(loadProjects);
   const [allSuppliers, setAllSuppliers] = useState<Supplier[]>(mock.suppliers);
+
+  useEffect(() => {
+    window.localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(allProjects));
+  }, [allProjects]);
 
   // Skydd i datalagret: även om ett UI-element av misstag visas ska mutationer
   // blockeras här om rollen saknar rättighet eller kontot inte längre är aktivt.
@@ -91,12 +137,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [currentProfile, role]
   );
 
-  const customers = useMemo(() => allCustomers.filter((c) => c.org_id === orgId), [allCustomers, orgId]);
+  const customers = useMemo(() => {
+    const orgCustomers = allCustomers.filter((c) => c.org_id === orgId);
+    if (currentCustomerUser) return orgCustomers.filter((c) => c.id === currentCustomerUser.customer_id);
+    return orgCustomers;
+  }, [allCustomers, orgId, currentCustomerUser]);
   const contactPersons = useMemo(() => {
     const orgCustomerIds = new Set(customers.map((c) => c.id));
     return allContactPersons.filter((c) => orgCustomerIds.has(c.customer_id));
   }, [allContactPersons, customers]);
-  const projects = useMemo(() => allProjects.filter((p) => p.org_id === orgId), [allProjects, orgId]);
+  const projects = useMemo(() => {
+    const orgProjects = allProjects.filter((p) => p.org_id === orgId);
+    if (currentCustomerUser) return orgProjects.filter((p) => p.customer_id === currentCustomerUser.customer_id);
+    return orgProjects;
+  }, [allProjects, orgId, currentCustomerUser]);
   const suppliers = useMemo(() => allSuppliers.filter((s) => s.org_id === orgId), [allSuppliers, orgId]);
   const profiles = useMemo(() => personnel.allProfiles.filter((p) => p.org_id === orgId), [personnel.allProfiles, orgId]);
 
@@ -225,6 +279,169 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return newProject;
     },
     [authorize, orgId]
+  );
+
+  const submitCustomerBooking: StoreShape["submitCustomerBooking"] = useCallback(
+    (data) => {
+      if (!currentCustomerUser || currentCustomerUser.status !== "aktiv") {
+        throw new Error("Kundkontot är inte aktivt.");
+      }
+      const now = new Date().toISOString();
+      const id = nextId("pr");
+      const customer = allCustomers.find((c) => c.id === currentCustomerUser.customer_id);
+      const contact = allContactPersons.find((c) => c.id === currentCustomerUser.contact_person_id);
+      const projectName =
+        data.name.trim() ||
+        `${customer?.company_name ?? "Kund"} – Bokningsförfrågan ${data.loading_name || "lastning"} till ${data.unloading_name || "lossning"}`;
+      const newProject: Project = {
+        id,
+        org_id: currentCustomerUser.org_id,
+        project_number: `WEB-${new Date().getFullYear()}-${id.replace(/\D/g, "").padStart(4, "0")}`,
+        name: projectName,
+        customer_id: currentCustomerUser.customer_id,
+        contact_person_id: currentCustomerUser.contact_person_id,
+        responsible_id: null,
+        status: "Ny",
+        transport_type: data.transport_type,
+        special_requirements: data.special_requirements.trim() || null,
+        planned_loading_date: data.planned_loading_date || null,
+        planned_delivery_date: data.planned_delivery_date || null,
+        supplier_id: null,
+        price: null,
+        cost: null,
+        invoice_status: "Ej fakturerad",
+        customer_reference: data.customer_reference.trim() || null,
+        booking_source: "customer_portal",
+        booking_approval_status: "Väntar på godkännande",
+        requested_by_customer_user_id: currentCustomerUser.id,
+        approved_at: null,
+        approved_by: null,
+        source_document_ref: null,
+        delivery_terms: null,
+        vehicle: null,
+        driver_name: null,
+        carrier_order_number: null,
+        created_at: now,
+        updated_at: now,
+        locations: [
+          {
+            id: nextId("l"),
+            project_id: id,
+            type: "lastning",
+            name: data.loading_name.trim(),
+            address: data.loading_address.trim() || null,
+            contact_name: data.loading_contact_name.trim() || contact?.name || null,
+            contact_phone: data.loading_contact_phone.trim() || contact?.mobile || contact?.phone || null,
+            order_index: 0,
+          },
+          {
+            id: nextId("l"),
+            project_id: id,
+            type: "lossning",
+            name: data.unloading_name.trim(),
+            address: data.unloading_address.trim() || null,
+            contact_name: data.unloading_contact_name.trim() || null,
+            contact_phone: data.unloading_contact_phone.trim() || null,
+            order_index: 1,
+          },
+        ],
+        cargo_items: [
+          {
+            id: nextId("g"),
+            project_id: id,
+            description: data.cargo_description.trim(),
+            length_m: data.length_m,
+            width_m: data.width_m,
+            height_m: data.height_m,
+            weight_ton: data.weight_ton,
+            quantity: data.quantity,
+            lift_points: null,
+            drawing_reference: null,
+            technical_info: "Skapad via kundportalen.",
+          },
+        ],
+        documents: [],
+        notes: [
+          {
+            id: nextId("n"),
+            project_id: id,
+            date: now,
+            user_name: currentCustomerUser.full_name,
+            text: "Bokning skapad av kund i kundportalen.",
+            category: "Kund",
+          },
+        ],
+        tasks: [],
+      };
+      setAllProjects((prev) => [newProject, ...prev]);
+      return newProject;
+    },
+    [allContactPersons, allCustomers, currentCustomerUser]
+  );
+
+  const approveCustomerBooking: StoreShape["approveCustomerBooking"] = useCallback(
+    (projectId, data) => {
+      authorize("projects", "edit");
+      const now = new Date().toISOString();
+      setAllProjects((prev) =>
+        prev.map((p) =>
+          p.id === projectId
+            ? {
+                ...p,
+                responsible_id: data.responsible_id,
+                status: data.status,
+                booking_approval_status: "Godkänd",
+                approved_at: now,
+                approved_by: currentProfile?.full_name ?? null,
+                updated_at: now,
+                notes: [
+                  {
+                    id: nextId("n"),
+                    project_id: projectId,
+                    date: now,
+                    user_name: currentProfile?.full_name ?? "JK",
+                    text: "Kundbokningen är godkänd och kan planeras vidare.",
+                    category: "Kund",
+                  },
+                  ...(p.notes ?? []),
+                ],
+              }
+            : p
+        )
+      );
+    },
+    [authorize, currentProfile]
+  );
+
+  const rejectCustomerBooking: StoreShape["rejectCustomerBooking"] = useCallback(
+    (projectId, reason) => {
+      authorize("projects", "edit");
+      const now = new Date().toISOString();
+      setAllProjects((prev) =>
+        prev.map((p) =>
+          p.id === projectId
+            ? {
+                ...p,
+                status: "Avbruten",
+                booking_approval_status: "Avvisad",
+                updated_at: now,
+                notes: [
+                  {
+                    id: nextId("n"),
+                    project_id: projectId,
+                    date: now,
+                    user_name: currentProfile?.full_name ?? "JK",
+                    text: reason.trim() ? `Kundbokningen avvisades: ${reason.trim()}` : "Kundbokningen avvisades.",
+                    category: "Kund",
+                  },
+                  ...(p.notes ?? []),
+                ],
+              }
+            : p
+        )
+      );
+    },
+    [authorize, currentProfile]
   );
 
   const updateProjectStatus: StoreShape["updateProjectStatus"] = useCallback(
@@ -419,6 +636,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateSupplier,
       deleteSupplier,
       addProject,
+      submitCustomerBooking,
+      approveCustomerBooking,
+      rejectCustomerBooking,
       updateProjectStatus,
       updateProject,
       updateProjectFinance,
@@ -457,6 +677,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateSupplier,
       deleteSupplier,
       addProject,
+      submitCustomerBooking,
+      approveCustomerBooking,
+      rejectCustomerBooking,
       updateProjectStatus,
       updateProject,
       updateProjectFinance,

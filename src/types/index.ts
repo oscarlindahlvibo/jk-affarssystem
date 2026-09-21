@@ -279,9 +279,27 @@ export interface Profile {
   invited_at?: string;
 }
 
+export type CustomerUserStatus = "aktiv" | "inbjuden" | "inaktiverad";
+
+export interface CustomerUser {
+  id: string;
+  org_id: string;
+  customer_id: string;
+  contact_person_id: string | null;
+  full_name: string;
+  email: string;
+  status: CustomerUserStatus;
+  initials: string;
+  invited_at?: string;
+}
+
 export type InvoiceStatus = "Ej fakturerad" | "Klar för fakturering" | "Fakturerad";
 
 export const INVOICE_STATUSES: InvoiceStatus[] = ["Ej fakturerad", "Klar för fakturering", "Fakturerad"];
+
+export type BookingApprovalStatus = "Väntar på godkännande" | "Godkänd" | "Avvisad";
+
+export type BookingSource = "internal" | "customer_portal";
 
 export type ProjectTemplateKey =
   | "Specialtransport"
@@ -309,6 +327,11 @@ export interface Project {
   cost: number | null;
   invoice_status: InvoiceStatus;
   customer_reference: string | null;
+  booking_source?: BookingSource;
+  booking_approval_status?: BookingApprovalStatus | null;
+  requested_by_customer_user_id?: string | null;
+  approved_at?: string | null;
+  approved_by?: string | null;
   // Referensnummer på källdokumentet (t.ex. Holtabs LTC-nr) som hela ordern/bokningen
   // skapades från – skilt från customer_reference som är per kolli/gods (Order-nr).
   source_document_ref: string | null;

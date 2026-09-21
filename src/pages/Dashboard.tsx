@@ -34,6 +34,7 @@ export function Dashboard() {
 
   const stats = useMemo(() => {
     const nya = projects.filter((p) => p.status === "Ny").length;
+    const kundbokningar = projects.filter((p) => p.booking_approval_status === "Väntar på godkännande").length;
     const planering = projects.filter((p) =>
       ["Planering", "Ruttkontroll", "Order"].includes(p.status)
     ).length;
@@ -43,8 +44,13 @@ export function Dashboard() {
     const vantarKund = projects.filter((p) => p.status === "Väntar på kund").length;
     const vantarTillstand = projects.filter((p) => p.status === "Tillstånd").length;
     const klarFakturering = projects.filter((p) => p.status === "Klar för fakturering").length;
-    return { nya, planering, transporterVecka, vantarKund, vantarTillstand, klarFakturering };
+    return { nya, kundbokningar, planering, transporterVecka, vantarKund, vantarTillstand, klarFakturering };
   }, [projects]);
+
+  const pendingCustomerBookings = useMemo(
+    () => projects.filter((p) => p.booking_approval_status === "Väntar på godkännande").slice(0, 5),
+    [projects]
+  );
 
   const recentActivity = useMemo(
     () => [...projects].sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1)).slice(0, 6),
@@ -74,6 +80,7 @@ export function Dashboard() {
 
   const cards = [
     { label: "Nya förfrågningar", value: stats.nya, icon: Inbox, color: "bg-slate-100 text-slate-600", to: "/projekt?filter=nya" },
+    { label: "Kundbokningar", value: stats.kundbokningar, icon: CheckCircle2, color: "bg-green-100 text-green-700", to: "/projekt?filter=kundbokningar" },
     { label: "Under planering", value: stats.planering, icon: ClipboardList, color: "bg-cyan-100 text-cyan-700", to: "/projekt?filter=planering" },
     { label: "Transporter denna vecka", value: stats.transporterVecka, icon: Truck, color: "bg-orange-100 text-orange-700", to: "/projekt?filter=denna-vecka" },
     { label: "Väntar på kund", value: stats.vantarKund, icon: Clock, color: "bg-amber-100 text-amber-700", to: "/projekt?filter=vantar-kund" },
@@ -83,7 +90,7 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7">
         {cards.map(({ label, value, icon: Icon, color, to }) => (
           <Link
             key={label}
@@ -98,6 +105,29 @@ export function Dashboard() {
           </Link>
         ))}
       </div>
+
+      {pendingCustomerBookings.length > 0 && (
+        <Panel
+          title="Kundbokningar att godkänna"
+          action={<Link to="/projekt?filter=kundbokningar" className="text-xs font-medium text-orange-600 hover:text-orange-700">Se alla</Link>}
+        >
+          <ul className="divide-y divide-border">
+            {pendingCustomerBookings.map((p) => (
+              <li key={p.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <Link to={`/projekt/${p.id}`} className="text-sm font-medium text-slate-800 hover:text-orange-600">
+                    {p.project_number} · {p.name}
+                  </Link>
+                  <div className="text-xs text-slate-500">
+                    {p.customer?.company_name} · lastning {formatDate(p.planned_loading_date)}
+                  </div>
+                </div>
+                <span className="status-pill shrink-0 bg-amber-100 text-amber-700">Väntar på godkännande</span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Panel title="Senaste aktivitet" className="lg:col-span-2">

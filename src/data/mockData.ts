@@ -1,5 +1,6 @@
 import type {
   Customer,
+  CustomerUser,
   ContactPerson,
   Organization,
   Project,
@@ -112,6 +113,12 @@ export const contactPersons: ContactPerson[] = [
   { id: "p4", customer_id: "c3", name: "Marcus Holm", role: "Inköpare Logistik", phone: "021-32 00 10", mobile: "070-456 78 90", email: "marcus.holm@abb.com", note: "Föredrar kontakt via e-post.", is_primary: true, created_at: "2024-11-01T08:00:00Z" },
   { id: "p5", customer_id: "c4", name: "Lina Öberg", role: "Speditör", phone: "08-590 100 10", mobile: "070-567 89 01", email: "lina.oberg@sverigeexpressen.se", note: null, is_primary: true, created_at: "2025-06-01T08:00:00Z" },
   { id: "p6", customer_id: "c5", name: "Oskar Dahl", role: "Inköpare", phone: "031-100 210", mobile: "070-678 90 12", email: "oskar.dahl@nordiskfraktpartner.se", note: null, is_primary: true, created_at: "2025-09-01T08:00:00Z" },
+];
+
+export const customerUsers: CustomerUser[] = [
+  { id: "cu1", org_id: "org1", customer_id: "c1", contact_person_id: "p1", full_name: "Anna Bergström", email: "anna.bergstrom@holtab.se", status: "aktiv", initials: "AB" },
+  { id: "cu2", org_id: "org1", customer_id: "c3", contact_person_id: "p4", full_name: "Marcus Holm", email: "marcus.holm@abb.com", status: "aktiv", initials: "MH" },
+  { id: "cu3", org_id: "org1", customer_id: "c4", contact_person_id: "p5", full_name: "Lina Öberg", email: "lina.oberg@sverigeexpressen.se", status: "inbjuden", initials: "LÖ", invited_at: "2026-09-12T09:00:00Z" },
 ];
 
 const rawSuppliers: Omit<Supplier, "org_id">[] = [
@@ -426,9 +433,36 @@ const rawProjects: Omit<
     notes: [],
     tasks: [],
   },
+  {
+    id: "pr10",
+    project_number: "WEB-2026-1001",
+    name: "Holtab – Kundbokning transformatorstation till Jönköping",
+    customer_id: "c1",
+    contact_person_id: "p1",
+    responsible_id: null,
+    status: "Ny",
+    transport_type: "Specialtransport",
+    special_requirements: "Kunden önskar återkoppling om dispens och följebil. Ritning skickas separat.",
+    planned_loading_date: "2026-09-30",
+    planned_delivery_date: "2026-10-01",
+    created_at: "2026-09-15T10:20:00Z",
+    updated_at: "2026-09-15T10:20:00Z",
+    locations: [
+      { id: "l13", project_id: "pr10", type: "lastning", name: "Holtab AB, Tingsryd", address: "Industrigatan 12, 361 30 Tingsryd", contact_name: "Anna Bergström", contact_phone: "070-123 45 67", order_index: 0 },
+      { id: "l14", project_id: "pr10", type: "lossning", name: "Elnät Jönköping", address: "Kabelvägen 8, 553 02 Jönköping", contact_name: "Johan på plats", contact_phone: "070-888 10 10", order_index: 1 },
+    ],
+    cargo_items: [
+      { id: "g7", project_id: "pr10", description: "Transformatorstation", length_m: 7.8, width_m: 3.2, height_m: 3.6, weight_ton: 36, quantity: 1, lift_points: null, drawing_reference: null, technical_info: "Kundbokning via portal, väntar på JK:s genomgång." },
+    ],
+    documents: [],
+    notes: [
+      { id: "n10", project_id: "pr10", date: "2026-09-15T10:20:00Z", user_name: "Anna Bergström", text: "Bokning skapad av kund i kundportalen.", category: "Kund" },
+    ],
+    tasks: [],
+  },
 ];
 
-const projectOverrides: Record<string, Partial<Pick<Project, "org_id" | "supplier_id" | "price" | "cost" | "invoice_status">>> = {
+const projectOverrides: Record<string, Partial<Pick<Project, "org_id" | "supplier_id" | "price" | "cost" | "invoice_status" | "booking_source" | "booking_approval_status" | "requested_by_customer_user_id">>> = {
   pr1: { supplier_id: "s1", price: 68000, cost: 41000, invoice_status: "Ej fakturerad" },
   pr2: { supplier_id: "s1", price: 54000, cost: 33000, invoice_status: "Ej fakturerad" },
   pr3: { supplier_id: "s2", price: 39500, cost: 24000, invoice_status: "Ej fakturerad" },
@@ -436,6 +470,7 @@ const projectOverrides: Record<string, Partial<Pick<Project, "org_id" | "supplie
   pr7: { supplier_id: "s2", price: 45500, cost: 27500, invoice_status: "Klar för fakturering" },
   pr8: { supplier_id: null, price: 6100, cost: 3900, invoice_status: "Fakturerad" },
   pr9: { org_id: "org2", supplier_id: "s5", price: 18500, cost: 11200, invoice_status: "Ej fakturerad" },
+  pr10: { supplier_id: null, price: null, cost: null, invoice_status: "Ej fakturerad", booking_source: "customer_portal", booking_approval_status: "Väntar på godkännande", requested_by_customer_user_id: "cu1" },
 };
 
 export const projects: Project[] = rawProjects.map((p) => ({
@@ -445,6 +480,11 @@ export const projects: Project[] = rawProjects.map((p) => ({
   cost: null,
   invoice_status: "Ej fakturerad",
   customer_reference: null,
+  booking_source: "internal",
+  booking_approval_status: null,
+  requested_by_customer_user_id: null,
+  approved_at: null,
+  approved_by: null,
   source_document_ref: null,
   delivery_terms: null,
   vehicle: null,

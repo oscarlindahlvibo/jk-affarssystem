@@ -20,6 +20,7 @@ import { MyTasksPage } from "./pages/MyTasksPage";
 import { ImportPage } from "./pages/ImportPage";
 import { OrderImportPage } from "./pages/OrderImportPage";
 import { ProjectPrint } from "./pages/ProjectPrint";
+import { CustomerPortalPage } from "./pages/CustomerPortalPage";
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -42,6 +43,18 @@ function RequireAdmin({ children }: { children: React.ReactElement }) {
   return children;
 }
 
+function RequireInternal({ children }: { children: React.ReactElement }) {
+  const { accountType } = useAuth();
+  if (accountType === "customer") return <Navigate to="/kundportal" replace />;
+  return children;
+}
+
+function RequireCustomer({ children }: { children: React.ReactElement }) {
+  const { accountType } = useAuth();
+  if (accountType !== "customer") return <Navigate to="/" replace />;
+  return children;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -57,7 +70,8 @@ function AppRoutes() {
           </RequireAuth>
         }
       >
-        <Route element={<AppLayout />}>
+        <Route path="/kundportal" element={<RequireCustomer><CustomerPortalPage /></RequireCustomer>} />
+        <Route element={<RequireInternal><AppLayout /></RequireInternal>}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/mina-uppgifter" element={<MyTasksPage />} />
           <Route path="/projekt" element={<ProjectList />} />
@@ -73,7 +87,7 @@ function AppRoutes() {
           <Route path="/personal" element={<RequireAdmin><PersonnelPage /></RequireAdmin>} />
           <Route path="/installningar" element={<RequireAdmin><SettingsPage /></RequireAdmin>} />
         </Route>
-        <Route path="/projekt/:id/skriv-ut" element={<ProjectPrint />} />
+        <Route path="/projekt/:id/skriv-ut" element={<RequireInternal><ProjectPrint /></RequireInternal>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

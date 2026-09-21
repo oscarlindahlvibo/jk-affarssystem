@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, MapPin, Building2, User, AlertTriangle, Printer, Pencil, Save } from "lucide-react";
+import { ArrowLeft, MapPin, Building2, User, AlertTriangle, Printer, Pencil, Save, UserCheck, XCircle } from "lucide-react";
 import { useStore } from "../data/store";
 import { Panel } from "../components/ui/Panel";
 import { StatusBadge } from "../components/ui/StatusBadge";
@@ -109,11 +109,14 @@ function FinancePanel({
 
 export function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
-  const { getProject, updateProjectStatus, updateProjectFinance } = useStore();
+  const { getProject, updateProjectStatus, updateProjectFinance, profiles, approveCustomerBooking, rejectCustomerBooking } = useStore();
   const project = id ? getProject(id) : undefined;
   const permissions = usePermissions();
   const canEditProject = permissions.can("projects", "edit");
   const [editOpen, setEditOpen] = useState(false);
+  const [approvalResponsibleId, setApprovalResponsibleId] = useState(project?.responsible_id ?? "");
+  const [approvalStatus, setApprovalStatus] = useState<Project["status"]>("Planering");
+  const [rejectReason, setRejectReason] = useState("");
 
   if (!project) {
     return (
@@ -131,6 +134,7 @@ export function ProjectDetail() {
   const waypoints = project.locations?.filter((l) => l.type === "mellanpunkt") ?? [];
   const cargo = project.cargo_items?.[0];
   const missing = getMissingFields(project);
+  const isPendingCustomerBooking = project.booking_approval_status === "Väntar på godkännande";
   const transportRules = evaluateTransportRules({
     length_m: cargo?.length_m ?? null,
     width_m: cargo?.width_m ?? null,
@@ -187,6 +191,61 @@ export function ProjectDetail() {
               <span className="font-medium">Projektet saknar {missing.length} uppgift{missing.length > 1 ? "er" : ""}: </span>
               {missing.map((m) => m.label).join(", ")}
             </div>
+          </div>
+        )}
+
+        {isPendingCustomerBooking && canEditProject && (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-sm font-semibold text-amber-800">
+                  <AlertTriangle size={16} /> Kundbokning väntar på godkännande
+                </div>
+                <p className="mt-1 text-sm text-amber-700">
+                  Tilldela ansvarig och godkänn bokningen för fortsatt planering, eller avvisa med en kort anledning.
+                </p>
+              </div>
+              <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:w-auto lg:grid-cols-[190px_170px_auto_auto]">
+                <select
+                  value={approvalResponsibleId}
+                  onChange={(e) => setApprovalResponsibleId(e.target.value)}
+                  className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                >
+                  <option value="">Ej tilldelad</option>
+                  {profiles.filter((p) => p.status === "aktiv").map((p) => (
+                    <option key={p.id} value={p.id}>{p.full_name}</option>
+                  ))}
+                </select>
+                <select
+                  value={approvalStatus}
+                  onChange={(e) => setApprovalStatus(e.target.value as Project["status"])}
+                  className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                >
+                  <option value="Planering">Planering</option>
+                  <option value="Under kalkylering">Under kalkylering</option>
+                  <option value="Order">Order</option>
+                </select>
+                <Button
+                  type="button"
+                  onClick={() => approveCustomerBooking(project.id, { responsible_id: approvalResponsibleId || null, status: approvalStatus })}
+                >
+                  <UserCheck size={14} /> Godkänn
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => rejectCustomerBooking(project.id, rejectReason)}
+                >
+                  <XCircle size={14} /> Avvisa
+                </Button>
+              </div>
+            </div>
+            <input
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              className="mt-3 w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+              placeholder="Anledning vid avvisning, visas i projektets noteringar"
+            />
           </div>
         )}
       </div>

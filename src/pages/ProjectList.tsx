@@ -16,6 +16,7 @@ import { PROJECT_STATUSES, type Project } from "../types";
 type QuickFilter =
   | "alla"
   | "nya"
+  | "kundbokningar"
   | "planering"
   | "ruttkontroll"
   | "denna-vecka"
@@ -28,6 +29,7 @@ type QuickFilter =
 const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
   { key: "alla", label: "Alla projekt" },
   { key: "nya", label: "Nya" },
+  { key: "kundbokningar", label: "Kundbokningar" },
   { key: "planering", label: "Planering" },
   { key: "ruttkontroll", label: "Ruttkontroll" },
   { key: "denna-vecka", label: "Denna vecka" },
@@ -66,6 +68,8 @@ function matchesQuickFilter(p: Project, filter: QuickFilter): boolean {
       return true;
     case "nya":
       return p.status === "Ny";
+    case "kundbokningar":
+      return p.booking_approval_status === "Väntar på godkännande";
     case "planering":
       return ["Planering", "Ruttkontroll", "Order"].includes(p.status);
     case "ruttkontroll":
@@ -115,6 +119,7 @@ export function ProjectList() {
     const counts: Record<QuickFilter, number> = {
       alla: projects.length,
       nya: 0,
+      kundbokningar: 0,
       planering: 0,
       ruttkontroll: 0,
       "denna-vecka": 0,
