@@ -284,6 +284,9 @@ export function ProjectDetail() {
                   ) : undefined
                 }
               />
+              {loading?.address && <InfoItem label="Lastningsadress" value={loading.address} />}
+              {unloading?.address && <InfoItem label="Lossningsadress" value={unloading.address} />}
+              {project.route_distance_km && <InfoItem label="Beräknad sträcka" value={`${project.route_distance_km.toLocaleString("sv-SE")} km`} />}
               {(loading?.contact_name || loading?.contact_phone) && (
                 <InfoItem label="Kontakt vid lastning" value={[loading?.contact_name, loading?.contact_phone].filter(Boolean).join(" · ")} />
               )}

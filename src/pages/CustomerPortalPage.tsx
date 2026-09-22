@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { CheckCircle2, Clock, LogOut, Package, Plus, Send, Truck, X } from "lucide-react";
+import { CheckCircle2, Clock, LogOut, MapPin, Package, Plus, Route, Send, Truck, X } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useStore, type CustomerBookingCargoInput, type CustomerBookingInput } from "../data/store";
 import { Button } from "../components/ui/Button";
@@ -7,6 +7,7 @@ import { Field, inputClass } from "../components/ui/Field";
 import { Panel } from "../components/ui/Panel";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { formatDate } from "../lib/format";
+import { calculateRouteDistance } from "../lib/routeDistance";
 import { PROJECT_STATUSES, type BookingApprovalStatus, type TransportType } from "../types";
 
 const TRANSPORT_TYPES: TransportType[] = ["Specialtransport", "Maskintransport", "Krantransport", "Styckegods", "Container", "Annat"];
@@ -36,6 +37,7 @@ const initialForm: CustomerBookingInput = {
   cargo_items: [blankCargoItem()],
   customer_reference: "",
   special_requirements: "",
+  route_distance_km: null,
 };
 
 const APPROVAL_STYLES: Record<BookingApprovalStatus, string> = {
@@ -60,6 +62,8 @@ export function CustomerPortalPage() {
   const [form, setForm] = useState<CustomerBookingInput>(initialForm);
   const [createdProjectNumber, setCreatedProjectNumber] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [distanceStatus, setDistanceStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [distanceMessage, setDistanceMessage] = useState<string | null>(null);
 
   const customer = customers.find((c) => c.id === currentCustomerUser?.customer_id);
   const bookings = useMemo(
@@ -87,6 +91,27 @@ export function CustomerPortalPage() {
       ...prev,
       cargo_items: prev.cargo_items.length > 1 ? prev.cargo_items.filter((_, i) => i !== index) : prev.cargo_items,
     }));
+  }
+
+  async function handleCalculateDistance() {
+    setDistanceStatus("loading");
+    setDistanceMessage(null);
+    try {
+      const result = await calculateRouteDistance([
+        form.loading_address || form.loading_name,
+        form.unloading_address || form.unloading_name,
+      ]);
+      update("route_distance_km", result.distanceKm);
+      setDistanceStatus("success");
+      setDistanceMessage(
+        result.source === "osrm"
+          ? `Körsträcka beräknad till ${result.distanceKm.toLocaleString("sv-SE")} km.`
+          : `Sträckan uppskattades till ${result.distanceKm.toLocaleString("sv-SE")} km utifrån orter.`
+      );
+    } catch (err) {
+      setDistanceStatus("error");
+      setDistanceMessage(err instanceof Error ? err.message : "Kunde inte beräkna sträckan.");
+    }
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -186,6 +211,35 @@ export function CustomerPortalPage() {
                   </Field>
               </section>
             </div>
+
+            <section className="border-t border-border pt-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto] md:items-end">
+                <Field label="Beräknad transportsträcka">
+                  <div className="flex items-center gap-2">
+                    <input
+                      inputMode="decimal"
+                      className={inputClass}
+                      value={numberValue(form.route_distance_km)}
+                      onChange={(e) => update("route_distance_km", parseNumber(e.target.value))}
+                      placeholder="km"
+                    />
+                    <span className="text-xs text-slate-500">km</span>
+                  </div>
+                </Field>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleCalculateDistance}
+                  disabled={distanceStatus === "loading" || (!form.loading_name && !form.loading_address) || (!form.unloading_name && !form.unloading_address)}
+                >
+                  {distanceStatus === "loading" ? <Route size={14} /> : <MapPin size={14} />}
+                  {distanceStatus === "loading" ? "Beräknar..." : "Beräkna sträcka"}
+                </Button>
+              </div>
+              {distanceMessage && (
+                <p className={`mt-2 text-xs ${distanceStatus === "error" ? "text-red-600" : "text-slate-500"}`}>{distanceMessage}</p>
+              )}
+            </section>
 
             <section className="space-y-3 border-t border-border pt-4">
               <div className="flex items-center justify-between gap-3">

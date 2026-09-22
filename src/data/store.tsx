@@ -49,6 +49,7 @@ export interface CustomerBookingInput {
   cargo_items: CustomerBookingCargoInput[];
   customer_reference: string;
   special_requirements: string;
+  route_distance_km: number | null;
 }
 
 interface StoreShape {
@@ -414,6 +415,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         vehicle: null,
         driver_name: null,
         carrier_order_number: null,
+        route_distance_km: data.route_distance_km,
         created_at: now,
         updated_at: now,
         locations: [

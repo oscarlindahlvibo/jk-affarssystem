@@ -58,6 +58,9 @@ export function ProjectPrint() {
         <Grid>
           <Item label="Lastningsplats" value={loading?.name} />
           <Item label="Lossningsplats" value={unloading?.name} />
+          <Item label="Lastningsadress" value={loading?.address} />
+          <Item label="Lossningsadress" value={unloading?.address} />
+          <Item label="Beräknad sträcka" value={project.route_distance_km ? `${project.route_distance_km.toLocaleString("sv-SE")} km` : undefined} />
           <Item label="Planerat lastningsdatum" value={formatDate(project.planned_loading_date)} />
           <Item label="Planerat leveransdatum" value={formatDate(project.planned_delivery_date)} />
           <Item label="Transporttyp" value={project.transport_type} />

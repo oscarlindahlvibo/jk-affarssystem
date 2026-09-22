@@ -27,7 +27,7 @@ export function FreightCalculatorPanel({
   const cargoItems = project.cargo_items ?? [];
   const [cargoIndex, setCargoIndex] = useState(0);
   const selectedCargo = cargoItems[cargoIndex] ?? cargoItems[0];
-  const [distanceKm, setDistanceKm] = useState("270");
+  const [distanceKm, setDistanceKm] = useState(project.route_distance_km?.toString() ?? "270");
   const [inputOverrides, setInputOverrides] = useState({
     weightKg: "",
     lengthMm: "",
@@ -94,6 +94,11 @@ export function FreightCalculatorPanel({
                   <input inputMode="decimal" className={inputClass} value={distanceKm} onChange={(e) => setDistanceKm(e.target.value)} />
                   <span className="text-xs text-slate-500">km</span>
                 </div>
+                {project.route_distance_km && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Hämtat från projektets beräknade transportsträcka. Kan justeras manuellt här.
+                  </p>
+                )}
               </Field>
             </div>
 

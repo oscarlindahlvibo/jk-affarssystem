@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, X } from "lucide-react";
+import { MapPin, Plus, Route, X } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Field, inputClass } from "../ui/Field";
 import { Button } from "../ui/Button";
 import { useStore } from "../../data/store";
 import { PROJECT_TEMPLATES, TEMPLATE_DESCRIPTIONS, TEMPLATE_TASKS } from "../../data/templates";
 import { evaluateTransportRules, suggestedFollowVehicleTask, RULE_SOURCE_NOTE } from "../../lib/transportRules";
+import { calculateRouteDistance } from "../../lib/routeDistance";
 import { TransportRuleList } from "./TransportRuleList";
 import { INVOICE_STATUSES, type CargoItem, type TransportType, type ProjectTemplateKey, type Project, type Location, type InvoiceStatus } from "../../types";
 
@@ -97,12 +98,17 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
   const [loadingDate, setLoadingDate] = useState(project?.planned_loading_date ?? "");
   const [deliveryDate, setDeliveryDate] = useState(project?.planned_delivery_date ?? "");
   const [loadingPlace, setLoadingPlace] = useState(existingLoading?.name ?? "");
+  const [loadingAddress, setLoadingAddress] = useState(existingLoading?.address ?? "");
   const [loadingContactName, setLoadingContactName] = useState(existingLoading?.contact_name ?? "");
   const [loadingContactPhone, setLoadingContactPhone] = useState(existingLoading?.contact_phone ?? "");
   const [unloadingPlace, setUnloadingPlace] = useState(existingUnloading?.name ?? "");
+  const [unloadingAddress, setUnloadingAddress] = useState(existingUnloading?.address ?? "");
   const [unloadingContactName, setUnloadingContactName] = useState(existingUnloading?.contact_name ?? "");
   const [unloadingContactPhone, setUnloadingContactPhone] = useState(existingUnloading?.contact_phone ?? "");
   const [waypoint, setWaypoint] = useState(existingWaypoint?.name ?? "");
+  const [routeDistanceKm, setRouteDistanceKm] = useState(project?.route_distance_km?.toString() ?? "");
+  const [distanceStatus, setDistanceStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [distanceMessage, setDistanceMessage] = useState<string | null>(null);
   const [specialRequirements, setSpecialRequirements] = useState(project?.special_requirements ?? "");
   const [deliveryTerms, setDeliveryTerms] = useState(project?.delivery_terms ?? "");
   const [vehicle, setVehicle] = useState(project?.vehicle ?? "");
@@ -191,7 +197,7 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
         project_id: "",
         type: "lastning",
         name: loadingPlace,
-        address: null,
+        address: loadingAddress || null,
         contact_name: loadingContactName || null,
         contact_phone: loadingContactPhone || null,
         order_index: 0,
@@ -203,12 +209,30 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
         project_id: "",
         type: "lossning",
         name: unloadingPlace,
-        address: null,
+        address: unloadingAddress || null,
         contact_name: unloadingContactName || null,
         contact_phone: unloadingContactPhone || null,
         order_index: 2,
       });
     return locations;
+  }
+
+  async function handleCalculateDistance() {
+    setDistanceStatus("loading");
+    setDistanceMessage(null);
+    try {
+      const result = await calculateRouteDistance([loadingAddress || loadingPlace, waypoint, unloadingAddress || unloadingPlace]);
+      setRouteDistanceKm(result.distanceKm.toString());
+      setDistanceStatus("success");
+      setDistanceMessage(
+        result.source === "osrm"
+          ? `Körsträcka beräknad till ${result.distanceKm.toLocaleString("sv-SE")} km.`
+          : `Sträckan uppskattades till ${result.distanceKm.toLocaleString("sv-SE")} km utifrån orter. Kontrollera vid behov.`
+      );
+    } catch (error) {
+      setDistanceStatus("error");
+      setDistanceMessage(error instanceof Error ? error.message : "Kunde inte beräkna sträckan.");
+    }
   }
 
   function buildCargoItems() {
@@ -285,6 +309,7 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
       vehicle: vehicle || null,
       driver_name: driverName || null,
       carrier_order_number: carrierOrderNumber || null,
+      route_distance_km: numOrNull(routeDistanceKm),
       locations: buildLocations(),
       cargo_items: buildCargoItems(),
     };
@@ -449,6 +474,12 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
             <Field label="Lossningsplats">
               <input className={inputClass} value={unloadingPlace} onChange={(e) => setUnloadingPlace(e.target.value)} placeholder="Ort / adress" />
             </Field>
+            <Field label="Lastningsadress">
+              <input className={inputClass} value={loadingAddress} onChange={(e) => setLoadingAddress(e.target.value)} placeholder="Gata, postnr, ort" />
+            </Field>
+            <Field label="Lossningsadress">
+              <input className={inputClass} value={unloadingAddress} onChange={(e) => setUnloadingAddress(e.target.value)} placeholder="Gata, postnr, ort" />
+            </Field>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Field label="Kontakt vid lastning">
                 <input className={inputClass} value={loadingContactName ?? ""} onChange={(e) => setLoadingContactName(e.target.value)} placeholder="Namn" />
@@ -468,6 +499,32 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
             <Field label="Mellanpunkt / via">
               <input className={inputClass} value={waypoint} onChange={(e) => setWaypoint(e.target.value)} placeholder="Valfritt" />
             </Field>
+            <Field label="Beräknad sträcka">
+              <div className="flex items-center gap-2">
+                <input
+                  inputMode="decimal"
+                  className={inputClass}
+                  value={routeDistanceKm}
+                  onChange={(e) => setRouteDistanceKm(e.target.value)}
+                  placeholder="km"
+                />
+                <span className="text-xs text-slate-500">km</span>
+              </div>
+            </Field>
+            <div className="sm:col-span-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleCalculateDistance}
+                disabled={distanceStatus === "loading" || (!loadingPlace && !loadingAddress) || (!unloadingPlace && !unloadingAddress)}
+              >
+                {distanceStatus === "loading" ? <Route size={14} /> : <MapPin size={14} />}
+                {distanceStatus === "loading" ? "Beräknar sträcka..." : "Beräkna sträcka mellan adresser"}
+              </Button>
+              {distanceMessage && (
+                <p className={`mt-2 text-xs ${distanceStatus === "error" ? "text-red-600" : "text-slate-500"}`}>{distanceMessage}</p>
+              )}
+            </div>
             <Field label="Transportör">
               <select className={inputClass} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
                 <option value="">Välj transportör</option>

@@ -339,6 +339,7 @@ export interface Project {
   vehicle: string | null;
   driver_name: string | null;
   carrier_order_number: string | null;
+  route_distance_km?: number | null;
   created_at: string;
   updated_at: string;
 
