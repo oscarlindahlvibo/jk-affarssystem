@@ -4,6 +4,7 @@ import { MapPin, Plus, Route, X } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Field, inputClass } from "../ui/Field";
 import { Button } from "../ui/Button";
+import { AddressAutocomplete } from "../ui/AddressAutocomplete";
 import { useStore } from "../../data/store";
 import { PROJECT_TEMPLATES, TEMPLATE_DESCRIPTIONS, TEMPLATE_TASKS } from "../../data/templates";
 import { evaluateTransportRules, suggestedFollowVehicleTask, RULE_SOURCE_NOTE } from "../../lib/transportRules";
@@ -475,10 +476,24 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
               <input className={inputClass} value={unloadingPlace} onChange={(e) => setUnloadingPlace(e.target.value)} placeholder="Ort / adress" />
             </Field>
             <Field label="Lastningsadress">
-              <input className={inputClass} value={loadingAddress} onChange={(e) => setLoadingAddress(e.target.value)} placeholder="Gata, postnr, ort" />
+              <AddressAutocomplete
+                value={loadingAddress}
+                onChange={setLoadingAddress}
+                onSelect={(suggestion) => {
+                  if (!loadingPlace.trim()) setLoadingPlace(suggestion.place || suggestion.address);
+                }}
+                placeholder="Gata, postnr, ort"
+              />
             </Field>
             <Field label="Lossningsadress">
-              <input className={inputClass} value={unloadingAddress} onChange={(e) => setUnloadingAddress(e.target.value)} placeholder="Gata, postnr, ort" />
+              <AddressAutocomplete
+                value={unloadingAddress}
+                onChange={setUnloadingAddress}
+                onSelect={(suggestion) => {
+                  if (!unloadingPlace.trim()) setUnloadingPlace(suggestion.place || suggestion.address);
+                }}
+                placeholder="Gata, postnr, ort"
+              />
             </Field>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Field label="Kontakt vid lastning">

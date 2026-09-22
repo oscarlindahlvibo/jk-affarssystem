@@ -4,6 +4,7 @@ import { useAuth } from "../lib/auth";
 import { useStore, type CustomerBookingCargoInput, type CustomerBookingInput } from "../data/store";
 import { Button } from "../components/ui/Button";
 import { Field, inputClass } from "../components/ui/Field";
+import { AddressAutocomplete } from "../components/ui/AddressAutocomplete";
 import { Panel } from "../components/ui/Panel";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { formatDate } from "../lib/format";
@@ -186,7 +187,13 @@ export function CustomerPortalPage() {
                     <input required className={inputClass} value={form.loading_name} onChange={(e) => update("loading_name", e.target.value)} />
                   </Field>
                   <Field label="Adress">
-                    <input className={inputClass} value={form.loading_address} onChange={(e) => update("loading_address", e.target.value)} />
+                    <AddressAutocomplete
+                      value={form.loading_address}
+                      onChange={(value) => update("loading_address", value)}
+                      onSelect={(suggestion) => {
+                        if (!form.loading_name.trim()) update("loading_name", suggestion.place || suggestion.address);
+                      }}
+                    />
                   </Field>
                   <Field label="Kontakt på plats">
                     <input className={inputClass} value={form.loading_contact_name} onChange={(e) => update("loading_contact_name", e.target.value)} />
@@ -201,7 +208,13 @@ export function CustomerPortalPage() {
                     <input required className={inputClass} value={form.unloading_name} onChange={(e) => update("unloading_name", e.target.value)} />
                   </Field>
                   <Field label="Adress">
-                    <input className={inputClass} value={form.unloading_address} onChange={(e) => update("unloading_address", e.target.value)} />
+                    <AddressAutocomplete
+                      value={form.unloading_address}
+                      onChange={(value) => update("unloading_address", value)}
+                      onSelect={(suggestion) => {
+                        if (!form.unloading_name.trim()) update("unloading_name", suggestion.place || suggestion.address);
+                      }}
+                    />
                   </Field>
                   <Field label="Kontakt på plats">
                     <input className={inputClass} value={form.unloading_contact_name} onChange={(e) => update("unloading_contact_name", e.target.value)} />

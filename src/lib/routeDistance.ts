@@ -4,6 +4,15 @@ export interface RouteDistanceResult {
   stops: Array<{ query: string; lat: number; lon: number; displayName: string }>;
 }
 
+export interface AddressSuggestion {
+  id: string;
+  label: string;
+  address: string;
+  place: string;
+  lat: number;
+  lon: number;
+}
+
 interface Coordinates {
   lat: number;
   lon: number;
@@ -64,6 +73,74 @@ function findLocalPlace(query: string): Coordinates | null {
     return normalized.includes(key) || normalized.includes(display);
   });
   return match?.[1] ?? null;
+}
+
+function localPlaceSuggestions(query: string): AddressSuggestion[] {
+  const normalized = normalize(query);
+  if (normalized.length < 2) return [];
+  return Object.entries(SWEDISH_PLACES)
+    .filter(([key, place]) => key.includes(normalized.replace(/\s/g, "")) || normalize(place.displayName).includes(normalized))
+    .slice(0, 5)
+    .map(([key, place]) => ({
+      id: `local-${key}`,
+      label: place.displayName,
+      address: place.displayName,
+      place: place.displayName,
+      lat: place.lat,
+      lon: place.lon,
+    }));
+}
+
+export async function searchAddressSuggestions(query: string): Promise<AddressSuggestion[]> {
+  const trimmed = query.trim();
+  if (trimmed.length < 3) return localPlaceSuggestions(trimmed);
+
+  try {
+    const url = new URL("https://photon.komoot.io/api/");
+    url.searchParams.set("q", trimmed);
+    url.searchParams.set("limit", "7");
+    const response = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+    if (!response.ok) return localPlaceSuggestions(trimmed);
+    const data = (await response.json()) as {
+      features?: Array<{
+        geometry: { coordinates: [number, number] };
+        properties: {
+          osm_id?: number;
+          name?: string;
+          housenumber?: string;
+          street?: string;
+          city?: string;
+          county?: string;
+          postcode?: string;
+          country?: string;
+          countrycode?: string;
+        };
+      }>;
+    };
+    const suggestions =
+      data.features
+        ?.filter((feature) => ["SE", "DK", "NO", "FI"].includes(feature.properties.countrycode ?? ""))
+        .map((feature, index) => {
+          const [lon, lat] = feature.geometry.coordinates;
+          const streetLine = [feature.properties.street, feature.properties.housenumber].filter(Boolean).join(" ");
+          const address = [streetLine || feature.properties.name, feature.properties.postcode, feature.properties.city || feature.properties.county]
+            .filter(Boolean)
+            .join(", ");
+          const label = [address, feature.properties.country].filter(Boolean).join(", ");
+          return {
+            id: `${feature.properties.osm_id ?? index}-${lon}-${lat}`,
+            label,
+            address: address || feature.properties.name || trimmed,
+            place: feature.properties.city || feature.properties.name || feature.properties.county || "",
+            lat,
+            lon,
+          };
+        })
+        .filter((suggestion) => suggestion.label) ?? [];
+    return suggestions.length > 0 ? suggestions : localPlaceSuggestions(trimmed);
+  } catch {
+    return localPlaceSuggestions(trimmed);
+  }
 }
 
 async function geocode(query: string): Promise<Coordinates | null> {
