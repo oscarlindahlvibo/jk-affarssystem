@@ -14,6 +14,7 @@ import { TasksSection } from "../components/projects/TasksSection";
 import { MeasurementPanel } from "../components/projects/MeasurementPanel";
 import { ProjectFormModal } from "../components/projects/NewProjectModal";
 import { TransportRuleList } from "../components/projects/TransportRuleList";
+import { FreightCalculatorPanel } from "../components/projects/FreightCalculatorPanel";
 import { getMissingFields } from "../lib/validation";
 import { evaluateTransportRules, RULE_SOURCE_NOTE } from "../lib/transportRules";
 import { usePermissions } from "../lib/usePermissions";
@@ -362,6 +363,7 @@ export function ProjectDetail() {
             canEdit={permissions.canEditProjectFinance}
             onSave={(patch) => updateProjectFinance(project.id, patch)}
           />
+          <FreightCalculatorPanel project={project} canApplyToFinance={permissions.canEditProjectFinance} />
           <TasksSection projectId={project.id} tasks={project.tasks ?? []} />
           <MeasurementPanel link={project.measurement_link} />
         </div>

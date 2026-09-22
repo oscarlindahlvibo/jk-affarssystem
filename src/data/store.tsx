@@ -16,6 +16,7 @@ import * as mock from "./mockData";
 import { useAuth } from "../lib/auth";
 import { usePersonnel } from "./personnel";
 import { can, canEditProjectFinance, type Action, type Resource } from "../lib/permissions";
+import { DEFAULT_FREIGHT_CALCULATOR_CONFIG, type FreightCalculatorConfig } from "../lib/freightCalculator";
 
 export interface CustomerBookingCargoInput {
   description: string;
@@ -51,6 +52,9 @@ interface StoreShape {
   suppliers: Supplier[];
   profiles: Profile[];
   currentRole: UserRole | null;
+  freightCalculatorConfig: FreightCalculatorConfig;
+  updateFreightCalculatorConfig: (next: FreightCalculatorConfig) => void;
+  resetFreightCalculatorConfig: () => void;
   addCustomer: (c: Omit<Customer, "id" | "org_id" | "created_at" | "updated_at">) => Customer;
   updateCustomer: (id: string, patch: Partial<Customer>) => void;
   deleteCustomer: (id: string) => { ok: boolean; reason?: string };
@@ -88,6 +92,7 @@ interface StoreShape {
 
 const StoreContext = createContext<StoreShape | null>(null);
 const PROJECTS_STORAGE_KEY = "jk-mock-projects";
+const FREIGHT_CALCULATOR_STORAGE_KEY = "jk-freight-calculator-config";
 
 let idCounter = 2000;
 function nextId(prefix: string) {
@@ -109,6 +114,17 @@ function loadProjects(): Project[] {
   }
 }
 
+function loadFreightCalculatorConfig(): FreightCalculatorConfig {
+  if (typeof window === "undefined") return DEFAULT_FREIGHT_CALCULATOR_CONFIG;
+  const stored = window.localStorage.getItem(FREIGHT_CALCULATOR_STORAGE_KEY);
+  if (!stored) return DEFAULT_FREIGHT_CALCULATOR_CONFIG;
+  try {
+    return { ...DEFAULT_FREIGHT_CALCULATOR_CONFIG, ...JSON.parse(stored) };
+  } catch {
+    return DEFAULT_FREIGHT_CALCULATOR_CONFIG;
+  }
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
   const { currentProfile, currentCustomerUser } = useAuth();
   const personnel = usePersonnel();
@@ -119,10 +135,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [allContactPersons, setAllContactPersons] = useState<ContactPerson[]>(mock.contactPersons);
   const [allProjects, setAllProjects] = useState<Project[]>(loadProjects);
   const [allSuppliers, setAllSuppliers] = useState<Supplier[]>(mock.suppliers);
+  const [freightCalculatorConfig, setFreightCalculatorConfig] = useState<FreightCalculatorConfig>(loadFreightCalculatorConfig);
 
   useEffect(() => {
     window.localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(allProjects));
   }, [allProjects]);
+
+  useEffect(() => {
+    window.localStorage.setItem(FREIGHT_CALCULATOR_STORAGE_KEY, JSON.stringify(freightCalculatorConfig));
+  }, [freightCalculatorConfig]);
 
   // Skydd i datalagret: även om ett UI-element av misstag visas ska mutationer
   // blockeras här om rollen saknar rättighet eller kontot inte längre är aktivt.
@@ -140,6 +161,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     [currentProfile, role]
   );
+
+  const updateFreightCalculatorConfig: StoreShape["updateFreightCalculatorConfig"] = useCallback(
+    (next) => {
+      authorize("settings", "edit");
+      setFreightCalculatorConfig(next);
+    },
+    [authorize]
+  );
+
+  const resetFreightCalculatorConfig: StoreShape["resetFreightCalculatorConfig"] = useCallback(() => {
+    authorize("settings", "edit");
+    setFreightCalculatorConfig(DEFAULT_FREIGHT_CALCULATOR_CONFIG);
+  }, [authorize]);
 
   const customers = useMemo(() => {
     const orgCustomers = allCustomers.filter((c) => c.org_id === orgId);
@@ -629,6 +663,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       suppliers,
       profiles,
       currentRole: role,
+      freightCalculatorConfig,
+      updateFreightCalculatorConfig,
+      resetFreightCalculatorConfig,
       addCustomer,
       updateCustomer,
       deleteCustomer,
@@ -669,6 +706,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       suppliers,
       profiles,
       role,
+      freightCalculatorConfig,
+      updateFreightCalculatorConfig,
+      resetFreightCalculatorConfig,
       enrich,
       addCustomer,
       updateCustomer,

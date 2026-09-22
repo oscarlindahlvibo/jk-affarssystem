@@ -14,6 +14,7 @@ import {
   UserCog,
   LogOut,
   X,
+  Calculator,
 } from "lucide-react";
 import { useAuth } from "../../lib/auth";
 import { useStore } from "../../data/store";
@@ -41,6 +42,7 @@ const NAV_ITEMS = [
     show: (p: ReturnType<typeof usePermissions>) => p.can("projects", "create"),
   },
   { to: "/personal", label: "Personal", icon: UserCog, show: (p: ReturnType<typeof usePermissions>) => p.isAdmin },
+  { to: "/raknesnurra", label: "Räknesnurra", icon: Calculator, show: (p: ReturnType<typeof usePermissions>) => p.isAdmin },
   { to: "/installningar", label: "Inställningar", icon: Settings, show: (p: ReturnType<typeof usePermissions>) => p.isAdmin },
 ];
 
