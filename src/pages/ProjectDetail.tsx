@@ -132,7 +132,8 @@ export function ProjectDetail() {
   const loading = project.locations?.find((l) => l.type === "lastning");
   const unloading = project.locations?.find((l) => l.type === "lossning");
   const waypoints = project.locations?.filter((l) => l.type === "mellanpunkt") ?? [];
-  const cargo = project.cargo_items?.[0];
+  const cargoItems = project.cargo_items ?? [];
+  const cargo = cargoItems[0];
   const missing = getMissingFields(project);
   const isPendingCustomerBooking = project.booking_approval_status === "Väntar på godkännande";
   const transportRules = evaluateTransportRules({
@@ -311,22 +312,29 @@ export function ProjectDetail() {
           </Panel>
 
           <Panel title="Gods">
-            {cargo ? (
-              <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 sm:grid-cols-4">
-                <InfoItem label="Beskrivning" value={cargo.description} />
-                <InfoItem label="Längd" value={cargo.length_m ? `${cargo.length_m} m` : undefined} />
-                <InfoItem label="Bredd" value={cargo.width_m ? `${cargo.width_m} m` : undefined} />
-                <InfoItem label="Höjd" value={cargo.height_m ? `${cargo.height_m} m` : undefined} />
-                <InfoItem label="Vikt" value={cargo.weight_ton ? `${cargo.weight_ton} ton` : undefined} />
-                <InfoItem label="Antal kollin" value={cargo.quantity} />
-                <InfoItem label="Lyftpunkter" value={cargo.lift_points} />
-                <InfoItem label="Ritningsreferens" value={cargo.drawing_reference} />
-                {cargo.technical_info && (
-                  <div className="col-span-full">
-                    <div className="text-xs text-slate-500">Övrig teknisk information</div>
-                    <div className="text-sm text-slate-700">{cargo.technical_info}</div>
+            {cargoItems.length > 0 ? (
+              <div className="space-y-4">
+                {cargoItems.map((item, index) => (
+                  <div key={item.id ?? index} className={index > 0 ? "border-t border-border pt-4" : ""}>
+                    <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Godsrad {index + 1}</div>
+                    <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 sm:grid-cols-4">
+                      <InfoItem label="Beskrivning" value={item.description} />
+                      <InfoItem label="Längd" value={item.length_m ? `${item.length_m} m` : undefined} />
+                      <InfoItem label="Bredd" value={item.width_m ? `${item.width_m} m` : undefined} />
+                      <InfoItem label="Höjd" value={item.height_m ? `${item.height_m} m` : undefined} />
+                      <InfoItem label="Vikt" value={item.weight_ton ? `${item.weight_ton} ton` : undefined} />
+                      <InfoItem label="Antal kollin" value={item.quantity} />
+                      <InfoItem label="Lyftpunkter" value={item.lift_points} />
+                      <InfoItem label="Ritningsreferens" value={item.drawing_reference} />
+                      {item.technical_info && (
+                        <div className="col-span-full">
+                          <div className="text-xs text-slate-500">Övrig teknisk information</div>
+                          <div className="text-sm text-slate-700">{item.technical_info}</div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
+                ))}
               </div>
             ) : (
               <p className="text-sm text-slate-500">Ingen godsinformation registrerad ännu.</p>

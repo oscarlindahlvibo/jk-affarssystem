@@ -17,6 +17,15 @@ import { useAuth } from "../lib/auth";
 import { usePersonnel } from "./personnel";
 import { can, canEditProjectFinance, type Action, type Resource } from "../lib/permissions";
 
+export interface CustomerBookingCargoInput {
+  description: string;
+  length_m: number | null;
+  width_m: number | null;
+  height_m: number | null;
+  weight_ton: number | null;
+  quantity: number | null;
+}
+
 export interface CustomerBookingInput {
   name: string;
   transport_type: TransportType;
@@ -30,12 +39,7 @@ export interface CustomerBookingInput {
   unloading_address: string;
   unloading_contact_name: string;
   unloading_contact_phone: string;
-  cargo_description: string;
-  length_m: number | null;
-  width_m: number | null;
-  height_m: number | null;
-  weight_ton: number | null;
-  quantity: number | null;
+  cargo_items: CustomerBookingCargoInput[];
   customer_reference: string;
   special_requirements: string;
 }
@@ -293,6 +297,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const projectName =
         data.name.trim() ||
         `${customer?.company_name ?? "Kund"} – Bokningsförfrågan ${data.loading_name || "lastning"} till ${data.unloading_name || "lossning"}`;
+      const cargoItems = data.cargo_items.filter((item) => item.description.trim());
       const newProject: Project = {
         id,
         org_id: currentCustomerUser.org_id,
@@ -345,21 +350,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             order_index: 1,
           },
         ],
-        cargo_items: [
-          {
-            id: nextId("g"),
-            project_id: id,
-            description: data.cargo_description.trim(),
-            length_m: data.length_m,
-            width_m: data.width_m,
-            height_m: data.height_m,
-            weight_ton: data.weight_ton,
-            quantity: data.quantity,
-            lift_points: null,
-            drawing_reference: null,
-            technical_info: "Skapad via kundportalen.",
-          },
-        ],
+        cargo_items: cargoItems.map((item) => ({
+          id: nextId("g"),
+          project_id: id,
+          description: item.description.trim(),
+          length_m: item.length_m,
+          width_m: item.width_m,
+          height_m: item.height_m,
+          weight_ton: item.weight_ton,
+          quantity: item.quantity,
+          lift_points: null,
+          drawing_reference: null,
+          technical_info: "Skapad via kundportalen.",
+        })),
         documents: [],
         notes: [
           {

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { CheckCircle2, Clock, LogOut, Package, Send, Truck } from "lucide-react";
+import { CheckCircle2, Clock, LogOut, Package, Plus, Send, Truck, X } from "lucide-react";
 import { useAuth } from "../lib/auth";
-import { useStore, type CustomerBookingInput } from "../data/store";
+import { useStore, type CustomerBookingCargoInput, type CustomerBookingInput } from "../data/store";
 import { Button } from "../components/ui/Button";
 import { Field, inputClass } from "../components/ui/Field";
 import { Panel } from "../components/ui/Panel";
@@ -10,6 +10,15 @@ import { formatDate } from "../lib/format";
 import { PROJECT_STATUSES, type BookingApprovalStatus, type TransportType } from "../types";
 
 const TRANSPORT_TYPES: TransportType[] = ["Specialtransport", "Maskintransport", "Krantransport", "Styckegods", "Container", "Annat"];
+
+const blankCargoItem = (): CustomerBookingCargoInput => ({
+  description: "",
+  length_m: null,
+  width_m: null,
+  height_m: null,
+  weight_ton: null,
+  quantity: 1,
+});
 
 const initialForm: CustomerBookingInput = {
   name: "",
@@ -24,12 +33,7 @@ const initialForm: CustomerBookingInput = {
   unloading_address: "",
   unloading_contact_name: "",
   unloading_contact_phone: "",
-  cargo_description: "",
-  length_m: null,
-  width_m: null,
-  height_m: null,
-  weight_ton: null,
-  quantity: 1,
+  cargo_items: [blankCargoItem()],
   customer_reference: "",
   special_requirements: "",
 };
@@ -67,11 +71,29 @@ export function CustomerPortalPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  function updateCargoItem(index: number, patch: Partial<CustomerBookingCargoInput>) {
+    setForm((prev) => ({
+      ...prev,
+      cargo_items: prev.cargo_items.map((item, i) => (i === index ? { ...item, ...patch } : item)),
+    }));
+  }
+
+  function addCargoItem() {
+    setForm((prev) => ({ ...prev, cargo_items: [...prev.cargo_items, blankCargoItem()] }));
+  }
+
+  function removeCargoItem(index: number) {
+    setForm((prev) => ({
+      ...prev,
+      cargo_items: prev.cargo_items.length > 1 ? prev.cargo_items.filter((_, i) => i !== index) : prev.cargo_items,
+    }));
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setCreatedProjectNumber(null);
-    if (!form.loading_name.trim() || !form.unloading_name.trim() || !form.cargo_description.trim()) {
+    if (!form.loading_name.trim() || !form.unloading_name.trim() || !form.cargo_items.some((item) => item.description.trim())) {
       setError("Fyll i minst lastningsplats, lossningsplats och godsbeskrivning.");
       return;
     }
@@ -166,28 +188,57 @@ export function CustomerPortalPage() {
             </div>
 
             <section className="space-y-3 border-t border-border pt-4">
-              <h2 className="text-sm font-semibold text-slate-800">Gods</h2>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
-                <div className="md:col-span-5">
-                  <Field label="Godsbeskrivning">
-                    <input required className={inputClass} value={form.cargo_description} onChange={(e) => update("cargo_description", e.target.value)} placeholder="Vad ska transporteras?" />
-                  </Field>
-                </div>
-                <Field label="Längd (m)">
-                  <input inputMode="decimal" className={inputClass} value={numberValue(form.length_m)} onChange={(e) => update("length_m", parseNumber(e.target.value))} />
-                </Field>
-                <Field label="Bredd (m)">
-                  <input inputMode="decimal" className={inputClass} value={numberValue(form.width_m)} onChange={(e) => update("width_m", parseNumber(e.target.value))} />
-                </Field>
-                <Field label="Höjd (m)">
-                  <input inputMode="decimal" className={inputClass} value={numberValue(form.height_m)} onChange={(e) => update("height_m", parseNumber(e.target.value))} />
-                </Field>
-                <Field label="Vikt (ton)">
-                  <input inputMode="decimal" className={inputClass} value={numberValue(form.weight_ton)} onChange={(e) => update("weight_ton", parseNumber(e.target.value))} />
-                </Field>
-                <Field label="Antal">
-                  <input inputMode="numeric" className={inputClass} value={numberValue(form.quantity)} onChange={(e) => update("quantity", parseNumber(e.target.value))} />
-                </Field>
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold text-slate-800">Gods</h2>
+                <Button type="button" variant="secondary" onClick={addCargoItem}>
+                  <Plus size={14} /> Lägg till rad
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {form.cargo_items.map((item, index) => (
+                  <div key={index} className="rounded-lg border border-border p-3">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div className="text-sm font-medium text-slate-700">Godsrad {index + 1}</div>
+                      <button
+                        type="button"
+                        onClick={() => removeCargoItem(index)}
+                        disabled={form.cargo_items.length === 1}
+                        className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30"
+                        title="Ta bort godsrad"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+                      <div className="md:col-span-5">
+                        <Field label="Godsbeskrivning">
+                          <input
+                            required={index === 0}
+                            className={inputClass}
+                            value={item.description}
+                            onChange={(e) => updateCargoItem(index, { description: e.target.value })}
+                            placeholder="Vad ska transporteras?"
+                          />
+                        </Field>
+                      </div>
+                      <Field label="Längd (m)">
+                        <input inputMode="decimal" className={inputClass} value={numberValue(item.length_m)} onChange={(e) => updateCargoItem(index, { length_m: parseNumber(e.target.value) })} />
+                      </Field>
+                      <Field label="Bredd (m)">
+                        <input inputMode="decimal" className={inputClass} value={numberValue(item.width_m)} onChange={(e) => updateCargoItem(index, { width_m: parseNumber(e.target.value) })} />
+                      </Field>
+                      <Field label="Höjd (m)">
+                        <input inputMode="decimal" className={inputClass} value={numberValue(item.height_m)} onChange={(e) => updateCargoItem(index, { height_m: parseNumber(e.target.value) })} />
+                      </Field>
+                      <Field label="Vikt (ton)">
+                        <input inputMode="decimal" className={inputClass} value={numberValue(item.weight_ton)} onChange={(e) => updateCargoItem(index, { weight_ton: parseNumber(e.target.value) })} />
+                      </Field>
+                      <Field label="Antal">
+                        <input inputMode="numeric" className={inputClass} value={numberValue(item.quantity)} onChange={(e) => updateCargoItem(index, { quantity: parseNumber(e.target.value) })} />
+                      </Field>
+                    </div>
+                  </div>
+                ))}
               </div>
             </section>
 
@@ -229,7 +280,10 @@ export function CustomerPortalPage() {
                       <StatusBadge status={PROJECT_STATUSES.includes(p.status) ? p.status : "Ny"} />
                     </div>
                     <div className="mt-3 space-y-1 text-xs text-slate-500">
-                      <div className="flex items-center gap-1"><Package size={12} /> {p.cargo_items?.[0]?.description ?? "Gods saknas"}</div>
+                      <div className="flex items-center gap-1">
+                        <Package size={12} /> {p.cargo_items?.[0]?.description ?? "Gods saknas"}
+                        {(p.cargo_items?.length ?? 0) > 1 ? ` + ${(p.cargo_items?.length ?? 1) - 1} rad(er)` : ""}
+                      </div>
                       <div>{loading?.name ?? "Lastning saknas"} → {unloading?.name ?? "Lossning saknas"}</div>
                       <div className="flex items-center gap-1"><Clock size={12} /> Lastning {formatDate(p.planned_loading_date)}</div>
                     </div>

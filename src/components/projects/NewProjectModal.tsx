@@ -8,7 +8,7 @@ import { useStore } from "../../data/store";
 import { PROJECT_TEMPLATES, TEMPLATE_DESCRIPTIONS, TEMPLATE_TASKS } from "../../data/templates";
 import { evaluateTransportRules, suggestedFollowVehicleTask, RULE_SOURCE_NOTE } from "../../lib/transportRules";
 import { TransportRuleList } from "./TransportRuleList";
-import { INVOICE_STATUSES, type TransportType, type ProjectTemplateKey, type Project, type Location, type InvoiceStatus } from "../../types";
+import { INVOICE_STATUSES, type CargoItem, type TransportType, type ProjectTemplateKey, type Project, type Location, type InvoiceStatus } from "../../types";
 
 const TRANSPORT_TYPES: TransportType[] = [
   "Specialtransport",
@@ -35,13 +35,54 @@ function numOrNull(v: string): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+type CargoDraft = {
+  id?: string;
+  description: string;
+  length: string;
+  width: string;
+  height: string;
+  weight: string;
+  quantity: string;
+  liftPoints: string;
+  drawingReference: string;
+  technicalInfo: string | null;
+};
+
+function blankCargoDraft(): CargoDraft {
+  return {
+    description: "",
+    length: "",
+    width: "",
+    height: "",
+    weight: "",
+    quantity: "",
+    liftPoints: "",
+    drawingReference: "",
+    technicalInfo: null,
+  };
+}
+
+function cargoToDraft(cargo: CargoItem): CargoDraft {
+  return {
+    id: cargo.id,
+    description: cargo.description ?? "",
+    length: cargo.length_m?.toString() ?? "",
+    width: cargo.width_m?.toString() ?? "",
+    height: cargo.height_m?.toString() ?? "",
+    weight: cargo.weight_ton?.toString() ?? "",
+    quantity: cargo.quantity?.toString() ?? "",
+    liftPoints: cargo.lift_points ?? "",
+    drawingReference: cargo.drawing_reference ?? "",
+    technicalInfo: cargo.technical_info ?? null,
+  };
+}
+
 export function ProjectFormModal({ open, onClose, project }: { open: boolean; onClose: () => void; project?: Project }) {
   const { customers, contactPersons, suppliers, addProject, updateProject, addTask, addCustomer, addContactPerson, projects, profiles } = useStore();
   const navigate = useNavigate();
   const activeProfiles = profiles.filter((p) => p.status === "aktiv");
   const isEdit = Boolean(project);
 
-  const existingCargo = project?.cargo_items?.[0];
   const existingLoading = project?.locations?.find((l) => l.type === "lastning");
   const existingUnloading = project?.locations?.find((l) => l.type === "lossning");
   const existingWaypoint = project?.locations?.find((l) => l.type === "mellanpunkt");
@@ -73,23 +114,18 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
   const [cost, setCost] = useState(project?.cost?.toString() ?? "");
   const [invoiceStatus, setInvoiceStatus] = useState<InvoiceStatus>(project?.invoice_status ?? "Ej fakturerad");
 
-  const [cargoDescription, setCargoDescription] = useState(existingCargo?.description ?? "");
-  const [length, setLength] = useState(existingCargo?.length_m?.toString() ?? "");
-  const [width, setWidth] = useState(existingCargo?.width_m?.toString() ?? "");
-  const [height, setHeight] = useState(existingCargo?.height_m?.toString() ?? "");
-  const [weight, setWeight] = useState(existingCargo?.weight_ton?.toString() ?? "");
-  const [quantity, setQuantity] = useState(existingCargo?.quantity?.toString() ?? "");
-  const [liftPoints, setLiftPoints] = useState(existingCargo?.lift_points ?? "");
-  const [drawingReference, setDrawingReference] = useState(existingCargo?.drawing_reference ?? "");
+  const [cargoRows, setCargoRows] = useState<CargoDraft[]>(
+    project?.cargo_items?.length ? project.cargo_items.map(cargoToDraft) : [blankCargoDraft()]
+  );
 
-  const liveCargoDimensions = {
-    length_m: numOrNull(length),
-    width_m: numOrNull(width),
-    height_m: numOrNull(height),
-    weight_ton: numOrNull(weight),
-  };
-  const liveRules = evaluateTransportRules(liveCargoDimensions);
-  const liveTaskSuggestion = suggestedFollowVehicleTask(liveCargoDimensions);
+  const liveCargoDimensions = cargoRows.map((row) => ({
+    length_m: numOrNull(row.length),
+    width_m: numOrNull(row.width),
+    height_m: numOrNull(row.height),
+    weight_ton: numOrNull(row.weight),
+  }));
+  const liveRules = liveCargoDimensions.flatMap((dimensions) => evaluateTransportRules(dimensions));
+  const liveTaskSuggestion = liveCargoDimensions.map(suggestedFollowVehicleTask).find(Boolean);
 
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState("");
@@ -176,34 +212,40 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
   }
 
   function buildCargoItems() {
-    if (!cargoDescription && !length && !width && !height && !weight && !quantity) return [];
-    return [
-      {
-        id: existingCargo?.id ?? "cargo-1",
+    return cargoRows
+      .filter((row) => row.description || row.length || row.width || row.height || row.weight || row.quantity)
+      .map((row, index) => ({
+        id: row.id ?? `cargo-${index + 1}`,
         project_id: "",
-        description: cargoDescription || "Gods",
-        length_m: numOrNull(length),
-        width_m: numOrNull(width),
-        height_m: numOrNull(height),
-        weight_ton: numOrNull(weight),
-        quantity: numOrNull(quantity),
-        lift_points: liftPoints || null,
-        drawing_reference: drawingReference || null,
-        technical_info: existingCargo?.technical_info ?? null,
-      },
-    ];
+        description: row.description || "Gods",
+        length_m: numOrNull(row.length),
+        width_m: numOrNull(row.width),
+        height_m: numOrNull(row.height),
+        weight_ton: numOrNull(row.weight),
+        quantity: numOrNull(row.quantity),
+        lift_points: row.liftPoints || null,
+        drawing_reference: row.drawingReference || null,
+        technical_info: row.technicalInfo,
+      }));
+  }
+
+  function updateCargoRow(index: number, patch: Partial<CargoDraft>) {
+    setCargoRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  }
+
+  function addCargoRow() {
+    setCargoRows((prev) => [...prev, blankCargoDraft()]);
+  }
+
+  function removeCargoRow(index: number) {
+    setCargoRows((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
   }
 
   // Föreslår automatiskt en uppgift ("Boka följebil"/"Boka vägtransportledare") utifrån
   // lastens mått – oavsett vald transporttyp eller mall – om en sådan uppgift inte redan
   // finns med i checklistan.
   function ensureFollowVehicleTask(projectId: string, existingTaskTexts: string[]) {
-    const suggestion = suggestedFollowVehicleTask({
-      length_m: numOrNull(length),
-      width_m: numOrNull(width),
-      height_m: numOrNull(height),
-      weight_ton: numOrNull(weight),
-    });
+    const suggestion = liveCargoDimensions.map(suggestedFollowVehicleTask).find(Boolean);
     if (!suggestion) return;
     const alreadyPlanned = existingTaskTexts.some((t) => /följebil|vägtransportledare/i.test(t));
     if (alreadyPlanned) return;
@@ -484,34 +526,62 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
         </div>
 
         <div className="border-t border-border pt-4">
-          <h3 className="mb-3 text-sm font-semibold text-slate-700">Gods</h3>
-          <Field label="Godsbeskrivning">
-            <input className={inputClass} value={cargoDescription} onChange={(e) => setCargoDescription(e.target.value)} placeholder="t.ex. Transformatorstation, komplett" />
-          </Field>
-          <div className="mt-4 grid grid-cols-3 gap-4 sm:grid-cols-5">
-            <Field label="Längd (m)">
-              <input inputMode="decimal" className={inputClass} value={length} onChange={(e) => setLength(e.target.value)} />
-            </Field>
-            <Field label="Bredd (m)">
-              <input inputMode="decimal" className={inputClass} value={width} onChange={(e) => setWidth(e.target.value)} />
-            </Field>
-            <Field label="Höjd (m)">
-              <input inputMode="decimal" className={inputClass} value={height} onChange={(e) => setHeight(e.target.value)} />
-            </Field>
-            <Field label="Vikt (ton)">
-              <input inputMode="decimal" className={inputClass} value={weight} onChange={(e) => setWeight(e.target.value)} />
-            </Field>
-            <Field label="Antal kollin">
-              <input inputMode="numeric" className={inputClass} value={quantity} onChange={(e) => setQuantity(e.target.value)} />
-            </Field>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-slate-700">Gods</h3>
+            <Button type="button" variant="secondary" onClick={addCargoRow}>
+              <Plus size={14} /> Lägg till godsrad
+            </Button>
           </div>
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Lyftpunkter">
-              <input className={inputClass} value={liftPoints ?? ""} onChange={(e) => setLiftPoints(e.target.value)} />
-            </Field>
-            <Field label="Ritningsreferens">
-              <input className={inputClass} value={drawingReference ?? ""} onChange={(e) => setDrawingReference(e.target.value)} />
-            </Field>
+          <div className="space-y-3">
+            {cargoRows.map((row, index) => (
+              <div key={index} className="rounded-lg border border-border p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="text-sm font-medium text-slate-700">Godsrad {index + 1}</div>
+                  <button
+                    type="button"
+                    onClick={() => removeCargoRow(index)}
+                    disabled={cargoRows.length === 1}
+                    title="Ta bort godsrad"
+                    className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+                <Field label="Godsbeskrivning">
+                  <input
+                    className={inputClass}
+                    value={row.description}
+                    onChange={(e) => updateCargoRow(index, { description: e.target.value })}
+                    placeholder="t.ex. Transformatorstation, komplett"
+                  />
+                </Field>
+                <div className="mt-4 grid grid-cols-3 gap-4 sm:grid-cols-5">
+                  <Field label="Längd (m)">
+                    <input inputMode="decimal" className={inputClass} value={row.length} onChange={(e) => updateCargoRow(index, { length: e.target.value })} />
+                  </Field>
+                  <Field label="Bredd (m)">
+                    <input inputMode="decimal" className={inputClass} value={row.width} onChange={(e) => updateCargoRow(index, { width: e.target.value })} />
+                  </Field>
+                  <Field label="Höjd (m)">
+                    <input inputMode="decimal" className={inputClass} value={row.height} onChange={(e) => updateCargoRow(index, { height: e.target.value })} />
+                  </Field>
+                  <Field label="Vikt (ton)">
+                    <input inputMode="decimal" className={inputClass} value={row.weight} onChange={(e) => updateCargoRow(index, { weight: e.target.value })} />
+                  </Field>
+                  <Field label="Antal kollin">
+                    <input inputMode="numeric" className={inputClass} value={row.quantity} onChange={(e) => updateCargoRow(index, { quantity: e.target.value })} />
+                  </Field>
+                </div>
+                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Field label="Lyftpunkter">
+                    <input className={inputClass} value={row.liftPoints} onChange={(e) => updateCargoRow(index, { liftPoints: e.target.value })} />
+                  </Field>
+                  <Field label="Ritningsreferens">
+                    <input className={inputClass} value={row.drawingReference} onChange={(e) => updateCargoRow(index, { drawingReference: e.target.value })} />
+                  </Field>
+                </div>
+              </div>
+            ))}
           </div>
 
           {liveRules.length > 0 && (

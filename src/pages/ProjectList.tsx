@@ -316,6 +316,7 @@ export function ProjectList() {
                 {cargo?.height_m && <span>H {cargo.height_m} m</span>}
                 {cargo?.width_m && <span>B {cargo.width_m} m</span>}
                 {cargo?.weight_ton && <span>{cargo.weight_ton} t</span>}
+                {(p.cargo_items?.length ?? 0) > 1 && <span>{p.cargo_items?.length} godsrader</span>}
                 <span>{p.invoice_status}</span>
               </div>
               {missing.length > 0 && <div className="mt-3"><MissingFieldsBadge missing={missing} /></div>}
@@ -374,7 +375,12 @@ export function ProjectList() {
                     <div className="text-xs text-slate-500">{p.name}</div>
                   </td>
                   <td className="px-4 py-3 text-slate-600">{p.customer?.company_name}</td>
-                  <td className="px-4 py-3 text-slate-600">{cargo?.description ?? "–"}</td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {cargo?.description ?? "–"}
+                    {(p.cargo_items?.length ?? 0) > 1 && (
+                      <div className="text-xs text-slate-400">+ {(p.cargo_items?.length ?? 1) - 1} godsrad(er)</div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-slate-600"><span className="flex items-center gap-1 text-xs"><MapPin size={11} />{loading?.name ?? "–"}</span></td>
                   <td className="px-4 py-3 text-slate-600"><span className="flex items-center gap-1 text-xs"><MapPin size={11} />{unloading?.name ?? "–"}</span></td>
                   <td className="px-4 py-3 text-slate-600">{formatDate(p.planned_loading_date)}</td>

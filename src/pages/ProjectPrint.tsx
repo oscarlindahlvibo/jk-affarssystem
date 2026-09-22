@@ -12,7 +12,7 @@ export function ProjectPrint() {
     return <div className="p-10 text-center text-slate-500">Projektet hittades inte.</div>;
   }
 
-  const cargo = project.cargo_items?.[0];
+  const cargoItems = project.cargo_items ?? [];
   const loading = project.locations?.find((l) => l.type === "lastning");
   const unloading = project.locations?.find((l) => l.type === "lossning");
   const link = project.measurement_link;
@@ -69,15 +69,22 @@ export function ProjectPrint() {
       </Section>
 
       <Section title="Gods">
-        {cargo ? (
-          <Grid>
-            <Item label="Beskrivning" value={cargo.description} />
-            <Item label="Längd" value={cargo.length_m ? `${cargo.length_m} m` : undefined} />
-            <Item label="Bredd" value={cargo.width_m ? `${cargo.width_m} m` : undefined} />
-            <Item label="Höjd" value={cargo.height_m ? `${cargo.height_m} m` : undefined} />
-            <Item label="Vikt" value={cargo.weight_ton ? `${cargo.weight_ton} ton` : undefined} />
-            <Item label="Antal kollin" value={cargo.quantity} />
-          </Grid>
+        {cargoItems.length > 0 ? (
+          <div className="space-y-4">
+            {cargoItems.map((cargo, index) => (
+              <div key={cargo.id ?? index}>
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Godsrad {index + 1}</div>
+                <Grid>
+                  <Item label="Beskrivning" value={cargo.description} />
+                  <Item label="Längd" value={cargo.length_m ? `${cargo.length_m} m` : undefined} />
+                  <Item label="Bredd" value={cargo.width_m ? `${cargo.width_m} m` : undefined} />
+                  <Item label="Höjd" value={cargo.height_m ? `${cargo.height_m} m` : undefined} />
+                  <Item label="Vikt" value={cargo.weight_ton ? `${cargo.weight_ton} ton` : undefined} />
+                  <Item label="Antal kollin" value={cargo.quantity} />
+                </Grid>
+              </div>
+            ))}
+          </div>
         ) : (
           <p className="text-sm text-slate-500">Ingen godsinformation registrerad.</p>
         )}
