@@ -9,7 +9,7 @@ import { extractPdfText, parseLtcOrder, type ParsedLtcOrder, type ParsedLtcItem 
 import { MOCK_LTC_ORDER } from "../data/ltcMockOrder";
 import { nextProjectNumber } from "../components/projects/NewProjectModal";
 import { usePermissions } from "../lib/usePermissions";
-import type { TransportType } from "../types";
+import type { ContactPerson, TransportType } from "../types";
 
 const TRANSPORT_TYPES: TransportType[] = ["Specialtransport", "Maskintransport", "Krantransport", "Styckegods", "Container", "Annat"];
 
@@ -17,6 +17,29 @@ type Step = 1 | 2 | 3;
 
 interface EditableItem extends ParsedLtcItem {
   include: boolean;
+}
+
+function normalizeText(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function digitsOnly(value: string | null | undefined) {
+  return (value ?? "").replace(/\D/g, "");
+}
+
+function findMatchingContact(contacts: ContactPerson[], customerId: string, order: ParsedLtcOrder | null) {
+  const contactName = normalizeText(order?.recipientContact);
+  const contactEmail = normalizeText(order?.recipientEmail);
+  const contactPhone = digitsOnly(order?.recipientMobile ?? order?.recipientPhone);
+  if (!customerId || (!contactName && !contactEmail && !contactPhone)) return undefined;
+
+  return contacts.find((contact) => {
+    if (contact.customer_id !== customerId) return false;
+    if (contactName && normalizeText(contact.name) === contactName) return true;
+    if (contactEmail && normalizeText(contact.email) === contactEmail) return true;
+    if (contactPhone && [contact.mobile, contact.phone].some((value) => digitsOnly(value) === contactPhone)) return true;
+    return false;
+  });
 }
 
 export function OrderImportPage() {
@@ -48,18 +71,22 @@ export function OrderImportPage() {
 
   const activeProfiles = store.profiles.filter((p) => p.status === "aktiv");
   const contactsForCustomer = store.contactPersons.filter((c) => c.customer_id === customerId);
+  const parsedCustomerContactName = order?.recipientContact?.trim() ?? "";
+  const parsedCustomerContactPhone = order?.recipientMobile ?? order?.recipientPhone ?? "";
 
   function loadOrderIntoForm(parsed: ParsedLtcOrder) {
     setOrder(parsed);
     const matchedCustomer = store.customers.find((c) => c.company_name.toLowerCase() === (parsed.senderCompany ?? "").toLowerCase());
+    const matchedContact = matchedCustomer ? findMatchingContact(store.contactPersons, matchedCustomer.id, parsed) : undefined;
     setCustomerId(matchedCustomer?.id ?? "");
+    setContactId(matchedContact?.id ?? "");
     setShowNewCustomer(!matchedCustomer && Boolean(parsed.senderCompany));
     setNewCustomerName(parsed.senderCompany ?? "");
     setLoadingPlace([parsed.senderCity, parsed.senderAddress].filter(Boolean).join(", ") || parsed.senderCity || "");
     const coords = parsed.deliveryCoordinateN && parsed.deliveryCoordinateE ? ` (N: ${parsed.deliveryCoordinateN}, E: ${parsed.deliveryCoordinateE})` : "";
     setUnloadingPlace([parsed.deliveryPostnr, parsed.deliveryCity].filter(Boolean).join(" ") + coords);
-    setUnloadingContactName(parsed.recipientCompany ? `${parsed.recipientContact ?? ""} (${parsed.recipientCompany})`.trim() : parsed.recipientContact ?? "");
-    setUnloadingContactPhone(parsed.recipientPhone ?? parsed.recipientMobile ?? "");
+    setUnloadingContactName(parsed.recipientCompany ? `${parsed.recipientContact ?? ""} (${parsed.recipientCompany})`.trim() : "");
+    setUnloadingContactPhone(parsed.recipientCompany ? parsed.recipientPhone ?? parsed.recipientMobile ?? "" : "");
     setLoadingDate(parsed.loadingDate ?? "");
     setDeliveryDate(parsed.deliveryDate ?? "");
     setDeliveryTerms(parsed.deliveryTerms ?? "");
@@ -97,6 +124,11 @@ export function OrderImportPage() {
 
   const includedCount = items.filter((i) => i.include).length;
 
+  function handleCustomerChange(nextCustomerId: string) {
+    setCustomerId(nextCustomerId);
+    setContactId(findMatchingContact(store.contactPersons, nextCustomerId, order)?.id ?? "");
+  }
+
   function handleCreate() {
     let finalCustomerId = customerId;
     if (!finalCustomerId && newCustomerName.trim()) {
@@ -115,8 +147,30 @@ export function OrderImportPage() {
     }
     if (!finalCustomerId) return;
 
+    let finalContactId = contactId;
+    if (!finalContactId && order?.recipientContact?.trim()) {
+      const matchedContact = findMatchingContact(store.contactPersons, finalCustomerId, order);
+      if (matchedContact) {
+        finalContactId = matchedContact.id;
+      } else {
+        const existingContactsForCustomer = store.contactPersons.filter((c) => c.customer_id === finalCustomerId);
+        const createdContact = store.addContactPerson({
+          customer_id: finalCustomerId,
+          name: order.recipientContact.trim(),
+          role: "Kontakt från LTC",
+          phone: order.recipientPhone ?? null,
+          mobile: order.recipientMobile ?? null,
+          email: order.recipientEmail ?? null,
+          note: "Skapad via LTC-orderimport.",
+          is_primary: existingContactsForCustomer.length === 0,
+        });
+        finalContactId = createdContact.id;
+      }
+    }
+
     let created = 0;
     let workingProjects = store.projects;
+    const customerName = store.customers.find((c) => c.id === finalCustomerId)?.company_name ?? (newCustomerName.trim() || "Kund");
 
     for (const item of items) {
       if (!item.include) continue;
@@ -125,9 +179,9 @@ export function OrderImportPage() {
 
       const newProject = store.addProject({
         project_number: nextProjectNumber(workingProjects),
-        name: `${newCustomerName || "Kund"} – ${description || "Transport"}`,
+        name: `${customerName} – ${description || "Transport"}`,
         customer_id: finalCustomerId,
-        contact_person_id: contactId || null,
+        contact_person_id: finalContactId || null,
         responsible_id: responsibleId || null,
         status: "Ny",
         transport_type: transportType,
@@ -244,7 +298,7 @@ export function OrderImportPage() {
               <h3 className="mb-3 text-sm font-semibold text-slate-700">Kund (avsändare)</h3>
               {!showNewCustomer ? (
                 <div className="flex gap-2">
-                  <select className={inputClass} value={customerId} onChange={(e) => { setCustomerId(e.target.value); setContactId(""); }}>
+                  <select className={inputClass} value={customerId} onChange={(e) => handleCustomerChange(e.target.value)}>
                     <option value="">Välj kund</option>
                     {store.customers.map((c) => (
                       <option key={c.id} value={c.id}>{c.company_name}</option>
@@ -277,7 +331,19 @@ export function OrderImportPage() {
                       ))}
                     </select>
                   </Field>
+                  {parsedCustomerContactName && !contactId && (
+                    <p className="mt-2 text-xs text-slate-500">
+                      Skapar kontaktperson från LTC: {parsedCustomerContactName}
+                      {parsedCustomerContactPhone ? ` · ${parsedCustomerContactPhone}` : ""}
+                    </p>
+                  )}
                 </div>
+              )}
+              {showNewCustomer && parsedCustomerContactName && (
+                <p className="mt-2 text-xs text-slate-500">
+                  Skapar kontaktperson från LTC: {parsedCustomerContactName}
+                  {parsedCustomerContactPhone ? ` · ${parsedCustomerContactPhone}` : ""}
+                </p>
               )}
             </div>
 
