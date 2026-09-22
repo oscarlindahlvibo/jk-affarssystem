@@ -1,4 +1,4 @@
-import { RotateCcw, Save } from "lucide-react";
+import { History, RotateCcw, Save } from "lucide-react";
 import { useState } from "react";
 import { useStore } from "../data/store";
 import { Button } from "../components/ui/Button";
@@ -20,15 +20,30 @@ function numberInput(value: number | null, onChange: (value: number) => void, su
   );
 }
 
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("sv-SE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+function formatValue(value: string | number | boolean | null) {
+  if (value === null) return "Tomt";
+  if (typeof value === "boolean") return value ? "Ja" : "Nej";
+  if (typeof value === "number") return new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 3 }).format(value);
+  return value;
+}
+
+function valueCountText(count: number) {
+  return `${count} värde${count === 1 ? "" : "n"}`;
+}
+
 export function FreightCalculatorSettingsPage() {
-  const { freightCalculatorConfig, updateFreightCalculatorConfig, resetFreightCalculatorConfig } = useStore();
+  const { freightCalculatorConfig, freightCalculatorChangeLog, updateFreightCalculatorConfig, resetFreightCalculatorConfig } = useStore();
   const [draft, setDraft] = useState<FreightCalculatorConfig>(freightCalculatorConfig);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
 
   function save() {
-    updateFreightCalculatorConfig(draft);
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 2500);
+    const entry = updateFreightCalculatorConfig(draft);
+    setSaved(entry ? `Sparat. ${valueCountText(entry.changes.length)} loggades.` : "Inga ändringar att spara.");
+    window.setTimeout(() => setSaved(null), 2500);
   }
 
   function updateCategory(id: number, patch: Partial<FreightCalculatorConfig["categories"][number]>) {
@@ -56,8 +71,10 @@ export function FreightCalculatorSettingsPage() {
           <Button
             variant="secondary"
             onClick={() => {
-              resetFreightCalculatorConfig();
+              const entry = resetFreightCalculatorConfig();
               setDraft(DEFAULT_FREIGHT_CALCULATOR_CONFIG);
+              setSaved(entry ? `Återställt. ${valueCountText(entry.changes.length)} loggades.` : "Räknesnurran var redan återställd.");
+              window.setTimeout(() => setSaved(null), 2500);
             }}
           >
             <RotateCcw size={14} /> Återställ
@@ -67,7 +84,7 @@ export function FreightCalculatorSettingsPage() {
           </Button>
         </div>
       </div>
-      {saved && <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">Räknesnurran är sparad.</div>}
+      {saved && <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{saved}</div>}
 
       <Panel title="Globala påslag och gränser">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -160,6 +177,56 @@ export function FreightCalculatorSettingsPage() {
                   {numberInput(crane.establishmentNorthCost, (value) => updateCrane(index, { establishmentNorthCost: value }))}
                 </Field>
               </div>
+            </div>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel
+        title="Ändringslogg"
+        action={
+          <div className="flex items-center gap-1 text-xs text-slate-500">
+            <History size={14} /> {freightCalculatorChangeLog.length} poster
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {freightCalculatorChangeLog.map((entry) => (
+            <div key={entry.id} className="rounded-lg border border-border bg-white p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-slate-800">{formatDate(entry.changedAt)}</span>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                      {entry.source === "excel" ? "Excel" : "App"}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600">{entry.summary}</p>
+                </div>
+                <div className="text-xs text-slate-500">{entry.changedBy}</div>
+              </div>
+              {entry.changes.length > 0 && (
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full min-w-[620px] text-left text-xs">
+                    <thead className="border-b border-border text-slate-500">
+                      <tr>
+                        <th className="py-2 pr-3 font-medium">Värde</th>
+                        <th className="px-3 py-2 font-medium">Före</th>
+                        <th className="px-3 py-2 font-medium">Efter</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {entry.changes.map((change) => (
+                        <tr key={change.path}>
+                          <td className="py-2 pr-3 font-medium text-slate-700">{change.label}</td>
+                          <td className="px-3 py-2 text-slate-500">{formatValue(change.before)}</td>
+                          <td className="px-3 py-2 text-slate-800">{formatValue(change.after)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           ))}
         </div>

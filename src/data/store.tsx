@@ -16,7 +16,13 @@ import * as mock from "./mockData";
 import { useAuth } from "../lib/auth";
 import { usePersonnel } from "./personnel";
 import { can, canEditProjectFinance, type Action, type Resource } from "../lib/permissions";
-import { DEFAULT_FREIGHT_CALCULATOR_CONFIG, type FreightCalculatorConfig } from "../lib/freightCalculator";
+import {
+  collectFreightCalculatorChanges,
+  DEFAULT_FREIGHT_CALCULATOR_CHANGE_LOG,
+  DEFAULT_FREIGHT_CALCULATOR_CONFIG,
+  type FreightCalculatorChangeLogEntry,
+  type FreightCalculatorConfig,
+} from "../lib/freightCalculator";
 
 export interface CustomerBookingCargoInput {
   description: string;
@@ -53,8 +59,9 @@ interface StoreShape {
   profiles: Profile[];
   currentRole: UserRole | null;
   freightCalculatorConfig: FreightCalculatorConfig;
-  updateFreightCalculatorConfig: (next: FreightCalculatorConfig) => void;
-  resetFreightCalculatorConfig: () => void;
+  freightCalculatorChangeLog: FreightCalculatorChangeLogEntry[];
+  updateFreightCalculatorConfig: (next: FreightCalculatorConfig) => FreightCalculatorChangeLogEntry | null;
+  resetFreightCalculatorConfig: () => FreightCalculatorChangeLogEntry | null;
   addCustomer: (c: Omit<Customer, "id" | "org_id" | "created_at" | "updated_at">) => Customer;
   updateCustomer: (id: string, patch: Partial<Customer>) => void;
   deleteCustomer: (id: string) => { ok: boolean; reason?: string };
@@ -93,6 +100,7 @@ interface StoreShape {
 const StoreContext = createContext<StoreShape | null>(null);
 const PROJECTS_STORAGE_KEY = "jk-mock-projects";
 const FREIGHT_CALCULATOR_STORAGE_KEY = "jk-freight-calculator-config";
+const FREIGHT_CALCULATOR_CHANGE_LOG_STORAGE_KEY = "jk-freight-calculator-change-log";
 
 let idCounter = 2000;
 function nextId(prefix: string) {
@@ -125,6 +133,20 @@ function loadFreightCalculatorConfig(): FreightCalculatorConfig {
   }
 }
 
+function loadFreightCalculatorChangeLog(): FreightCalculatorChangeLogEntry[] {
+  if (typeof window === "undefined") return DEFAULT_FREIGHT_CALCULATOR_CHANGE_LOG;
+  const stored = window.localStorage.getItem(FREIGHT_CALCULATOR_CHANGE_LOG_STORAGE_KEY);
+  if (!stored) return DEFAULT_FREIGHT_CALCULATOR_CHANGE_LOG;
+  try {
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return DEFAULT_FREIGHT_CALCULATOR_CHANGE_LOG;
+    const storedIds = new Set(parsed.map((entry: FreightCalculatorChangeLogEntry) => entry.id));
+    return [...parsed, ...DEFAULT_FREIGHT_CALCULATOR_CHANGE_LOG.filter((entry) => !storedIds.has(entry.id))];
+  } catch {
+    return DEFAULT_FREIGHT_CALCULATOR_CHANGE_LOG;
+  }
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
   const { currentProfile, currentCustomerUser } = useAuth();
   const personnel = usePersonnel();
@@ -136,6 +158,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [allProjects, setAllProjects] = useState<Project[]>(loadProjects);
   const [allSuppliers, setAllSuppliers] = useState<Supplier[]>(mock.suppliers);
   const [freightCalculatorConfig, setFreightCalculatorConfig] = useState<FreightCalculatorConfig>(loadFreightCalculatorConfig);
+  const [freightCalculatorChangeLog, setFreightCalculatorChangeLog] =
+    useState<FreightCalculatorChangeLogEntry[]>(loadFreightCalculatorChangeLog);
 
   useEffect(() => {
     window.localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(allProjects));
@@ -144,6 +168,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     window.localStorage.setItem(FREIGHT_CALCULATOR_STORAGE_KEY, JSON.stringify(freightCalculatorConfig));
   }, [freightCalculatorConfig]);
+
+  useEffect(() => {
+    window.localStorage.setItem(FREIGHT_CALCULATOR_CHANGE_LOG_STORAGE_KEY, JSON.stringify(freightCalculatorChangeLog));
+  }, [freightCalculatorChangeLog]);
 
   // Skydd i datalagret: även om ett UI-element av misstag visas ska mutationer
   // blockeras här om rollen saknar rättighet eller kontot inte längre är aktivt.
@@ -165,15 +193,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const updateFreightCalculatorConfig: StoreShape["updateFreightCalculatorConfig"] = useCallback(
     (next) => {
       authorize("settings", "edit");
+      const changes = collectFreightCalculatorChanges(freightCalculatorConfig, next);
       setFreightCalculatorConfig(next);
+      if (changes.length === 0) return null;
+      const entry: FreightCalculatorChangeLogEntry = {
+        id: nextId("calc-log"),
+        changedAt: new Date().toISOString(),
+        changedBy: currentProfile?.full_name ?? "JK",
+        source: "app",
+        summary: `${changes.length} värde${changes.length === 1 ? "" : "n"} ändrade i räknesnurran.`,
+        changes,
+      };
+      setFreightCalculatorChangeLog((prev) => [entry, ...prev]);
+      return entry;
     },
-    [authorize]
+    [authorize, currentProfile, freightCalculatorConfig]
   );
 
   const resetFreightCalculatorConfig: StoreShape["resetFreightCalculatorConfig"] = useCallback(() => {
     authorize("settings", "edit");
+    const changes = collectFreightCalculatorChanges(freightCalculatorConfig, DEFAULT_FREIGHT_CALCULATOR_CONFIG);
     setFreightCalculatorConfig(DEFAULT_FREIGHT_CALCULATOR_CONFIG);
-  }, [authorize]);
+    if (changes.length === 0) return null;
+    const entry: FreightCalculatorChangeLogEntry = {
+      id: nextId("calc-log"),
+      changedAt: new Date().toISOString(),
+      changedBy: currentProfile?.full_name ?? "JK",
+      source: "app",
+      summary: `Återställde räknesnurran till standardvärden från Excel v9. ${changes.length} värde${
+        changes.length === 1 ? "" : "n"
+      } ändrades.`,
+      changes,
+    };
+    setFreightCalculatorChangeLog((prev) => [entry, ...prev]);
+    return entry;
+  }, [authorize, currentProfile, freightCalculatorConfig]);
 
   const customers = useMemo(() => {
     const orgCustomers = allCustomers.filter((c) => c.org_id === orgId);
@@ -664,6 +718,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       profiles,
       currentRole: role,
       freightCalculatorConfig,
+      freightCalculatorChangeLog,
       updateFreightCalculatorConfig,
       resetFreightCalculatorConfig,
       addCustomer,
@@ -707,6 +762,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       profiles,
       role,
       freightCalculatorConfig,
+      freightCalculatorChangeLog,
       updateFreightCalculatorConfig,
       resetFreightCalculatorConfig,
       enrich,
