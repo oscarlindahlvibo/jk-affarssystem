@@ -93,8 +93,101 @@ function parseWeightTons(raw: string | null): number | null {
   return n > 200 ? Math.round((n / 1000) * 100) / 100 : n;
 }
 
+function cleanTableValue(raw: string | null | undefined): string | null {
+  const cleaned = (raw ?? "").replace(/\s+/g, " ").replace(/,+$/, "").trim();
+  return cleaned || null;
+}
+
+function isStopLine(line: string): boolean {
+  return /^(Godsmärke|Koordinat|Fortsättning|---SIDBRYTNING---|Tillägg leveransvillkor|Nr\.|Fraktbeställning)/i.test(line.trim());
+}
+
+function findGoodsMark(lines: string[], fromIndex: number): string | null {
+  const goodsMarkLine = lines.slice(fromIndex + 1, fromIndex + 6).find((l) => /Godsmärke/i.test(l));
+  return goodsMarkLine ? cleanTableValue(goodsMarkLine.replace(/.*Godsmärke\s*/i, "")) : null;
+}
+
+function findDeliveryTermsAddition(lines: string[]): string | null {
+  const additionLine = lines.find((l) => /Tillägg leveransvillkor/i.test(l));
+  return additionLine ? cleanTableValue(additionLine.replace(/.*Tillägg leveransvillkor\s*/i, "")) : null;
+}
+
+function parseItems(text: string): ParsedLtcItem[] {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  const deliveryTermsAddition = findDeliveryTermsAddition(lines);
+  const items: ParsedLtcItem[] = [];
+
+  // Godsrader kan vara en komplett rad, eller uppdelade av PDF-layouten:
+  // "TSBI 2/2000,"
+  // "1 Z00393 5,95 4,49 3,92 44 656"
+  // "5940x4500"
+  const itemLinePattern = /^(\d+)\s+([A-Za-zÅÄÖåäö]?\d{3,})\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+(\d+(?:\s+\d{3})*|\d+)(?:\s+(.+))?$/;
+  const completeLinePattern = /^(\d+)\s+(.+?)\s+([A-Za-zÅÄÖåäö]?\d{3,})\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+(\d+(?:\s+\d{3})*|\d+)$/;
+
+  let tableStarted = false;
+  let pendingType: string | null = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^Antal\s+Typ\s+Order\s+Längd\s+Bredd\s+Höjd\s+Vikt/i.test(line)) {
+      tableStarted = true;
+      pendingType = null;
+      continue;
+    }
+
+    const complete = completeLinePattern.exec(line);
+    if (complete) {
+      items.push({
+        quantity: parseNum(complete[1]),
+        typeName: cleanTableValue(complete[2]),
+        orderRef: cleanTableValue(complete[3]),
+        length_m: parseNum(complete[4]),
+        width_m: parseNum(complete[5]),
+        height_m: parseNum(complete[6]),
+        weight_ton: parseWeightTons(complete[7]),
+        goodsMark: findGoodsMark(lines, i),
+        deliveryTermsAddition,
+      });
+      pendingType = null;
+      tableStarted = false;
+      continue;
+    }
+
+    if (!tableStarted) continue;
+    if (isStopLine(line)) {
+      pendingType = null;
+      tableStarted = false;
+      continue;
+    }
+
+    const split = itemLinePattern.exec(line);
+    if (split) {
+      const extraTypeInfo = cleanTableValue(split[7]);
+      const nextLine = cleanTableValue(lines[i + 1]);
+      const dimensionCode = nextLine && /^\d+(?:[xX]\d+)+$/.test(nextLine) ? nextLine : null;
+      items.push({
+        quantity: parseNum(split[1]),
+        typeName: [pendingType, extraTypeInfo, dimensionCode].filter(Boolean).join(" ") || null,
+        orderRef: cleanTableValue(split[2]),
+        length_m: parseNum(split[3]),
+        width_m: parseNum(split[4]),
+        height_m: parseNum(split[5]),
+        weight_ton: parseWeightTons(split[6]),
+        goodsMark: findGoodsMark(lines, i),
+        deliveryTermsAddition,
+      });
+      pendingType = null;
+      continue;
+    }
+
+    pendingType = [pendingType, line].filter(Boolean).join(" ");
+  }
+
+  return items;
+}
+
 export function parseLtcOrder(text: string): ParsedLtcOrder {
-  const documentNumber = match1(text, /Nr\.\s*([A-Z0-9]+)/i);
+  const documentNumber = match1(text, /\b(LTC\d+)\b/i) ?? match1(text, /Nr\.\s*([A-Z0-9]+)/i);
   const senderCompanyRaw = match1(text, /Avsändare\s+(.+)/i);
   const senderCompany = senderCompanyRaw ? senderCompanyRaw.replace(/\s*\/\s*[A-Z]{2,5}$/, "").trim() : null;
   const senderAddress = match1(text, /^Adress\s+(.+)/im);
@@ -114,31 +207,7 @@ export function parseLtcOrder(text: string): ParsedLtcOrder {
   const deliveryCity = deliveryPostnrMatch ? deliveryPostnrMatch[2].trim() : null;
   const deliveryTerms = match1(text, /Leveransvillkor\s+(.+)/i);
 
-  // Godsrader: "1 SC2500CL T69889 3,89 3,1 3,15 11 901" – antal, typ, ordernr,
-  // längd, bredd, höjd, vikt (kg, kan innehålla mellanslag som tusentalsavgränsare).
-  const itemPattern = /^(\d+)\s+([A-Za-zÅÄÖåäö0-9]+)\s+([A-Za-z]?\d{3,})\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d][\d\s]*\d|\d)\s*$/gm;
-  const items: ParsedLtcItem[] = [];
-  const lines = text.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    itemPattern.lastIndex = 0;
-    const m = itemPattern.exec(lines[i]);
-    if (!m) continue;
-    const goodsMarkLine = lines.slice(i + 1, i + 4).find((l) => /Godsmärke/i.test(l));
-    const goodsMark = goodsMarkLine ? goodsMarkLine.replace(/.*Godsmärke\s+/i, "").trim() : null;
-    const additionLine = lines.slice(i + 1, i + 6).find((l) => /Tillägg leveransvillkor/i.test(l));
-    const deliveryTermsAddition = additionLine ? additionLine.replace(/.*Tillägg leveransvillkor\s+/i, "").trim() : null;
-    items.push({
-      quantity: parseNum(m[1]),
-      typeName: m[2],
-      orderRef: m[3],
-      length_m: parseNum(m[4]),
-      width_m: parseNum(m[5]),
-      height_m: parseNum(m[6]),
-      weight_ton: parseWeightTons(m[7]),
-      goodsMark,
-      deliveryTermsAddition,
-    });
-  }
+  const items = parseItems(text);
 
   return {
     documentNumber,
