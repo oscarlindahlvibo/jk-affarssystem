@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import { Upload, FileText, Lock, Eye, Trash2, ExternalLink, HardDrive, Loader2 } from "lucide-react";
-import type { ProjectDocument, DocumentCategory } from "../../types";
+import { Upload, FileText, Lock, Eye, Trash2, ExternalLink, HardDrive, Loader2, FileSignature } from "lucide-react";
+import type { Project, ProjectDocument, DocumentCategory } from "../../types";
 import { Panel } from "../ui/Panel";
 import { Button } from "../ui/Button";
 import { formatDateTime } from "../../lib/format";
@@ -9,6 +9,7 @@ import { useAuth } from "../../lib/auth";
 import { usePermissions } from "../../lib/usePermissions";
 import { useGoogleDrive } from "../../lib/googleDriveContext";
 import { uploadFileToDrive, deleteFileFromDrive } from "../../lib/googleDrive";
+import { generateShippingDocument, shippingDocumentFileName, type ShippingDocumentKind } from "../../lib/shippingDocuments";
 
 const CATEGORIES: DocumentCategory[] = ["Ritning", "Tillstånd", "Offert", "Order", "Fraktsedel", "Foto", "Övrigt"];
 
@@ -19,7 +20,8 @@ function formatSize(bytes: number | null | undefined): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function DocumentsSection({ projectId, documents }: { projectId: string; documents: ProjectDocument[] }) {
+export function DocumentsSection({ project, documents }: { project: Project; documents: ProjectDocument[] }) {
+  const projectId = project.id;
   const { addDocument, deleteDocument } = useStore();
   const { currentProfile } = useAuth();
   const permissions = usePermissions();
@@ -29,7 +31,43 @@ export function DocumentsSection({ projectId, documents }: { projectId: string; 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [category, setCategory] = useState<DocumentCategory>("Övrigt");
   const [uploading, setUploading] = useState(false);
+  const [generating, setGenerating] = useState<ShippingDocumentKind | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
+  async function addFileDocument(file: File, documentCategory: DocumentCategory, comment: string | null = null) {
+    if (drive.isConnected) {
+      const token = await drive.getAccessToken();
+      const folderId = await drive.getFolderId(token);
+      const uploaded = await uploadFileToDrive(token, file, folderId);
+      addDocument(projectId, {
+        file_name: file.name,
+        file_type: file.name.split(".").pop() ?? "fil",
+        category: documentCategory,
+        storage_path: `drive:${uploaded.id}`,
+        file_url: uploaded.webViewLink,
+        file_size: file.size,
+        drive_file_id: uploaded.id,
+        uploaded_at: new Date().toISOString(),
+        uploaded_by: currentProfile?.full_name ?? "Okänd",
+        visibility: "internal",
+        comment,
+      });
+      return;
+    }
+
+    addDocument(projectId, {
+      file_name: file.name,
+      file_type: file.name.split(".").pop() ?? "fil",
+      category: documentCategory,
+      storage_path: `${projectId}/${file.name}`,
+      file_url: URL.createObjectURL(file),
+      file_size: file.size,
+      uploaded_at: new Date().toISOString(),
+      uploaded_by: currentProfile?.full_name ?? "Okänd",
+      visibility: "internal",
+      comment,
+    });
+  }
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -37,43 +75,27 @@ export function DocumentsSection({ projectId, documents }: { projectId: string; 
     setUploading(true);
     try {
       for (const file of Array.from(files)) {
-        if (drive.isConnected) {
-          const token = await drive.getAccessToken();
-          const folderId = await drive.getFolderId(token);
-          const uploaded = await uploadFileToDrive(token, file, folderId);
-          addDocument(projectId, {
-            file_name: file.name,
-            file_type: file.name.split(".").pop() ?? "fil",
-            category,
-            storage_path: `drive:${uploaded.id}`,
-            file_url: uploaded.webViewLink,
-            file_size: file.size,
-            drive_file_id: uploaded.id,
-            uploaded_at: new Date().toISOString(),
-            uploaded_by: currentProfile?.full_name ?? "Okänd",
-            visibility: "internal",
-            comment: null,
-          });
-        } else {
-          addDocument(projectId, {
-            file_name: file.name,
-            file_type: file.name.split(".").pop() ?? "fil",
-            category,
-            storage_path: `${projectId}/${file.name}`,
-            file_url: URL.createObjectURL(file),
-            file_size: file.size,
-            uploaded_at: new Date().toISOString(),
-            uploaded_by: currentProfile?.full_name ?? "Okänd",
-            visibility: "internal",
-            comment: null,
-          });
-        }
+        await addFileDocument(file, category);
       }
     } catch (e) {
       setUploadError(e instanceof Error ? e.message : "Uppladdningen misslyckades.");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function handleGenerate(kind: ShippingDocumentKind) {
+    setUploadError(null);
+    setGenerating(kind);
+    try {
+      const blob = await generateShippingDocument(project, kind);
+      const file = new File([blob], shippingDocumentFileName(project, kind), { type: "application/pdf" });
+      await addFileDocument(file, "Fraktsedel", kind === "cmr" ? "Genererad CMR för utrikestransport." : "Genererad fraktsedel för inrikestransport.");
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : "Dokumentet kunde inte skapas.");
+    } finally {
+      setGenerating(null);
     }
   }
 
@@ -94,7 +116,25 @@ export function DocumentsSection({ projectId, documents }: { projectId: string; 
       title="Dokument"
       action={
         canUpload && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => handleGenerate("cmr")}
+              disabled={Boolean(generating) || uploading}
+              className="!px-2.5 !py-1.5"
+            >
+              {generating === "cmr" ? <Loader2 size={14} className="animate-spin" /> : <FileSignature size={14} />}
+              CMR
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => handleGenerate("domestic-waybill")}
+              disabled={Boolean(generating) || uploading}
+              className="!px-2.5 !py-1.5"
+            >
+              {generating === "domestic-waybill" ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+              Fraktsedel
+            </Button>
             <select value={category} onChange={(e) => setCategory(e.target.value as DocumentCategory)} className="rounded-lg border border-border bg-white px-2 py-1.5 text-xs">
               {CATEGORIES.map((c) => (
                 <option key={c} value={c}>{c}</option>

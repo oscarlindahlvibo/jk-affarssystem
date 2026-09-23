@@ -355,7 +355,7 @@ export function ProjectDetail() {
             )}
           </Panel>
 
-          <DocumentsSection projectId={project.id} documents={project.documents ?? []} />
+          <DocumentsSection project={project} documents={project.documents ?? []} />
           <NotesSection projectId={project.id} notes={project.notes ?? []} />
         </div>
 
