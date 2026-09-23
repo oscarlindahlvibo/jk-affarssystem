@@ -71,6 +71,8 @@ export interface FreightCalculationInput {
   lengthMm: number;
   widthMm: number;
   heightMm: number;
+  selectedCategoryId?: number | null;
+  includeCrane: boolean;
   cityVtlMobileCrane: boolean;
   siteInspection: boolean;
   siteDelivery: boolean;
@@ -88,6 +90,7 @@ export interface FreightCalculationResult {
   selectedCategory: FreightCategory | null;
   vehicleCandidates: Array<{ category: FreightCategory; possible: boolean; transportCost: number; reason?: string }>;
   warning: string | null;
+  categoryOverrideWarning: string | null;
   requirements: {
     followVehicle: boolean;
     vtl: boolean;
@@ -373,8 +376,18 @@ export function calculateFreight(input: FreightCalculationInput, config: Freight
     };
   });
   const possible = vehicleCandidates.filter((candidate) => candidate.possible);
-  const selected = possible.sort((a, b) => a.transportCost - b.transportCost)[0] ?? null;
+  const selectedOverride = input.selectedCategoryId
+    ? vehicleCandidates.find((candidate) => candidate.category.id === input.selectedCategoryId) ?? null
+    : null;
+  const selected =
+    selectedOverride && selectedOverride.possible
+      ? selectedOverride
+      : [...possible].sort((a, b) => a.transportCost - b.transportCost)[0] ?? null;
   const selectedCategory = selected?.category ?? null;
+  const categoryOverrideWarning =
+    selectedOverride && !selectedOverride.possible
+      ? `Vald fordonskategori kan inte användas för lasten (${selectedOverride.reason}). Rekommendationen används istället.`
+      : null;
   const serviceFollow = config.categories.find((category) => category.id === 10);
   const serviceVtl = config.categories.find((category) => category.id === 11);
 
@@ -390,7 +403,9 @@ export function calculateFreight(input: FreightCalculationInput, config: Freight
   const routeCheck = selectedCategory ? routeCheckCost(selectedCategory, input, config) > 0 : false;
 
   const craneWeight = input.weightKg + (selectedCategory?.craneWeightBufferKg ?? 0);
-  const crane = [...config.cranes].sort((a, b) => b.minWeightKg - a.minWeightKg).find((row) => craneWeight >= row.minWeightKg) ?? null;
+  const crane = input.includeCrane
+    ? [...config.cranes].sort((a, b) => b.minWeightKg - a.minWeightKg).find((row) => craneWeight >= row.minWeightKg) ?? null
+    : null;
 
   const lines: FreightCostLine[] = [];
   if (selectedCategory) lines.push({ label: "Grundkostnad transport", amount: selected?.transportCost ?? 0 });
@@ -410,6 +425,7 @@ export function calculateFreight(input: FreightCalculationInput, config: Freight
     selectedCategory,
     vehicleCandidates,
     warning: selectedCategory ? null : "Angiven vikt eller mått överskrider tillåtna värden. Kontakta JK Projektlogistik AB.",
+    categoryOverrideWarning,
     requirements: { followVehicle, vtl, cityVtlMobileCrane: input.cityVtlMobileCrane, permit, routeCheck },
     crane,
     lines,

@@ -28,6 +28,7 @@ export function FreightCalculatorPanel({
   const [cargoIndex, setCargoIndex] = useState(0);
   const selectedCargo = cargoItems[cargoIndex] ?? cargoItems[0];
   const [distanceKm, setDistanceKm] = useState(project.route_distance_km?.toString() ?? "270");
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [inputOverrides, setInputOverrides] = useState({
     weightKg: "",
     lengthMm: "",
@@ -35,6 +36,7 @@ export function FreightCalculatorPanel({
     heightMm: "",
   });
   const [options, setOptions] = useState({
+    includeCrane: true,
     cityVtlMobileCrane: false,
     siteInspection: true,
     siteDelivery: true,
@@ -60,9 +62,10 @@ export function FreightCalculatorPanel({
       lengthMm: inputOverrides.lengthMm ? toNumber(inputOverrides.lengthMm) : defaultInput.lengthMm,
       widthMm: inputOverrides.widthMm ? toNumber(inputOverrides.widthMm) : defaultInput.widthMm,
       heightMm: inputOverrides.heightMm ? toNumber(inputOverrides.heightMm) : defaultInput.heightMm,
+      selectedCategoryId: selectedCategoryId ? Number(selectedCategoryId) : null,
       ...options,
     }),
-    [defaultInput, distanceKm, inputOverrides, options]
+    [defaultInput, distanceKm, inputOverrides, options, selectedCategoryId]
   );
 
   const result = useMemo(() => calculateFreight(input, freightCalculatorConfig), [input, freightCalculatorConfig]);
@@ -80,6 +83,7 @@ export function FreightCalculatorPanel({
                   onChange={(e) => {
                     setCargoIndex(Number(e.target.value));
                     setInputOverrides({ weightKg: "", lengthMm: "", widthMm: "", heightMm: "" });
+                    setSelectedCategoryId("");
                   }}
                 >
                   {cargoItems.map((cargo, index) => (
@@ -102,6 +106,26 @@ export function FreightCalculatorPanel({
               </Field>
             </div>
 
+            <Field label="Fordonskategori">
+              <select className={inputClass} value={selectedCategoryId} onChange={(e) => setSelectedCategoryId(e.target.value)}>
+                <option value="">Automatisk rekommendation (lägsta möjliga pris)</option>
+                {result.vehicleCandidates.map((candidate) => (
+                  <option key={candidate.category.id} value={candidate.category.id}>
+                    Kategori {candidate.category.id} · {candidate.category.name}
+                    {candidate.possible ? "" : ` - ej möjlig (${candidate.reason})`}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-500">
+                Rekommendationen väljer billigaste möjliga ekipage. Välj manuellt om du vill använda en större möjlig transport.
+              </p>
+            </Field>
+            {result.categoryOverrideWarning && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                {result.categoryOverrideWarning}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Field label="Vikt">
                 <input inputMode="decimal" className={inputClass} value={inputOverrides.weightKg || defaultInput.weightKg || ""} onChange={(e) => setInputOverrides((prev) => ({ ...prev, weightKg: e.target.value }))} />
@@ -120,6 +144,7 @@ export function FreightCalculatorPanel({
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {[
+                ["includeCrane", "Ta med mobilkran/lossning"],
                 ["cityVtlMobileCrane", "VTL mobilkran storstad"],
                 ["siteInspection", "Besiktning av site"],
                 ["siteDelivery", "Leverans på site"],
