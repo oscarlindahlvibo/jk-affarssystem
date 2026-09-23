@@ -64,17 +64,23 @@ function drawTextBox(
   y: number,
   width: number,
   height: number,
-  options: { maxChars?: number; fontSize?: number } = {}
+  options: { maxChars?: number; fontSize?: number; labelMaxChars?: number; labelLines?: number } = {}
 ) {
   page.drawRectangle({ x, y, width, height, borderColor: rgb(0.05, 0.05, 0.05), borderWidth: 0.85 });
-  page.drawText(label, { x: x + 4, y: y + height - 10, size: 6.5, font, color: rgb(0.05, 0.05, 0.05) });
+  const labelFontSize = 6.5;
+  const labelLineHeight = 7.2;
+  const labelLines = splitLines(label, options.labelMaxChars ?? Math.max(16, Math.floor(width / 4.2))).slice(0, options.labelLines ?? 2);
+  labelLines.forEach((line, index) => {
+    page.drawText(line, { x: x + 4, y: y + height - 10 - index * labelLineHeight, size: labelFontSize, font, color: rgb(0.05, 0.05, 0.05) });
+  });
   const maxChars = options.maxChars ?? Math.max(18, Math.floor(width / 4.8));
   const fontSize = options.fontSize ?? 7.4;
   const lineHeight = fontSize + 1.3;
+  const valueTop = y + height - 13 - labelLines.length * labelLineHeight;
   splitLines(value, maxChars)
-    .slice(0, Math.max(1, Math.floor((height - 15) / lineHeight)))
+    .slice(0, Math.max(1, Math.floor((valueTop - y - 4) / lineHeight)))
     .forEach((line, index) => {
-      page.drawText(line, { x: x + 4, y: y + height - 21 - index * lineHeight, size: fontSize, font });
+      page.drawText(line, { x: x + 4, y: valueTop - index * lineHeight, size: fontSize, font });
     });
 }
 
@@ -245,41 +251,53 @@ export async function generateCmrPdf(project: Project) {
       }
     }
 
-    drawTextBox(page, font, "16. Special agreements between the sender and carrier / Särskilda avtal", project.delivery_terms ?? "-", left, 236, 190, 84, {
+    drawTextBox(page, font, "16. Special agreements between the sender and carrier / Särskilda avtal", project.delivery_terms ?? "-", left, 188, 190, 84, {
       maxChars: 36,
       fontSize: 6.9,
+      labelMaxChars: 42,
+      labelLines: 3,
     });
-    page.drawRectangle({ x: 214, y: 236, width: 357, height: 84, borderColor: border, borderWidth: 0.85 });
-    page.drawText("17. To be paid by / Att betalas av", { x: 219, y: 307, size: 6.8, font: bold });
-    page.drawText("expeditor / expeditor", { x: 378, y: 307, size: 6.3, font: bold });
-    page.drawText("destinatar / destinatär", { x: 480, y: 307, size: 6.3, font: bold });
-    [296, 278, 260].forEach((y) => page.drawLine({ start: { x: 214, y }, end: { x: 571, y }, thickness: 0.65, color: border }));
-    [374, 476].forEach((x) => page.drawLine({ start: { x, y: 236 }, end: { x, y: 320 }, thickness: 0.65, color: border }));
+    page.drawRectangle({ x: 214, y: 188, width: 357, height: 84, borderColor: border, borderWidth: 0.85 });
+    page.drawText("17. To be paid by / Att betalas av", { x: 219, y: 259, size: 6.8, font: bold });
+    page.drawText("expeditor / expeditor", { x: 378, y: 259, size: 6.3, font: bold });
+    page.drawText("destinatar / destinatär", { x: 480, y: 259, size: 6.3, font: bold });
+    [248, 233, 218, 203].forEach((lineY) => page.drawLine({ start: { x: 214, y: lineY }, end: { x: 571, y: lineY }, thickness: 0.65, color: border }));
+    [374, 476].forEach((lineX) => page.drawLine({ start: { x: lineX, y: 188 }, end: { x: lineX, y: 272 }, thickness: 0.65, color: border }));
     ["Carriage charges / Transportkostnader", "Supplementary charges / Tilläggsavgifter", "Customs duties / Tullavgifter", "Other charges / Övriga avgifter"].forEach(
-      (line, index) => page.drawText(line, { x: 219, y: 283 - index * 18, size: 6.5, font })
+      (line, index) => page.drawText(line, { x: 219, y: 237 - index * 15, size: 6.5, font })
     );
 
-    drawTextBox(page, font, "18. Other useful particulars / Andra användbara uppgifter", usefulParticulars || "-", left, 204, columnWidth, 32, {
+    drawTextBox(page, font, "18. Other useful particulars / Andra användbara uppgifter", usefulParticulars || "-", left, 156, columnWidth, 32, {
       maxChars: 52,
       fontSize: 6.6,
     });
-    drawTextBox(page, font, "19. Cash on delivery / Postförskott", "-", right, 204, columnWidth, 32, { maxChars: 45, fontSize: 6.6 });
-    page.drawRectangle({ x: left, y: 174, width: pageWidth, height: 30, borderColor: border, borderWidth: 0.85 });
+    drawTextBox(page, font, "19. Cash on delivery / Postförskott", "-", right, 156, columnWidth, 32, { maxChars: 45, fontSize: 6.6 });
+    page.drawRectangle({ x: left, y: 126, width: pageWidth, height: 30, borderColor: border, borderWidth: 0.85 });
     splitLines(
       "20. This carriage is subject, notwithstanding any clause to the contrary, to the Convention on the Contract for the International Carriage of Goods by Road (CMR).",
       115
     )
       .slice(0, 3)
-      .forEach((line, index) => page.drawText(line, { x: left + 4, y: 193 - index * 8, size: 6.2, font }));
-    page.drawRectangle({ x: left, y: 150, width: pageWidth, height: 24, borderColor: border, borderWidth: 0.85 });
-    page.drawText(`21. Established in / Upprättad i ${safe(loading?.name)} / Date ${today()}`, { x: left + 4, y: 159, size: 7, font: bold });
-    drawTextBox(page, font, "22. Signature or stamp of the sender / Avsändarens underskrift eller stämpel", "", left, 84, 164, 66, { fontSize: 6.6 });
-    drawTextBox(page, font, "23. Signature or stamp of the carrier / Transportörens underskrift eller stämpel", "", 188, 84, 164, 66, { fontSize: 6.6 });
-    drawTextBox(page, font, "24. Goods received / Varor mottagna", "locul / locu\ndata / data\nSignature or stamp of the consignee / Mottagarens underskrift eller stämpel", 352, 84, 219, 66, {
+      .forEach((line, index) => page.drawText(line, { x: left + 4, y: 145 - index * 8, size: 6.2, font }));
+    page.drawRectangle({ x: left, y: 102, width: pageWidth, height: 24, borderColor: border, borderWidth: 0.85 });
+    page.drawText(`21. Established in / Upprättad i ${safe(loading?.name)} / Date ${today()}`, { x: left + 4, y: 111, size: 7, font: bold });
+    drawTextBox(page, font, "22. Signature or stamp of the sender / Avsändarens underskrift eller stämpel", "", left, 36, 164, 66, {
+      fontSize: 6.6,
+      labelMaxChars: 33,
+      labelLines: 3,
+    });
+    drawTextBox(page, font, "23. Signature or stamp of the carrier / Transportörens underskrift eller stämpel", "", 188, 36, 164, 66, {
+      fontSize: 6.6,
+      labelMaxChars: 33,
+      labelLines: 3,
+    });
+    drawTextBox(page, font, "24. Goods received / Varor mottagna", "locul / locu\ndata / data\nSignature or stamp of the consignee / Mottagarens underskrift eller stämpel", 352, 36, 219, 66, {
       maxChars: 48,
       fontSize: 6.4,
+      labelMaxChars: 44,
+      labelLines: 2,
     });
-    page.drawText(`CMR No / Nr: ${project.project_number}`, { x: left, y: 70, size: 5.8, font, color: copy.color });
+    page.drawText(`CMR No / Nr: ${project.project_number}`, { x: left, y: 22, size: 5.8, font, color: copy.color });
   }
 
   return pdfBlob(await pdf.save());
