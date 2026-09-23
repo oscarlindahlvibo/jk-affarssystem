@@ -79,23 +79,11 @@ function drawTextBox(
 
 export async function generateCmrPdf(project: Project) {
   const pdf = await PDFDocument.create();
-  const page = pdf.addPage([595.28, 841.89]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const loading = location(project, "lastning");
   const unloading = location(project, "lossning");
   const cargoItems = project.cargo_items ?? [];
-
-  page.drawText("LETTRE DE VOITURE INTERNATIONALE / INTERNATIONAL CONSIGNMENT NOTE", {
-    x: 110,
-    y: 810,
-    size: 10,
-    font: bold,
-  });
-  page.drawText("CMR", { x: 276, y: 790, size: 18, font: bold, color: rgb(0.85, 0.2, 0.05) });
-  page.drawText(`Projekt: ${project.project_number}`, { x: 36, y: 790, size: 9, font });
-  page.drawText(`Datum: ${today()}`, { x: 480, y: 790, size: 9, font });
-
   const sender = [
     project.customer?.company_name,
     loading?.name,
@@ -123,71 +111,110 @@ export async function generateCmrPdf(project: Project) {
   ]
     .filter(Boolean)
     .join("\n");
-
-  drawTextBox(page, font, "1. Sender / Avsändare", sender || "-", 36, 675, 250, 100, { maxChars: 42 });
-  drawTextBox(page, font, "6. Carrier / Transportör", carrier || "-", 309, 675, 250, 100, { maxChars: 42 });
-  drawTextBox(page, font, "2. Consignee / Mottagare", consignee || "-", 36, 560, 250, 100, { maxChars: 42 });
-  drawTextBox(page, font, "7. Successive carriers / Efterföljande transportörer", "-", 309, 560, 250, 100, { maxChars: 42 });
-  drawTextBox(
-    page,
-    font,
-    "3. Taking over the goods / Övertagande",
-    [`Plats: ${safe(loading?.name)}`, `Adress: ${safe(loading?.address)}`, `Datum: ${safe(project.planned_loading_date)}`].join("\n"),
-    36,
-    475,
-    250,
-    72,
-    { maxChars: 42 }
-  );
-  drawTextBox(
-    page,
-    font,
-    "4. Delivery of the goods / Leverans",
-    [`Plats: ${safe(unloading?.name)}`, `Adress: ${safe(unloading?.address)}`, `Datum: ${safe(project.planned_delivery_date)}`].join("\n"),
-    309,
-    475,
-    250,
-    72,
-    { maxChars: 42 }
-  );
-  drawTextBox(page, font, "5. Sender's instructions / Avsändarens instruktioner", project.special_requirements ?? "-", 36, 390, 523, 72, {
-    maxChars: 92,
-  });
-
-  const tableTop = 360;
-  const columns = [
-    { label: "10. Marks / Märkning", x: 36, w: 118 },
-    { label: "11. Antal", x: 154, w: 56 },
-    { label: "12. Varuslag", x: 210, w: 170 },
-    { label: "13. Vikt kg", x: 380, w: 76 },
-    { label: "14. Volym m3", x: 456, w: 70 },
-    { label: "15. Obs", x: 526, w: 33 },
+  const takingOver = [
+    `Place / Plats: ${safe(loading?.name)}`,
+    `Address / Adress: ${safe(loading?.address)}`,
+    `Date / Datum: ${safe(project.planned_loading_date)}`,
+    "Arrival/departure time / Ankomst/avgång: __________",
+  ].join("\n");
+  const delivery = [
+    `Place / Plats: ${safe(unloading?.name)}`,
+    `Address / Adress: ${safe(unloading?.address)}`,
+    `Date / Datum: ${safe(project.planned_delivery_date)}`,
+    "Opening/arrival time / Tid: __________",
+  ].join("\n");
+  const documents = [project.source_document_ref, project.customer_reference].filter(Boolean).join(", ") || "-";
+  const usefulParticulars = [
+    project.route_distance_km ? `Route distance / Transportsträcka: ${project.route_distance_km} km` : null,
+    project.vehicle ? `Vehicle / Fordon: ${project.vehicle}` : null,
+    project.driver_name ? `Driver / Chaufför: ${project.driver_name}` : null,
+    project.carrier_order_number ? `Carrier order no / Transportörens ordernr: ${project.carrier_order_number}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const copies = [
+    { label: "1 - Consignor copy / Avsändarens exemplar", color: rgb(0.78, 0.08, 0.08) },
+    { label: "2 - Consignee copy / Mottagarens exemplar - accompanies goods", color: rgb(0.05, 0.25, 0.72) },
+    { label: "3 - Carrier copy / Transportörens exemplar", color: rgb(0.0, 0.45, 0.22) },
+    { label: "4 - Administrative copy / Administrativt exemplar", color: rgb(0.05, 0.05, 0.05) },
   ];
-  for (const column of columns) {
-    page.drawRectangle({ x: column.x, y: tableTop, width: column.w, height: 28, borderColor: rgb(0.7, 0.7, 0.7), borderWidth: 0.6 });
-    page.drawText(column.label, { x: column.x + 3, y: tableTop + 10, size: 6.7, font: bold });
-  }
-  const rowHeight = 34;
-  const rows = cargoItems.slice(0, 6);
-  rows.forEach((cargo, index) => {
-    const y = tableTop - rowHeight * (index + 1);
-    for (const column of columns) {
-      page.drawRectangle({ x: column.x, y, width: column.w, height: rowHeight, borderColor: rgb(0.82, 0.82, 0.82), borderWidth: 0.5 });
-    }
-    page.drawText(project.customer_reference ?? "-", { x: 39, y: y + 20, size: 7, font });
-    page.drawText(safe(cargo.quantity), { x: 160, y: y + 20, size: 8, font });
-    splitLines(cargo.description, 31).slice(0, 2).forEach((line, lineIndex) => page.drawText(line, { x: 214, y: y + 21 - lineIndex * 9, size: 7, font }));
-    page.drawText(weightKg(cargo), { x: 384, y: y + 20, size: 8, font });
-    page.drawText(volume(cargo), { x: 460, y: y + 20, size: 8, font });
-  });
 
-  drawTextBox(page, font, "16. Special agreements / Särskilda avtal", project.delivery_terms ?? "-", 36, 96, 250, 84, { maxChars: 44 });
-  drawTextBox(page, font, "18. Other useful particulars / Andra uppgifter", `Sträcka: ${safe(project.route_distance_km)} km`, 309, 96, 250, 84, {
-    maxChars: 44,
-  });
-  drawTextBox(page, font, "22. Sender signature / Avsändare", "", 36, 30, 160, 52);
-  drawTextBox(page, font, "23. Carrier signature / Transportör", "", 216, 30, 160, 52);
-  drawTextBox(page, font, "24. Goods received / Mottagare", "", 396, 30, 163, 52);
+  for (const copy of copies) {
+    const page = pdf.addPage([595.28, 841.89]);
+    page.drawRectangle({ x: 24, y: 804, width: 547, height: 20, color: copy.color });
+    page.drawText(copy.label, { x: 32, y: 810, size: 8.5, font: bold, color: rgb(1, 1, 1) });
+    page.drawText("Pays / Country: SE", { x: 432, y: 810, size: 8, font: bold, color: rgb(1, 1, 1) });
+    page.drawText("LETTRE DE VOITURE INTERNATIONALE / INTERNATIONAL CONSIGNMENT NOTE", {
+      x: 86,
+      y: 786,
+      size: 10,
+      font: bold,
+    });
+    page.drawText("CMR", { x: 270, y: 765, size: 18, font: bold, color: copy.color });
+    page.drawText(`CMR No / Nr: ${project.project_number}`, { x: 36, y: 770, size: 8.5, font: bold });
+    page.drawText(`Issued / Upprättad: ${today()}`, { x: 420, y: 770, size: 8.5, font });
+
+    drawTextBox(page, font, "1. Sender (name, address, country) / Avsändare", sender || "-", 36, 658, 250, 96, { maxChars: 42 });
+    drawTextBox(page, font, "6. Carrier (name, address, country) / Transportör", carrier || "-", 309, 658, 250, 96, { maxChars: 42 });
+    drawTextBox(page, font, "2. Consignee (name, address, country) / Mottagare", consignee || "-", 36, 552, 250, 94, { maxChars: 42 });
+    drawTextBox(page, font, "7. Successive carriers / Efterföljande transportörer", "-", 309, 552, 250, 94, { maxChars: 42 });
+    drawTextBox(page, font, "3. Taking over the goods / Övertagande av godset", takingOver, 36, 462, 250, 78, { maxChars: 42 });
+    drawTextBox(page, font, "4. Delivery of the goods / Leverans av godset", delivery, 309, 462, 250, 78, { maxChars: 42 });
+    drawTextBox(page, font, "5. Sender's instructions / Avsändarens instruktioner", project.special_requirements ?? "-", 36, 382, 250, 68, {
+      maxChars: 42,
+    });
+    drawTextBox(page, font, "8. Carrier reservations / Transportörens förbehåll", "", 309, 382, 250, 68, { maxChars: 42 });
+
+    const tableTop = 352;
+    const columns = [
+      { label: "10. Marks and Numbers / Märken och nummer", x: 36, w: 100 },
+      { label: "11. Packages / Antal", x: 136, w: 55 },
+      { label: "12. Packing and nature of goods / Förpackning och varuslag", x: 191, w: 195 },
+      { label: "13. Gross weight kg / Bruttovikt", x: 386, w: 78 },
+      { label: "14. Volume m3 / Volym", x: 464, w: 55 },
+      { label: "15. Observations / Anm.", x: 519, w: 40 },
+    ];
+    for (const column of columns) {
+      page.drawRectangle({ x: column.x, y: tableTop, width: column.w, height: 30, borderColor: copy.color, borderWidth: 0.8 });
+      splitLines(column.label, Math.floor(column.w / 4.5))
+        .slice(0, 2)
+        .forEach((line, index) => page.drawText(line, { x: column.x + 3, y: tableTop + 19 - index * 8, size: 6.3, font: bold }));
+    }
+    const rowHeight = 30;
+    cargoItems.slice(0, 5).forEach((cargo, index) => {
+      const y = tableTop - rowHeight * (index + 1);
+      for (const column of columns) {
+        page.drawRectangle({ x: column.x, y, width: column.w, height: rowHeight, borderColor: rgb(0.78, 0.78, 0.78), borderWidth: 0.5 });
+      }
+      page.drawText(project.customer_reference ?? project.project_number, { x: 39, y: y + 18, size: 6.8, font });
+      page.drawText(safe(cargo.quantity), { x: 142, y: y + 18, size: 7.5, font });
+      const goodsText = [cargo.description, cargo.technical_info].filter(Boolean).join(" - ");
+      splitLines(goodsText, 42).slice(0, 2).forEach((line, lineIndex) => page.drawText(line, { x: 195, y: y + 19 - lineIndex * 8, size: 6.8, font }));
+      page.drawText(weightKg(cargo), { x: 390, y: y + 18, size: 7.5, font });
+      page.drawText(volume(cargo), { x: 468, y: y + 18, size: 7.5, font });
+    });
+
+    drawTextBox(page, font, "9. Documents handed to carrier / Dokument överlämnade", documents, 36, 158, 250, 48, { maxChars: 42 });
+    drawTextBox(page, font, "16. Special agreements / Särskilda avtal", project.delivery_terms ?? "-", 309, 158, 250, 48, { maxChars: 42 });
+    drawTextBox(page, font, "17. Charges / Avgifter", "Carriage charges / Transportkostnader: ______\nOther charges / Övriga avgifter: ______", 36, 98, 250, 48, {
+      maxChars: 42,
+      fontSize: 7.5,
+    });
+    drawTextBox(page, font, "18. Other useful particulars / Andra uppgifter", usefulParticulars || "-", 309, 98, 250, 48, { maxChars: 42, fontSize: 7.5 });
+    drawTextBox(page, font, "19. Cash on delivery / Postförskott", "-", 36, 64, 250, 24, { maxChars: 42, fontSize: 7.5 });
+    page.drawRectangle({ x: 309, y: 64, width: 250, height: 24, borderColor: copy.color, borderWidth: 0.8 });
+    splitLines(
+      "20. This carriage is subject, notwithstanding any clause to the contrary, to the Convention on the Contract for the International Carriage of Goods by Road (CMR).",
+      76
+    )
+      .slice(0, 3)
+      .forEach((line, index) => page.drawText(line, { x: 314, y: 80 - index * 7, size: 5.8, font: bold }));
+    page.drawText(`21. Established in / Upprättad i: ${safe(loading?.name)}  Date / Datum: ${today()}`, { x: 36, y: 48, size: 7.4, font });
+    drawTextBox(page, font, "22. Sender signature/stamp / Avsändare", "", 36, 12, 160, 30, { fontSize: 7 });
+    drawTextBox(page, font, "23. Carrier signature/stamp / Transportör", "", 216, 12, 160, 30, { fontSize: 7 });
+    drawTextBox(page, font, "24. Goods received / Varor mottagna", "", 396, 12, 163, 30, { fontSize: 7 });
+    page.drawText(`CMR No / Nr: ${project.project_number}`, { x: 36, y: 4, size: 5.8, font, color: copy.color });
+  }
 
   return pdfBlob(await pdf.save());
 }
