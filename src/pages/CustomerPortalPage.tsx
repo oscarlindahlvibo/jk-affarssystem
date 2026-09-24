@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { CheckCircle2, Clock, LogOut, MapPin, Package, Plus, Route, Send, Truck, X } from "lucide-react";
+import { CheckCircle2, Clock, LogOut, MapPin, MessageSquareText, Package, Plus, Route, Send, Truck, X } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useStore, type CustomerBookingCargoInput, type CustomerBookingInput } from "../data/store";
 import { Button } from "../components/ui/Button";
@@ -7,7 +7,7 @@ import { Field, inputClass } from "../components/ui/Field";
 import { AddressAutocomplete } from "../components/ui/AddressAutocomplete";
 import { Panel } from "../components/ui/Panel";
 import { StatusBadge } from "../components/ui/StatusBadge";
-import { formatDate } from "../lib/format";
+import { formatDate, formatDateTime } from "../lib/format";
 import { calculateRouteDistance } from "../lib/routeDistance";
 import { PROJECT_STATUSES, type BookingApprovalStatus, type TransportType } from "../types";
 
@@ -333,6 +333,7 @@ export function CustomerPortalPage() {
                 const loading = p.locations?.find((l) => l.type === "lastning");
                 const unloading = p.locations?.find((l) => l.type === "lossning");
                 const approval = p.booking_approval_status;
+                const customerNotes = (p.notes ?? []).filter((note) => note.visibility === "customer");
                 return (
                   <div key={p.id} className="rounded-lg border border-border p-3">
                     <div className="flex items-start justify-between gap-3">
@@ -354,6 +355,24 @@ export function CustomerPortalPage() {
                       <div>{loading?.name ?? "Lastning saknas"} → {unloading?.name ?? "Lossning saknas"}</div>
                       <div className="flex items-center gap-1"><Clock size={12} /> Lastning {formatDate(p.planned_loading_date)}</div>
                     </div>
+                    {customerNotes.length > 0 && (
+                      <div className="mt-3 border-t border-border pt-3">
+                        <div className="mb-2 flex items-center gap-1 text-xs font-semibold text-slate-700">
+                          <MessageSquareText size={13} /> Kommentarer från JK
+                        </div>
+                        <div className="space-y-2">
+                          {customerNotes.map((note) => (
+                            <div key={note.id} className="rounded-md bg-slate-50 px-2.5 py-2 text-xs text-slate-600">
+                              <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                                <span>{note.user_name}</span>
+                                <span>{formatDateTime(note.date)}</span>
+                              </div>
+                              <p>{note.text}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}

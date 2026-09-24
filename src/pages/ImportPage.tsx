@@ -169,7 +169,7 @@ export function ImportPage() {
         : [];
 
       const notes = d.comment
-        ? [{ id: "tmp", project_id: "", date: new Date().toISOString(), user_name: "Excel-import", text: d.comment, category: "Allmänt" as const }]
+        ? [{ id: "tmp", project_id: "", date: new Date().toISOString(), user_name: "Excel-import", text: d.comment, category: "Allmänt" as const, visibility: "internal" as const }]
         : [];
 
       const documents = d.documentRef

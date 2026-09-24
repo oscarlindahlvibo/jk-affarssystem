@@ -214,8 +214,8 @@ const rawProjects: Omit<
       { id: "d2", project_id: "pr1", file_name: "Dispensansokan_Rv25.pdf", file_type: "pdf", category: "Tillstånd", storage_path: "pr1/Dispensansokan_Rv25.pdf", uploaded_at: "2026-08-25T13:00:00Z", uploaded_by: "Peter Sund", visibility: "internal", comment: null },
     ],
     notes: [
-      { id: "n1", project_id: "pr1", date: "2026-08-10T09:15:00Z", user_name: "Maria Lind", text: "Kund bekräftar mått per telefon. Väntar på slutgiltig ritning.", category: "Kund" },
-      { id: "n2", project_id: "pr1", date: "2026-08-27T11:00:00Z", user_name: "Peter Sund", text: "Elledning vid Rv25 kräver samordning med nätägare innan transportdatum.", category: "Tillstånd" },
+      { id: "n1", project_id: "pr1", date: "2026-08-10T09:15:00Z", user_name: "Maria Lind", text: "Kund bekräftar mått per telefon. Väntar på slutgiltig ritning.", category: "Kund", visibility: "internal" },
+      { id: "n2", project_id: "pr1", date: "2026-08-27T11:00:00Z", user_name: "Peter Sund", text: "Elledning vid Rv25 kräver samordning med nätägare innan transportdatum.", category: "Tillstånd", visibility: "internal" },
     ],
     tasks: [
       { id: "t1", project_id: "pr1", task: "Kontrollera transportmått", category: "Dokumentation", description: null, route_section: null, assignee_id: "u2", assignee: "Maria Lind", deadline: "2026-08-15", status: "Klar", comment: null },
@@ -250,7 +250,7 @@ const rawProjects: Omit<
       { id: "d3", project_id: "pr2", file_name: "Maskinspecifikation_ABB-M-4471.pdf", file_type: "pdf", category: "Ritning", storage_path: "pr2/Maskinspecifikation_ABB-M-4471.pdf", uploaded_at: "2026-08-06T10:00:00Z", uploaded_by: "Jens Karlsson", visibility: "internal", comment: null },
     ],
     notes: [
-      { id: "n3", project_id: "pr2", date: "2026-09-01T08:30:00Z", user_name: "Jens Karlsson", text: "Ruttmätning visar kritisk punkt vid tunnel Norrköping. Utreder alternativ väg via Rv34.", category: "Transport" },
+      { id: "n3", project_id: "pr2", date: "2026-09-01T08:30:00Z", user_name: "Jens Karlsson", text: "Ruttmätning visar kritisk punkt vid tunnel Norrköping. Utreder alternativ väg via Rv34.", category: "Transport", visibility: "internal" },
     ],
     tasks: [
       { id: "t6", project_id: "pr2", task: "Kontrollera transportmått", category: "Dokumentation", description: null, route_section: null, assignee_id: "u1", assignee: "Jens Karlsson", deadline: "2026-08-12", status: "Klar", comment: null },
@@ -281,7 +281,7 @@ const rawProjects: Omit<
     ],
     documents: [],
     notes: [
-      { id: "n4", project_id: "pr3", date: "2026-08-22T10:00:00Z", user_name: "Peter Sund", text: "Order bekräftad av Jinert. Inväntar exakt lastningstid.", category: "Kund" },
+      { id: "n4", project_id: "pr3", date: "2026-08-22T10:00:00Z", user_name: "Peter Sund", text: "Order bekräftad av Jinert. Inväntar exakt lastningstid.", category: "Kund", visibility: "internal" },
     ],
     tasks: [
       { id: "t9", project_id: "pr3", task: "Bekräfta lastning", category: "Övrigt", description: null, route_section: null, assignee_id: "u3", assignee: "Peter Sund", deadline: "2026-09-15", status: "Ej påbörjad", comment: null },
@@ -456,7 +456,8 @@ const rawProjects: Omit<
     ],
     documents: [],
     notes: [
-      { id: "n10", project_id: "pr10", date: "2026-09-15T10:20:00Z", user_name: "Anna Bergström", text: "Bokning skapad av kund i kundportalen.", category: "Kund" },
+      { id: "n10", project_id: "pr10", date: "2026-09-15T10:20:00Z", user_name: "Anna Bergström", text: "Bokning skapad av kund i kundportalen.", category: "Kund", visibility: "internal" },
+      { id: "n11", project_id: "pr10", date: "2026-09-15T14:30:00Z", user_name: "Jens Karlsson", text: "Vi har tagit emot bokningen och återkommer när transportupplägget är klart.", category: "Kund", visibility: "customer" },
     ],
     tasks: [],
   },

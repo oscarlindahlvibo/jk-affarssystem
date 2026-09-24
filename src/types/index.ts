@@ -162,6 +162,7 @@ export interface ProjectDocument {
 }
 
 export type NoteCategory = "Allmänt" | "Kund" | "Transport" | "Tillstånd" | "Ekonomi";
+export type NoteVisibility = "internal" | "customer";
 
 export interface ProjectNote {
   id: string;
@@ -170,6 +171,7 @@ export interface ProjectNote {
   user_name: string;
   text: string;
   category: NoteCategory;
+  visibility?: NoteVisibility;
 }
 
 export type TaskStatus = "Ej påbörjad" | "Pågående" | "Klar";
