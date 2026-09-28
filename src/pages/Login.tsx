@@ -5,6 +5,7 @@ import { useAuth } from "../lib/auth";
 import { usePersonnel } from "../data/personnel";
 import { customerUsers, customers } from "../data/mockData";
 import { isSupabaseConfigured } from "../lib/supabase";
+import { allowMockAuth, requireSupabase } from "../lib/runtimeMode";
 import { Field, inputClass } from "../components/ui/Field";
 import { Button } from "../components/ui/Button";
 import { ROLE_LABELS, USER_STATUS_LABELS } from "../types";
@@ -17,6 +18,7 @@ export function Login() {
   const [mockTab, setMockTab] = useState<"internal" | "customer">("internal");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const canUseMockAuth = allowMockAuth();
 
   if (isAuthenticated) {
     return <Navigate to={accountType === "customer" ? "/kundportal" : "/"} replace />;
@@ -68,7 +70,7 @@ export function Login() {
               {loading ? "Loggar in..." : "Logga in"}
             </Button>
           </form>
-        ) : (
+        ) : canUseMockAuth ? (
           <div className="space-y-4">
             <p className="text-center text-sm text-slate-500">
               Supabase Auth är förberett men inte anslutet i denna miljö. Välj en testanvändare för att prova
@@ -154,6 +156,12 @@ export function Login() {
                     </button>
                   ))}
             </div>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {requireSupabase()
+              ? "Produktionsläge kräver Supabase-konfiguration. Lägg in VITE_SUPABASE_URL och VITE_SUPABASE_ANON_KEY innan publicering."
+              : "Testinloggning är avstängd i denna miljö."}
           </div>
         )}
       </div>

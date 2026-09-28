@@ -35,7 +35,7 @@ Varje användare, kund, projekt och leverantör tillhör ett bolag (`org_id`). S
 ## Koppla in Supabase
 
 1. Skapa ett Supabase-projekt.
-2. Kör `supabase/migrations/0001_init.sql` i SQL-editorn (skapar tabeller, RLS-policyer och en `project-documents`-bucket för dokument).
+2. Kör migrationerna i ordning från `supabase/migrations/` i SQL-editorn (skapar tabeller, RLS-policyer, kundportalstöd och en `project-documents`-bucket för dokument).
 3. Kopiera `.env.example` till `.env` och fyll i:
    ```
    VITE_SUPABASE_URL=...
@@ -44,6 +44,27 @@ Varje användare, kund, projekt och leverantör tillhör ett bolag (`org_id`). S
 4. Starta om `npm run dev`. Login-sidan växlar automatiskt till Supabase Auth (e-post/lösenord).
 
 Frontend-koden läser fortfarande från `src/data/mockData.ts` via `src/data/store.tsx` tills datalagret kopplas om till Supabase-queries – datamodellen (`src/types/index.ts`) speglar databasschemat 1:1 för att göra den övergången enkel.
+
+## Go-live på projekt.jkprojekt.se
+
+Vid skarp publicering ska appen köras utan testinloggning/mockanvändare:
+
+```env
+VITE_APP_ENV=production
+VITE_REQUIRE_SUPABASE=true
+VITE_ALLOW_MOCK_AUTH=false
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...
+```
+
+Appen blockerar automatiskt mockinloggning på hosten `projekt.jkprojekt.se`. Innan DNS/deploy pekas om ska detta vara gjort:
+
+- Kör alla Supabase-migrationer, inklusive `0005_live_readiness.sql`.
+- Skapa JK:s organisation i `organizations`.
+- Skapa första admin-användaren i Supabase Auth och en matchande rad i `profiles` med samma `id`, `org_id`, `email`, `role = 'admin'` och `status = 'aktiv'`.
+- Skapa kundanvändare i Supabase Auth och matchande rader i `customer_users` för de kunder som ska kunna logga in i kundportalen.
+- Koppla om `StoreProvider` från mock/localStorage till Supabase-queries innan live med riktiga projektdata. Utan det finns riktig Auth, men inte ett persistent rent produktionsregister.
+- Rensa lokal testdata i webbläsaren vid sluttest (`localStorage`/`sessionStorage`) och verifiera med en privat/incognito-session.
 
 ## Koppla in Google Drive (dokumentlagring)
 
