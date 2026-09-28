@@ -7,7 +7,7 @@ import { Button } from "../ui/Button";
 import { AddressAutocomplete } from "../ui/AddressAutocomplete";
 import { useStore } from "../../data/store";
 import { PROJECT_TEMPLATES, TEMPLATE_DESCRIPTIONS, TEMPLATE_TASKS } from "../../data/templates";
-import { evaluateTransportRules, suggestedFollowVehicleTask, RULE_SOURCE_NOTE } from "../../lib/transportRules";
+import { evaluateTransportRules, suggestedTransportTasks, RULE_SOURCE_NOTE } from "../../lib/transportRules";
 import { calculateRouteDistance } from "../../lib/routeDistance";
 import { TransportRuleList } from "./TransportRuleList";
 import { INVOICE_STATUSES, type CargoItem, type TransportType, type ProjectTemplateKey, type Project, type Location, type InvoiceStatus } from "../../types";
@@ -132,7 +132,7 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
     weight_ton: numOrNull(row.weight),
   }));
   const liveRules = liveCargoDimensions.flatMap((dimensions) => evaluateTransportRules(dimensions));
-  const liveTaskSuggestion = liveCargoDimensions.map(suggestedFollowVehicleTask).find(Boolean);
+  const liveTaskSuggestions = suggestedTransportTasks(liveCargoDimensions);
 
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState("");
@@ -266,25 +266,34 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
     setCargoRows((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
   }
 
-  // Föreslår automatiskt en uppgift ("Boka följebil"/"Boka vägtransportledare") utifrån
-  // lastens mått – oavsett vald transporttyp eller mall – om en sådan uppgift inte redan
-  // finns med i checklistan.
-  function ensureFollowVehicleTask(projectId: string, existingTaskTexts: string[]) {
-    const suggestion = liveCargoDimensions.map(suggestedFollowVehicleTask).find(Boolean);
-    if (!suggestion) return;
-    const alreadyPlanned = existingTaskTexts.some((t) => /följebil|vägtransportledare/i.test(t));
-    if (alreadyPlanned) return;
-    addTask(projectId, {
-      task: suggestion,
-      category: "Följebil",
-      description: "Föreslagen automatiskt utifrån godsets mått, oavsett transporttyp.",
-      route_section: null,
-      assignee_id: null,
-      assignee: null,
-      deadline: null,
-      status: "Ej påbörjad",
-      comment: null,
-    });
+  // Föreslår automatiskt arbetsordrar utifrån lastens mått – oavsett vald transporttyp
+  // eller mall – om motsvarande uppgift inte redan finns med i checklistan.
+  function ensureSuggestedTransportTasks(projectId: string, existingTaskTexts: string[]) {
+    const normalizedExisting = existingTaskTexts.map((text) => text.toLowerCase());
+    const suggestions = suggestedTransportTasks(liveCargoDimensions);
+    for (const suggestion of suggestions) {
+      const alreadyPlanned = normalizedExisting.some((text) => {
+        if (/vägtransportledare|vtl/i.test(suggestion.task)) return /vägtransportledare|vtl/i.test(text);
+        if (/följebil/i.test(suggestion.task)) return /följebil/i.test(text);
+        if (/dispens/i.test(suggestion.task)) return /dispens/i.test(text);
+        if (/vägrekning|ruttkontroll/i.test(suggestion.task)) return /vägrekning|ruttkontroll|reka/i.test(text);
+        if (/besiktning/i.test(suggestion.task)) return /besiktning|site/i.test(text);
+        return text.includes(suggestion.task.toLowerCase());
+      });
+      if (alreadyPlanned) continue;
+      normalizedExisting.push(suggestion.task.toLowerCase());
+      addTask(projectId, {
+        task: suggestion.task,
+        category: suggestion.category,
+        description: suggestion.description,
+        route_section: null,
+        assignee_id: null,
+        assignee: null,
+        deadline: null,
+        status: "Ej påbörjad",
+        comment: null,
+      });
+    }
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -317,7 +326,7 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
 
     if (isEdit && project) {
       updateProject(project.id, sharedFields);
-      ensureFollowVehicleTask(project.id, (project.tasks ?? []).map((t) => t.task));
+      ensureSuggestedTransportTasks(project.id, (project.tasks ?? []).map((t) => t.task));
       onClose();
       return;
     }
@@ -342,7 +351,7 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
         comment: null,
       });
     }
-    ensureFollowVehicleTask(created.id, templateTaskDefs.map((d) => d.task));
+    ensureSuggestedTransportTasks(created.id, templateTaskDefs.map((d) => d.task));
 
     onClose();
     navigate(`/projekt/${created.id}`);
@@ -662,11 +671,15 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
                 Automatiskt bedömda krav utifrån måtten
               </h4>
               <TransportRuleList rules={liveRules} compact />
-              {liveTaskSuggestion && (
-                <p className="mt-2 text-xs text-slate-600">
-                  Uppgiften <span className="font-medium">"{liveTaskSuggestion}"</span> läggs automatiskt till i checklistan
-                  när projektet sparas (om den inte redan finns), oavsett transporttyp.
-                </p>
+              {liveTaskSuggestions.length > 0 && (
+                <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  <div className="font-medium text-slate-700">Följande arbetsordrar läggs till automatiskt om de saknas:</div>
+                  <ul className="mt-1 list-disc pl-4">
+                    {liveTaskSuggestions.map((task) => (
+                      <li key={task.task}>{task.task}</li>
+                    ))}
+                  </ul>
+                </div>
               )}
               <p className="mt-2 text-[11px] text-slate-400">{RULE_SOURCE_NOTE}</p>
             </div>

@@ -16,6 +16,10 @@ function money(value: number) {
   return `${Math.round(value).toLocaleString("sv-SE")} kr`;
 }
 
+function quantity(value: number | null | undefined) {
+  return value && value > 0 ? value : 1;
+}
+
 export function FreightCalculatorPanel({
   project,
   canApplyToFinance,
@@ -24,7 +28,8 @@ export function FreightCalculatorPanel({
   canApplyToFinance: boolean;
 }) {
   const { freightCalculatorConfig, updateProjectFinance } = useStore();
-  const cargoItems = project.cargo_items ?? [];
+  const cargoItems = useMemo(() => project.cargo_items ?? [], [project.cargo_items]);
+  const [calculationMode, setCalculationMode] = useState<"selected" | "all">("selected");
   const [cargoIndex, setCargoIndex] = useState(0);
   const selectedCargo = cargoItems[cargoIndex] ?? cargoItems[0];
   const [distanceKm, setDistanceKm] = useState(project.route_distance_km?.toString() ?? "270");
@@ -45,15 +50,26 @@ export function FreightCalculatorPanel({
     denmarkJutlandFunen: false,
   });
 
-  const defaultInput = useMemo(
-    () => ({
-      weightKg: selectedCargo?.weight_ton ? selectedCargo.weight_ton * 1000 : 0,
+  const defaultInput = useMemo(() => {
+    if (calculationMode === "all") {
+      return cargoItems.reduce(
+        (acc, cargo) => ({
+          weightKg: acc.weightKg + (cargo.weight_ton ? cargo.weight_ton * 1000 * quantity(cargo.quantity) : 0),
+          lengthMm: Math.max(acc.lengthMm, cargo.length_m ? cargo.length_m * 1000 : 0),
+          widthMm: Math.max(acc.widthMm, cargo.width_m ? cargo.width_m * 1000 : 0),
+          heightMm: Math.max(acc.heightMm, cargo.height_m ? cargo.height_m * 1000 : 0),
+        }),
+        { weightKg: 0, lengthMm: 0, widthMm: 0, heightMm: 0 }
+      );
+    }
+
+    return {
+      weightKg: selectedCargo?.weight_ton ? selectedCargo.weight_ton * 1000 * quantity(selectedCargo.quantity) : 0,
       lengthMm: selectedCargo?.length_m ? selectedCargo.length_m * 1000 : 0,
       widthMm: selectedCargo?.width_m ? selectedCargo.width_m * 1000 : 0,
       heightMm: selectedCargo?.height_m ? selectedCargo.height_m * 1000 : 0,
-    }),
-    [selectedCargo]
-  );
+    };
+  }, [calculationMode, cargoItems, selectedCargo]);
 
   const input: FreightCalculationInput = useMemo(
     () => ({
@@ -76,22 +92,42 @@ export function FreightCalculatorPanel({
         {cargoItems.length > 0 ? (
           <>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {cargoItems.length > 1 && (
+                <Field label="Beräkningsläge">
+                  <select
+                    className={inputClass}
+                    value={calculationMode}
+                    onChange={(e) => {
+                      setCalculationMode(e.target.value as "selected" | "all");
+                      setInputOverrides({ weightKg: "", lengthMm: "", widthMm: "", heightMm: "" });
+                      setSelectedCategoryId("");
+                    }}
+                  >
+                    <option value="selected">Vald godsrad</option>
+                    <option value="all">Alla godsrader som samlad last</option>
+                  </select>
+                </Field>
+              )}
               <Field label="Godsrad">
-                <select
-                  className={inputClass}
-                  value={cargoIndex}
-                  onChange={(e) => {
-                    setCargoIndex(Number(e.target.value));
-                    setInputOverrides({ weightKg: "", lengthMm: "", widthMm: "", heightMm: "" });
-                    setSelectedCategoryId("");
-                  }}
-                >
-                  {cargoItems.map((cargo, index) => (
-                    <option key={cargo.id ?? index} value={index}>
-                      {index + 1}. {cargo.description}
-                    </option>
-                  ))}
-                </select>
+                {calculationMode === "selected" ? (
+                  <select
+                    className={inputClass}
+                    value={cargoIndex}
+                    onChange={(e) => {
+                      setCargoIndex(Number(e.target.value));
+                      setInputOverrides({ weightKg: "", lengthMm: "", widthMm: "", heightMm: "" });
+                      setSelectedCategoryId("");
+                    }}
+                  >
+                    {cargoItems.map((cargo, index) => (
+                      <option key={cargo.id ?? index} value={index}>
+                        {index + 1}. {cargo.description}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className={`${inputClass} flex items-center text-slate-600`}>{cargoItems.length} godsrader summeras</div>
+                )}
               </Field>
               <Field label="Avstånd">
                 <div className="flex items-center gap-2">
@@ -105,6 +141,12 @@ export function FreightCalculatorPanel({
                 )}
               </Field>
             </div>
+            {calculationMode === "all" && (
+              <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                Räknesnurran behandlar godsraderna som en samlad last: vikten summeras och största längd, bredd och höjd styr fordonskategori, krav och tillägg.
+                Om kollin kräver separata transporter bör de kalkyleras separat.
+              </div>
+            )}
 
             <Field label="Fordonskategori">
               <select className={inputClass} value={selectedCategoryId} onChange={(e) => setSelectedCategoryId(e.target.value)}>

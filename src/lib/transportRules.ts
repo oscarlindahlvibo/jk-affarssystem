@@ -6,6 +6,8 @@
 // - Transportstyrelsen, "Odelbar last och fordon som överskrider vikt- och dimensionsbestämmelser"
 // - Trafikverket, handbok Dispenstransporter (TSFS 2023:37 m.fl.)
 
+import type { TaskCategory } from "../types";
+
 export type RuleSeverity = "info" | "warning" | "critical";
 
 export interface TransportRule {
@@ -22,8 +24,16 @@ export interface CargoDimensions {
   weight_ton: number | null;
 }
 
+export interface SuggestedTransportTask {
+  task: string;
+  category: TaskCategory;
+  description: string;
+}
+
 const WIDTH_SIGN_LIMIT = 2.6; // över denna: skylt "Bred last", ev. dispens för odelbar last
 const WIDTH_ESCORT_LIMIT = 3.1; // över denna: följebil krävs
+const WIDTH_PERMIT_LIMIT = 3.5; // över denna: dispenshantering behövs normalt
+const WIDTH_ROUTE_CHECK_LIMIT = 4.1; // över denna: färdväg bör kontrolleras i detalj
 const WIDTH_PILOT_LIMIT = 4.5; // över denna: vägtransportledare istället för vanlig följebil
 const LENGTH_STANDARD_LIMIT = 24.0; // standardgräns för fordonståg
 const LENGTH_PERMIT_LIMIT = 30.0; // över denna krävs dispens för längd
@@ -56,6 +66,24 @@ export function evaluateTransportRules(cargo: CargoDimensions): TransportRule[] 
         severity: "info",
         label: 'Skylt "Bred last" krävs',
         detail: `Bredd ${width} m överstiger ${WIDTH_SIGN_LIMIT} m – varningsskylt krävs. Odelbar last upp till ${WIDTH_ESCORT_LIMIT} m går normalt utan dispens.`,
+      });
+    }
+
+    if (width > WIDTH_PERMIT_LIMIT) {
+      rules.push({
+        id: "dispens-bredd",
+        severity: "warning",
+        label: "Dispens krävs för bredden",
+        detail: `Bredd ${width} m överstiger ${WIDTH_PERMIT_LIMIT} m – dispenshantering behöver planeras.`,
+      });
+    }
+
+    if (width > WIDTH_ROUTE_CHECK_LIMIT) {
+      rules.push({
+        id: "bredd-ruttkontroll",
+        severity: "warning",
+        label: "Vägrekning/ruttkontroll rekommenderas",
+        detail: `Bredd ${width} m överstiger ${WIDTH_ROUTE_CHECK_LIMIT} m – kontrollera framkomlighet och kritiska punkter på rutten.`,
       });
     }
   }
@@ -117,6 +145,19 @@ export function evaluateTransportRules(cargo: CargoDimensions): TransportRule[] 
 
 const FOLLOW_VEHICLE_RULE_IDS = ["foljebil-bredd", "vtl-bredd", "vtl-langd", "dispens-langd", "langt-fordon", "dubbel-foljebil"];
 const PILOT_RULE_IDS = ["vtl-bredd", "vtl-langd"];
+const PERMIT_RULE_IDS = ["dispens-bredd", "dispens-langd", "bk-vikt"];
+const ROUTE_CHECK_RULE_IDS = ["bredd-ruttkontroll", "hojd-ruttkontroll", "bk-vikt"];
+
+function ruleSummary(cargoItems: CargoDimensions[], ruleIds: string[]) {
+  return cargoItems
+    .map((cargo, index) => ({
+      index,
+      rules: evaluateTransportRules(cargo).filter((rule) => ruleIds.includes(rule.id)),
+    }))
+    .filter((item) => item.rules.length > 0)
+    .map((item) => `godsrad ${item.index + 1}: ${item.rules.map((rule) => rule.label).join(", ")}`)
+    .join("; ");
+}
 
 // Gäller oavsett vald transporttyp (Specialtransport, Maskintransport, Krantransport,
 // Styckegods, Container, Annat) – det är enbart lastens uppmätta dimensioner som styr,
@@ -132,6 +173,54 @@ export function suggestedFollowVehicleTask(cargo: CargoDimensions): string | nul
   if (rules.some((r) => PILOT_RULE_IDS.includes(r.id))) return "Boka vägtransportledare";
   if (rules.some((r) => FOLLOW_VEHICLE_RULE_IDS.includes(r.id))) return "Boka följebil";
   return null;
+}
+
+export function suggestedTransportTasks(cargoItems: CargoDimensions[]): SuggestedTransportTask[] {
+  const tasks: SuggestedTransportTask[] = [];
+  const hasRule = (ruleIds: string[]) =>
+    cargoItems.some((cargo) => evaluateTransportRules(cargo).some((rule) => ruleIds.includes(rule.id)));
+
+  if (hasRule(FOLLOW_VEHICLE_RULE_IDS)) {
+    tasks.push({
+      task: "Boka följebil",
+      category: "Följebil",
+      description: `Föreslagen automatiskt utifrån godsets mått. ${ruleSummary(cargoItems, FOLLOW_VEHICLE_RULE_IDS)}`,
+    });
+  }
+
+  if (hasRule(PILOT_RULE_IDS)) {
+    tasks.push({
+      task: "Boka vägtransportledare (VTL)",
+      category: "Följebil",
+      description: `Föreslagen automatiskt utifrån godsets mått. ${ruleSummary(cargoItems, PILOT_RULE_IDS)}`,
+    });
+  }
+
+  if (hasRule(PERMIT_RULE_IDS)) {
+    tasks.push({
+      task: "Ansök om dispens",
+      category: "Dispensansökan",
+      description: `Föreslagen automatiskt utifrån godsets mått och/eller vikt. ${ruleSummary(cargoItems, PERMIT_RULE_IDS)}`,
+    });
+  }
+
+  if (hasRule(ROUTE_CHECK_RULE_IDS)) {
+    tasks.push({
+      task: "Vägrekning / ruttkontroll",
+      category: "Rekning",
+      description: `Föreslagen automatiskt utifrån godsets höjd/vikt. ${ruleSummary(cargoItems, ROUTE_CHECK_RULE_IDS)}`,
+    });
+  }
+
+  if (cargoItems.some((cargo) => (cargo.weight_ton ?? 0) >= 30 || (cargo.width_m ?? 0) > WIDTH_ESCORT_LIMIT || (cargo.height_m ?? 0) > HEIGHT_ROUTE_CHECK_LIMIT)) {
+    tasks.push({
+      task: "Besiktning av site",
+      category: "Rekning",
+      description: "Föreslagen automatiskt för tung, bred eller hög transport där lastnings-/lossningsplats bör kontrolleras.",
+    });
+  }
+
+  return tasks;
 }
 
 export const RULE_SOURCE_NOTE =

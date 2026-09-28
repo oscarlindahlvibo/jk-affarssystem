@@ -23,6 +23,7 @@ import {
   type FreightCalculatorChangeLogEntry,
   type FreightCalculatorConfig,
 } from "../lib/freightCalculator";
+import { suggestedTransportTasks } from "../lib/transportRules";
 
 export interface CustomerBookingCargoInput {
   description: string;
@@ -387,6 +388,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         data.name.trim() ||
         `${customer?.company_name ?? "Kund"} – Bokningsförfrågan ${data.loading_name || "lastning"} till ${data.unloading_name || "lossning"}`;
       const cargoItems = data.cargo_items.filter((item) => item.description.trim());
+      const suggestedTasks = suggestedTransportTasks(cargoItems);
       const newProject: Project = {
         id,
         org_id: currentCustomerUser.org_id,
@@ -465,7 +467,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             visibility: "internal",
           },
         ],
-        tasks: [],
+        tasks: suggestedTasks.map((task) => ({
+          ...task,
+          id: nextId("t"),
+          project_id: id,
+          route_section: null,
+          assignee_id: null,
+          assignee: null,
+          deadline: null,
+          status: "Ej påbörjad",
+          comment: null,
+        })),
       };
       setAllProjects((prev) => [newProject, ...prev]);
       return newProject;
