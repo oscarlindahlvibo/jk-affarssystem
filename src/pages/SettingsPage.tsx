@@ -1,4 +1,5 @@
-import { Database, CheckCircle2, XCircle, HardDrive, Loader2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Calculator, Database, CheckCircle2, XCircle, HardDrive, Loader2 } from "lucide-react";
 import { Panel } from "../components/ui/Panel";
 import { Button } from "../components/ui/Button";
 import { isSupabaseConfigured } from "../lib/supabase";
@@ -11,6 +12,25 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
+      <Panel title="Systeminställningar">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Link
+            to="/installningar/raknesnurra"
+            className="flex items-start gap-3 rounded-lg border border-border p-4 transition hover:border-orange-200 hover:bg-orange-50/60"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-700">
+              <Calculator size={18} />
+            </div>
+            <div>
+              <div className="text-sm font-medium text-slate-800">Räknesnurra</div>
+              <p className="mt-1 text-xs text-slate-500">
+                Administrera fordonskategorier, tilläggskostnader och ändringslogg för kalkylen.
+              </p>
+            </div>
+          </Link>
+        </div>
+      </Panel>
+
       <Panel title="Anslutningar">
         <div className="flex flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-center">
           <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${isSupabaseConfigured ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>

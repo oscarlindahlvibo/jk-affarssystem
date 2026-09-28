@@ -86,8 +86,9 @@ function AppRoutes() {
           <Route path="/importera" element={<ImportPage />} />
           <Route path="/importera-order" element={<OrderImportPage />} />
           <Route path="/personal" element={<RequireAdmin><PersonnelPage /></RequireAdmin>} />
-          <Route path="/raknesnurra" element={<RequireAdmin><FreightCalculatorSettingsPage /></RequireAdmin>} />
+          <Route path="/raknesnurra" element={<Navigate to="/installningar/raknesnurra" replace />} />
           <Route path="/installningar" element={<RequireAdmin><SettingsPage /></RequireAdmin>} />
+          <Route path="/installningar/raknesnurra" element={<RequireAdmin><FreightCalculatorSettingsPage /></RequireAdmin>} />
         </Route>
         <Route path="/projekt/:id/skriv-ut" element={<RequireInternal><ProjectPrint /></RequireInternal>} />
       </Route>

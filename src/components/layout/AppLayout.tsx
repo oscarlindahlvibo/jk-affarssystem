@@ -18,6 +18,7 @@ const TITLE_BY_PATH: { pattern: string; title: string }[] = [
   { pattern: "/importera-order", title: "Importera order (LTC)" },
   { pattern: "/personal", title: "Personal" },
   { pattern: "/raknesnurra", title: "Räknesnurra" },
+  { pattern: "/installningar/raknesnurra", title: "Räknesnurra" },
   { pattern: "/installningar", title: "Inställningar" },
 ];
 
