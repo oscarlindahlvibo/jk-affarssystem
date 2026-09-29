@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Plus, MapPin, Ruler, Search, Download, Upload, TriangleAlert } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Plus, MapPin, Ruler, Search, Download, Upload, TriangleAlert } from "lucide-react";
 import { useStore } from "../data/store";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { Button } from "../components/ui/Button";
@@ -25,6 +25,60 @@ type QuickFilter =
   | "klar-fakturering"
   | "saknar-uppgifter"
   | "kraver-foljebil";
+
+type SortKey =
+  | "project"
+  | "customer"
+  | "cargo"
+  | "loadingPlace"
+  | "unloadingPlace"
+  | "loadingDate"
+  | "deliveryDate"
+  | "height"
+  | "width"
+  | "weight"
+  | "status"
+  | "responsible"
+  | "route"
+  | "followVehicle"
+  | "invoice"
+  | "missing";
+
+type SortDirection = "asc" | "desc";
+
+function SortableHeader({
+  label,
+  sortKey,
+  activeKey,
+  direction,
+  onSort,
+  centered = false,
+}: {
+  label: string;
+  sortKey: SortKey;
+  activeKey: SortKey | null;
+  direction: SortDirection;
+  onSort: (key: SortKey) => void;
+  centered?: boolean;
+}) {
+  const active = activeKey === sortKey;
+  const Icon = active ? (direction === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <th
+      className={`px-4 py-3 font-medium ${centered ? "text-center" : ""}`}
+      aria-sort={active ? (direction === "asc" ? "ascending" : "descending") : "none"}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex items-center gap-1 whitespace-nowrap hover:text-slate-800 ${centered ? "justify-center" : ""}`}
+      >
+        {label}
+        <Icon size={12} className={active ? "text-orange-600" : "text-slate-300"} />
+      </button>
+    </th>
+  );
+}
 
 const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
   { key: "alla", label: "Alla projekt" },
@@ -91,6 +145,44 @@ function matchesQuickFilter(p: Project, filter: QuickFilter): boolean {
   }
 }
 
+function projectSortValue(project: Project, key: SortKey): string | number | null {
+  const cargo = project.cargo_items?.[0];
+  const loading = project.locations?.find((location) => location.type === "lastning");
+  const unloading = project.locations?.find((location) => location.type === "lossning");
+  switch (key) {
+    case "project": return project.project_number;
+    case "customer": return project.customer?.company_name ?? null;
+    case "cargo": return cargo?.description ?? null;
+    case "loadingPlace": return loading?.name ?? null;
+    case "unloadingPlace": return unloading?.name ?? null;
+    case "loadingDate": return project.planned_loading_date ? `${project.planned_loading_date}T${project.planned_loading_time ?? "00:00"}` : null;
+    case "deliveryDate": return project.planned_delivery_date ? `${project.planned_delivery_date}T${project.planned_delivery_time ?? "00:00"}` : null;
+    case "height": return cargo?.height_m ?? null;
+    case "width": return cargo?.width_m ?? null;
+    case "weight": return cargo?.weight_ton ?? null;
+    case "status": return PROJECT_STATUSES.indexOf(project.status);
+    case "responsible": return project.responsible?.full_name ?? null;
+    case "route": return project.measurement_link ? 1 : 0;
+    case "followVehicle": return projectNeedsFollowVehicle(project) ? 1 : 0;
+    case "invoice": return ["Ej fakturerad", "Klar för fakturering", "Fakturerad"].indexOf(project.invoice_status);
+    case "missing": return getMissingFields(project).length;
+  }
+}
+
+function compareSortValues(a: string | number | null, b: string | number | null, direction: SortDirection): number {
+  if (a === null && b === null) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  const result = typeof a === "number" && typeof b === "number"
+    ? a - b
+    : String(a).localeCompare(String(b), "sv", { numeric: true, sensitivity: "base" });
+  return direction === "asc" ? result : -result;
+}
+
+function isArchivedOrInvoiced(project: Project): boolean {
+  return ["Avslutad", "Avbruten"].includes(project.status) || project.invoice_status === "Fakturerad";
+}
+
 export function ProjectList() {
   const { projects, customers } = useStore();
   const navigate = useNavigate();
@@ -105,6 +197,8 @@ export function ProjectList() {
   const [responsible, setResponsible] = useState("");
   const [measurement, setMeasurement] = useState<"" | "finns" | "saknas">("");
   const [dateFrom, setDateFrom] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const filterParam = searchParams.get("filter") as QuickFilter | null;
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(
     filterParam && QUICK_FILTERS.some((f) => f.key === filterParam) ? filterParam : "alla"
@@ -138,7 +232,7 @@ export function ProjectList() {
   }, [projects]);
 
   const filtered = useMemo(() => {
-    return projects.filter((p) => {
+    const matchingProjects = projects.filter((p) => {
       if (!matchesQuickFilter(p, quickFilter)) return false;
       if (search) {
         const q = search.toLowerCase();
@@ -153,7 +247,32 @@ export function ProjectList() {
       if (dateFrom && (!p.planned_loading_date || p.planned_loading_date < dateFrom)) return false;
       return true;
     });
-  }, [projects, search, status, customerId, responsible, measurement, dateFrom, quickFilter]);
+
+    return matchingProjects
+      .map((project, originalIndex) => ({ project, originalIndex }))
+      .sort((a, b) => {
+        if (!sortKey) {
+          const archiveDifference = Number(isArchivedOrInvoiced(a.project)) - Number(isArchivedOrInvoiced(b.project));
+          return archiveDifference || a.originalIndex - b.originalIndex;
+        }
+        const valueDifference = compareSortValues(
+          projectSortValue(a.project, sortKey),
+          projectSortValue(b.project, sortKey),
+          sortDirection
+        );
+        return valueDifference || a.originalIndex - b.originalIndex;
+      })
+      .map(({ project }) => project);
+  }, [projects, search, status, customerId, responsible, measurement, dateFrom, quickFilter, sortKey, sortDirection]);
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDirection((current) => current === "asc" ? "desc" : "asc");
+      return;
+    }
+    setSortKey(key);
+    setSortDirection("asc");
+  }
 
   function handleExport() {
     const header = [
@@ -334,22 +453,22 @@ export function ProjectList() {
         <table className="w-full min-w-[1400px] text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-              <th className="px-4 py-3 font-medium">Projekt</th>
-              <th className="px-4 py-3 font-medium">Kund</th>
-              <th className="px-4 py-3 font-medium">Projekt/gods</th>
-              <th className="px-4 py-3 font-medium">Från</th>
-              <th className="px-4 py-3 font-medium">Till</th>
-              <th className="px-4 py-3 font-medium">Lastning</th>
-              <th className="px-4 py-3 font-medium">Leverans</th>
-              <th className="px-4 py-3 font-medium">Höjd</th>
-              <th className="px-4 py-3 font-medium">Bredd</th>
-              <th className="px-4 py-3 font-medium">Vikt</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Ansvarig</th>
-              <th className="px-4 py-3 font-medium text-center">Rutt</th>
-              <th className="px-4 py-3 font-medium text-center">Följebil</th>
-              <th className="px-4 py-3 font-medium">Fakturering</th>
-              <th className="px-4 py-3 font-medium">Saknade uppgifter</th>
+              <SortableHeader label="Projekt" sortKey="project" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Kund" sortKey="customer" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Projekt/gods" sortKey="cargo" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Från" sortKey="loadingPlace" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Till" sortKey="unloadingPlace" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Lastning" sortKey="loadingDate" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Leverans" sortKey="deliveryDate" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Höjd" sortKey="height" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Bredd" sortKey="width" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Vikt" sortKey="weight" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Status" sortKey="status" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Ansvarig" sortKey="responsible" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Rutt" sortKey="route" activeKey={sortKey} direction={sortDirection} onSort={handleSort} centered />
+              <SortableHeader label="Följebil" sortKey="followVehicle" activeKey={sortKey} direction={sortDirection} onSort={handleSort} centered />
+              <SortableHeader label="Fakturering" sortKey="invoice" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Saknade uppgifter" sortKey="missing" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
