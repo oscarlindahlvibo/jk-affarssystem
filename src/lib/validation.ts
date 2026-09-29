@@ -5,7 +5,16 @@ export interface MissingField {
   label: string;
 }
 
+const COMPLETENESS_EXEMPT_STATUSES: Project["status"][] = [
+  "Levererad",
+  "Klar för fakturering",
+  "Avslutad",
+  "Avbruten",
+];
+
 export function getMissingFields(project: Project): MissingField[] {
+  if (COMPLETENESS_EXEMPT_STATUSES.includes(project.status)) return [];
+
   const missing: MissingField[] = [];
   const cargo = project.cargo_items?.[0];
   const hasLoading = project.locations?.some((l) => l.type === "lastning");
