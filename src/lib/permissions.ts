@@ -1,6 +1,6 @@
 import type { UserRole } from "../types";
 
-export type Resource = "customers" | "contacts" | "suppliers" | "projects" | "documents" | "users" | "settings";
+export type Resource = "customers" | "contacts" | "suppliers" | "projects" | "documents" | "inquiries" | "users" | "settings";
 export type Action = "view" | "create" | "edit" | "delete";
 
 const ALL: Action[] = ["view", "create", "edit", "delete"];
@@ -16,6 +16,7 @@ const MATRIX: Record<UserRole, Partial<Record<Resource, Action[]>>> = {
     suppliers: ALL,
     projects: ALL,
     documents: ALL,
+    inquiries: ALL,
     users: ALL,
     settings: ALL,
   },
@@ -25,6 +26,7 @@ const MATRIX: Record<UserRole, Partial<Record<Resource, Action[]>>> = {
     suppliers: MANAGE,
     projects: MANAGE,
     documents: MANAGE,
+    inquiries: MANAGE,
   },
   ekonomi: {
     customers: VIEW_ONLY,
@@ -32,6 +34,7 @@ const MATRIX: Record<UserRole, Partial<Record<Resource, Action[]>>> = {
     suppliers: VIEW_ONLY,
     projects: VIEW_ONLY,
     documents: VIEW_ONLY,
+    inquiries: VIEW_ONLY,
   },
   lasare: {
     customers: VIEW_ONLY,
@@ -39,6 +42,7 @@ const MATRIX: Record<UserRole, Partial<Record<Resource, Action[]>>> = {
     suppliers: VIEW_ONLY,
     projects: VIEW_ONLY,
     documents: VIEW_ONLY,
+    inquiries: VIEW_ONLY,
   },
 };
 

@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type {
   Customer,
   ContactPerson,
+  ContactSubmission,
+  ContactSubmissionStatus,
   Profile,
   Project,
   ProjectNote,
@@ -72,11 +74,13 @@ interface StoreShape {
   projects: Project[];
   suppliers: Supplier[];
   profiles: Profile[];
+  contactSubmissions: ContactSubmission[];
   currentRole: UserRole | null;
   freightCalculatorConfig: FreightCalculatorConfig;
   freightCalculatorChangeLog: FreightCalculatorChangeLogEntry[];
   updateFreightCalculatorConfig: (next: FreightCalculatorConfig) => FreightCalculatorChangeLogEntry | null;
   resetFreightCalculatorConfig: () => FreightCalculatorChangeLogEntry | null;
+  updateContactSubmissionStatus: (id: string, status: ContactSubmissionStatus) => void;
   addCustomer: (c: Omit<Customer, "id" | "org_id" | "created_at" | "updated_at">) => Customer;
   updateCustomer: (id: string, patch: Partial<Customer>) => void;
   deleteCustomer: (id: string) => { ok: boolean; reason?: string };
@@ -181,6 +185,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [allProjects, setAllProjects] = useState<Project[]>(isSupabaseConfigured ? [] : loadProjects);
   const [allSuppliers, setAllSuppliers] = useState<Supplier[]>(isSupabaseConfigured ? [] : mock.suppliers);
   const [allProfiles, setAllProfiles] = useState<Profile[]>(isSupabaseConfigured ? [] : personnel.allProfiles);
+  const [contactSubmissions, setContactSubmissions] = useState<ContactSubmission[]>([]);
   const [isLoading, setIsLoading] = useState(isSupabaseConfigured);
   const [dataError, setDataError] = useState<string | null>(null);
   const [loadVersion, setLoadVersion] = useState(0);
@@ -216,6 +221,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setAllProjects(data.projects);
         setAllSuppliers(data.suppliers);
         setAllProfiles(data.profiles);
+        setContactSubmissions(data.contactSubmissions);
         setFreightCalculatorConfig(data.freightCalculatorConfig ?? DEFAULT_FREIGHT_CALCULATOR_CONFIG);
         setFreightCalculatorChangeLog(data.freightCalculatorChangeLog);
       })
@@ -319,6 +325,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [allProjects, orgId, currentCustomerUser]);
   const suppliers = useMemo(() => allSuppliers.filter((s) => s.org_id === orgId), [allSuppliers, orgId]);
   const profiles = useMemo(() => allProfiles.filter((p) => p.org_id === orgId), [allProfiles, orgId]);
+
+  const updateContactSubmissionStatus = useCallback(
+    (id: string, status: ContactSubmissionStatus) => {
+      authorize("inquiries", "edit");
+      setContactSubmissions((prev) => prev.map((item) => item.id === id ? { ...item, status } : item));
+      persist(() => updateRow("contact_submissions", id, { status }, "förfrågan"));
+    },
+    [authorize, persist]
+  );
 
   const enrich = useCallback(
     (p: Project): Project => ({
@@ -923,11 +938,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       projects: projects.map(enrich),
       suppliers,
       profiles,
+      contactSubmissions,
       currentRole: role,
       freightCalculatorConfig,
       freightCalculatorChangeLog,
       updateFreightCalculatorConfig,
       resetFreightCalculatorConfig,
+      updateContactSubmissionStatus,
       addCustomer,
       updateCustomer,
       deleteCustomer,
@@ -970,11 +987,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       projects,
       suppliers,
       profiles,
+      contactSubmissions,
       role,
       freightCalculatorConfig,
       freightCalculatorChangeLog,
       updateFreightCalculatorConfig,
       resetFreightCalculatorConfig,
+      updateContactSubmissionStatus,
       enrich,
       addCustomer,
       updateCustomer,

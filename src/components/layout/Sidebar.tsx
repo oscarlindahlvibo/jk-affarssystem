@@ -12,6 +12,7 @@ import {
   Upload,
   FileUp,
   UserCog,
+  Inbox,
   LogOut,
   X,
 } from "lucide-react";
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { to: "/kontakter", label: "Kontaktpersoner", icon: Contact, show: () => true },
   { to: "/leverantorer", label: "Leverantörer", icon: Truck, show: () => true },
   { to: "/dokument", label: "Dokument", icon: FileText, show: () => true },
+  { to: "/forfragningar", label: "Förfrågningar", icon: Inbox, show: () => true },
   {
     to: "/importera",
     label: "Importera Excel",
@@ -47,7 +49,8 @@ const NAV_ITEMS = [
 export function Sidebar({ open = false, onClose }: { open?: boolean; onClose?: () => void }) {
   const { currentProfile, signOut } = useAuth();
   const permissions = usePermissions();
-  const { projects } = useStore();
+  const { projects, contactSubmissions } = useStore();
+  const newInquiryCount = contactSubmissions.filter((item) => item.status === "new").length;
 
   const myOpenTaskCount = currentProfile
     ? projects.reduce(
@@ -97,6 +100,11 @@ export function Sidebar({ open = false, onClose }: { open?: boolean; onClose?: (
             {to === "/mina-uppgifter" && myOpenTaskCount > 0 && (
               <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold text-white">
                 {myOpenTaskCount}
+              </span>
+            )}
+            {to === "/forfragningar" && newInquiryCount > 0 && (
+              <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                {newInquiryCount}
               </span>
             )}
           </NavLink>

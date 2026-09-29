@@ -295,6 +295,20 @@ export interface CustomerUser {
   invited_at?: string;
 }
 
+export type ContactSubmissionStatus = "new" | "read" | "responded" | "archived";
+
+export interface ContactSubmission {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  company: string | null;
+  message: string;
+  service_type: string | null;
+  status: ContactSubmissionStatus;
+  created_at: string;
+}
+
 export type InvoiceStatus = "Ej fakturerad" | "Klar för fakturering" | "Fakturerad";
 
 export const INVOICE_STATUSES: InvoiceStatus[] = ["Ej fakturerad", "Klar för fakturering", "Fakturerad"];

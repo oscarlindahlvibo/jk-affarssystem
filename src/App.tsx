@@ -22,6 +22,7 @@ import { OrderImportPage } from "./pages/OrderImportPage";
 import { ProjectPrint } from "./pages/ProjectPrint";
 import { CustomerPortalPage } from "./pages/CustomerPortalPage";
 import { FreightCalculatorSettingsPage } from "./pages/FreightCalculatorSettingsPage";
+import { ContactSubmissionsPage } from "./pages/ContactSubmissionsPage";
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -83,6 +84,7 @@ function AppRoutes() {
           <Route path="/kontakter/:id" element={<ContactDetail />} />
           <Route path="/leverantorer" element={<SuppliersPage />} />
           <Route path="/dokument" element={<DocumentsPage />} />
+          <Route path="/forfragningar" element={<ContactSubmissionsPage />} />
           <Route path="/importera" element={<ImportPage />} />
           <Route path="/importera-order" element={<OrderImportPage />} />
           <Route path="/personal" element={<RequireAdmin><PersonnelPage /></RequireAdmin>} />
