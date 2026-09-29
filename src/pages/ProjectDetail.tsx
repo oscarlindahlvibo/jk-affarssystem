@@ -269,7 +269,7 @@ export function ProjectDetail() {
           <Panel title="Transportinformation">
             <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 sm:grid-cols-3">
               <InfoItem
-                label="Lastningsplats"
+                label="Lastningsort"
                 value={
                   loading ? (
                     <span className="flex items-center gap-1"><MapPin size={13} />{loading.name}</span>
@@ -277,7 +277,7 @@ export function ProjectDetail() {
                 }
               />
               <InfoItem
-                label="Lossningsplats"
+                label="Lossningsort"
                 value={
                   unloading ? (
                     <span className="flex items-center gap-1"><MapPin size={13} />{unloading.name}</span>

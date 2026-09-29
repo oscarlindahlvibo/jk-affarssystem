@@ -478,18 +478,12 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
         <div className="border-t border-border pt-4">
           <h3 className="mb-3 text-sm font-semibold text-slate-700">Transport</h3>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Lastningsplats">
-              <input className={inputClass} value={loadingPlace} onChange={(e) => setLoadingPlace(e.target.value)} placeholder="Ort / adress" />
-            </Field>
-            <Field label="Lossningsplats">
-              <input className={inputClass} value={unloadingPlace} onChange={(e) => setUnloadingPlace(e.target.value)} placeholder="Ort / adress" />
-            </Field>
             <Field label="Lastningsadress">
               <AddressAutocomplete
                 value={loadingAddress}
                 onChange={setLoadingAddress}
                 onSelect={(suggestion) => {
-                  if (!loadingPlace.trim()) setLoadingPlace(suggestion.place || suggestion.address);
+                  setLoadingPlace(suggestion.place || suggestion.address);
                 }}
                 placeholder="Gata, postnr, ort"
               />
@@ -499,10 +493,16 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
                 value={unloadingAddress}
                 onChange={setUnloadingAddress}
                 onSelect={(suggestion) => {
-                  if (!unloadingPlace.trim()) setUnloadingPlace(suggestion.place || suggestion.address);
+                  setUnloadingPlace(suggestion.place || suggestion.address);
                 }}
                 placeholder="Gata, postnr, ort"
               />
+            </Field>
+            <Field label="Lastningsort">
+              <input className={inputClass} value={loadingPlace} onChange={(e) => setLoadingPlace(e.target.value)} placeholder="Fylls i från adressen" />
+            </Field>
+            <Field label="Lossningsort">
+              <input className={inputClass} value={unloadingPlace} onChange={(e) => setUnloadingPlace(e.target.value)} placeholder="Fylls i från adressen" />
             </Field>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Field label="Kontakt vid lastning">

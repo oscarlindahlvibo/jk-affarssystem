@@ -120,7 +120,7 @@ export function CustomerPortalPage() {
     setError(null);
     setCreatedProjectNumber(null);
     if (!form.loading_name.trim() || !form.unloading_name.trim() || !form.cargo_items.some((item) => item.description.trim())) {
-      setError("Fyll i minst lastningsplats, lossningsplats och godsbeskrivning.");
+      setError("Fyll i minst lastningsort, lossningsort och godsbeskrivning.");
       return;
     }
     try {
@@ -198,17 +198,18 @@ export function CustomerPortalPage() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <section className="space-y-3 border-t border-border pt-4">
                 <h2 className="text-sm font-semibold text-slate-800">Lastning</h2>
-                  <Field label="Plats">
-                    <input required className={inputClass} value={form.loading_name} onChange={(e) => update("loading_name", e.target.value)} />
-                  </Field>
-                  <Field label="Adress">
+                  <Field label="Lastningsadress">
                     <AddressAutocomplete
                       value={form.loading_address}
                       onChange={(value) => update("loading_address", value)}
                       onSelect={(suggestion) => {
-                        if (!form.loading_name.trim()) update("loading_name", suggestion.place || suggestion.address);
+                        update("loading_name", suggestion.place || suggestion.address);
                       }}
+                      placeholder="Gata, postnr, ort"
                     />
+                  </Field>
+                  <Field label="Lastningsort">
+                    <input required className={inputClass} value={form.loading_name} onChange={(e) => update("loading_name", e.target.value)} placeholder="Fylls i från adressen" />
                   </Field>
                   <Field label="Kontakt på plats">
                     <input className={inputClass} value={form.loading_contact_name} onChange={(e) => update("loading_contact_name", e.target.value)} />
@@ -219,17 +220,18 @@ export function CustomerPortalPage() {
               </section>
               <section className="space-y-3 border-t border-border pt-4">
                 <h2 className="text-sm font-semibold text-slate-800">Lossning</h2>
-                  <Field label="Plats">
-                    <input required className={inputClass} value={form.unloading_name} onChange={(e) => update("unloading_name", e.target.value)} />
-                  </Field>
-                  <Field label="Adress">
+                  <Field label="Lossningsadress">
                     <AddressAutocomplete
                       value={form.unloading_address}
                       onChange={(value) => update("unloading_address", value)}
                       onSelect={(suggestion) => {
-                        if (!form.unloading_name.trim()) update("unloading_name", suggestion.place || suggestion.address);
+                        update("unloading_name", suggestion.place || suggestion.address);
                       }}
+                      placeholder="Gata, postnr, ort"
                     />
+                  </Field>
+                  <Field label="Lossningsort">
+                    <input required className={inputClass} value={form.unloading_name} onChange={(e) => update("unloading_name", e.target.value)} placeholder="Fylls i från adressen" />
                   </Field>
                   <Field label="Kontakt på plats">
                     <input className={inputClass} value={form.unloading_contact_name} onChange={(e) => update("unloading_contact_name", e.target.value)} />

@@ -56,8 +56,8 @@ export function ProjectPrint() {
 
       <Section title="Transportdata">
         <Grid>
-          <Item label="Lastningsplats" value={loading?.name} />
-          <Item label="Lossningsplats" value={unloading?.name} />
+          <Item label="Lastningsort" value={loading?.name} />
+          <Item label="Lossningsort" value={unloading?.name} />
           <Item label="Lastningsadress" value={loading?.address} />
           <Item label="Lossningsadress" value={unloading?.address} />
           <Item label="Beräknad sträcka" value={project.route_distance_km ? `${project.route_distance_km.toLocaleString("sv-SE")} km` : undefined} />

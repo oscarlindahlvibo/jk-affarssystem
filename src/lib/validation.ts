@@ -13,8 +13,8 @@ export function getMissingFields(project: Project): MissingField[] {
 
   if (!project.customer_id) missing.push({ key: "kund", label: "Kund" });
   if (!project.contact_person_id) missing.push({ key: "kontaktperson", label: "Kontaktperson" });
-  if (!hasLoading) missing.push({ key: "lastningsplats", label: "Lastningsplats" });
-  if (!hasUnloading) missing.push({ key: "lossningsplats", label: "Lossningsplats" });
+  if (!hasLoading) missing.push({ key: "lastningsplats", label: "Lastningsort" });
+  if (!hasUnloading) missing.push({ key: "lossningsplats", label: "Lossningsort" });
   if (!cargo || cargo.height_m === null || cargo.height_m === undefined) missing.push({ key: "hojd", label: "Höjd" });
   if (!cargo || cargo.width_m === null || cargo.width_m === undefined) missing.push({ key: "bredd", label: "Bredd" });
   if (!cargo || cargo.weight_ton === null || cargo.weight_ton === undefined) missing.push({ key: "vikt", label: "Vikt" });
