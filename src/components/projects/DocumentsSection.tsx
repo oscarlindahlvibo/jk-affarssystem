@@ -230,20 +230,16 @@ export function DocumentsSection({ project, documents }: { project: Project; doc
         )
       }
     >
-      {isCentralDriveEnabled ? (
-        <p className="mb-3 flex items-center gap-1.5 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-700">
-          <HardDrive size={13} /> Dokument lagras centralt i WPE:s delade Google Drive.
-        </p>
-      ) : drive.isConnected ? (
-        <p className="mb-3 flex items-center gap-1.5 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-700">
-          <HardDrive size={13} /> Uppladdade dokument sparas i Google Drive.
-        </p>
-      ) : !isSupabaseConfigured ? (
-        <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
-          Google Drive är inte anslutet – dokument sparas endast i webbläsarens minne under sessionen. Anslut i
-          Inställningar för permanent lagring.
-        </p>
-      ) : null}
+      {!isCentralDriveEnabled && (drive.isConnected ? (
+          <p className="mb-3 flex items-center gap-1.5 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-700">
+            <HardDrive size={13} /> Uppladdade dokument sparas i Google Drive.
+          </p>
+        ) : !isSupabaseConfigured ? (
+          <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            Google Drive är inte anslutet – dokument sparas endast i webbläsarens minne under sessionen. Anslut i
+            Inställningar för permanent lagring.
+          </p>
+        ) : null)}
       {uploadError && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{uploadError}</p>}
       <ul className="divide-y divide-border">
         {documents.map((d) => (
