@@ -66,7 +66,12 @@ export function ProjectPrint() {
           <Item label="Planerat lastningsdatum" value={formatDate(project.planned_loading_date)} />
           <Item label="Planerat leveransdatum" value={formatDate(project.planned_delivery_date)} />
           <Item label="Transporttyp" value={project.transport_type} />
-          <Item label="Transportör" value={project.supplier?.company_name} />
+          <Item
+            label="Transportörer"
+            value={(project.suppliers?.length ? project.suppliers : project.supplier ? [project.supplier] : [])
+              .map((supplier) => supplier.company_name)
+              .join(", ") || undefined}
+          />
         </Grid>
         {project.special_requirements && (
           <p className="mt-3 text-sm"><span className="font-medium">Särskilda krav: </span>{project.special_requirements}</p>

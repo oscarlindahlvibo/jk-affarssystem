@@ -109,7 +109,7 @@ export async function generateCmrPdf(project: Project) {
     .filter(Boolean)
     .join("\n");
   const carrier = [
-    project.supplier?.company_name,
+    project.suppliers?.map((supplier) => supplier.company_name).join(" / ") || project.supplier?.company_name,
     project.supplier?.contact_person,
     project.supplier?.phone,
     project.vehicle ? `Fordon: ${project.vehicle}` : null,
@@ -341,7 +341,11 @@ export async function generateDomesticWaybillPdf(project: Project) {
   const unloading = location(project, "lossning");
   const cargoItems = project.cargo_items ?? [];
 
-  setText(form, "transportföretag", project.supplier?.company_name ?? "JK Projektlogistik AB");
+  setText(
+    form,
+    "transportföretag",
+    project.suppliers?.map((supplier) => supplier.company_name).join(" / ") || project.supplier?.company_name || "JK Projektlogistik AB"
+  );
   setText(form, "adressnamn", project.customer?.company_name);
   setText(form, "gatuadress", loading?.address ?? loading?.name);
   setText(form, "postadress", loading?.name);

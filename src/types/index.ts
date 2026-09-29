@@ -364,6 +364,8 @@ export interface Project {
   contact_person?: ContactPerson | null;
   responsible?: Profile | null;
   supplier?: Supplier | null;
+  supplier_ids?: string[];
+  suppliers?: Supplier[];
   locations?: Location[];
   cargo_items?: CargoItem[];
   documents?: ProjectDocument[];

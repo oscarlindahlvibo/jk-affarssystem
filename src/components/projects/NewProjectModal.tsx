@@ -95,7 +95,9 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
   const [customerId, setCustomerId] = useState(project?.customer_id ?? "");
   const [contactId, setContactId] = useState(project?.contact_person_id ?? "");
   const [responsibleId, setResponsibleId] = useState(project?.responsible_id ?? "");
-  const [supplierId, setSupplierId] = useState(project?.supplier_id ?? "");
+  const [selectedSupplierIds, setSelectedSupplierIds] = useState<string[]>(
+    project?.supplier_ids ?? project?.suppliers?.map((supplier) => supplier.id) ?? (project?.supplier_id ? [project.supplier_id] : [])
+  );
   const [transportType, setTransportType] = useState<TransportType>(project?.transport_type ?? "Specialtransport");
   const [template, setTemplate] = useState<ProjectTemplateKey | "">("");
   const [loadingDate, setLoadingDate] = useState(project?.planned_loading_date ?? "");
@@ -212,7 +214,7 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
       area: newSupplierArea.trim() || null,
       notes: null,
     });
-    setSupplierId(created.id);
+    setSelectedSupplierIds((current) => current.includes(created.id) ? current : [...current, created.id]);
     setShowNewSupplier(false);
     setNewSupplierName("");
     setNewSupplierType("Åkeri");
@@ -354,7 +356,8 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
       delivery_terms: deliveryTerms || null,
       planned_loading_date: loadingDate || null,
       planned_delivery_date: deliveryDate || null,
-      supplier_id: supplierId || null,
+      supplier_id: selectedSupplierIds[0] ?? null,
+      supplier_ids: selectedSupplierIds,
       price: numOrNull(price),
       cost: numOrNull(cost),
       invoice_status: invoiceStatus,
@@ -607,23 +610,52 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
                 <p className={`mt-2 text-xs ${distanceStatus === "error" ? "text-red-600" : "text-slate-500"}`}>{distanceMessage}</p>
               )}
             </div>
-            <Field label="Transportör">
+            <Field label="Transportörer">
               {!showNewSupplier ? (
-                <div className="flex gap-2">
-                  <select className={inputClass} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-                    <option value="">Välj transportör</option>
-                    {suppliers.map((s) => (
-                      <option key={s.id} value={s.id}>{s.company_name}</option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => setShowNewSupplier(true)}
-                    title="Skapa ny transportör"
-                    className="flex shrink-0 items-center gap-1 rounded-lg border border-border bg-white px-2.5 text-sm text-slate-600 hover:bg-slate-50"
-                  >
-                    <Plus size={14} /> Ny
-                  </button>
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <select
+                      className={inputClass}
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) setSelectedSupplierIds((current) => [...current, e.target.value]);
+                      }}
+                    >
+                      <option value="">Lägg till transportör</option>
+                      {suppliers.filter((supplier) => !selectedSupplierIds.includes(supplier.id)).map((supplier) => (
+                        <option key={supplier.id} value={supplier.id}>{supplier.company_name}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewSupplier(true)}
+                      title="Skapa ny transportör"
+                      className="flex shrink-0 items-center gap-1 rounded-lg border border-border bg-white px-2.5 text-sm text-slate-600 hover:bg-slate-50"
+                    >
+                      <Plus size={14} /> Ny
+                    </button>
+                  </div>
+                  {selectedSupplierIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedSupplierIds.map((id, index) => {
+                        const supplier = suppliers.find((item) => item.id === id);
+                        if (!supplier) return null;
+                        return (
+                          <span key={id} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-700">
+                            {supplier.company_name}{index === 0 ? " (primär)" : ""}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedSupplierIds((current) => current.filter((supplierId) => supplierId !== id))}
+                              title={`Ta bort ${supplier.company_name}`}
+                              className="text-slate-400 hover:text-slate-700"
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2 rounded-lg border border-orange-200 bg-orange-50/50 p-3">

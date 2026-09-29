@@ -349,6 +349,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       contact_person: allContactPersons.find((c) => c.id === p.contact_person_id) ?? null,
       responsible: allProfiles.find((profile) => profile.id === p.responsible_id) ?? null,
       supplier: allSuppliers.find((s) => s.id === p.supplier_id) ?? null,
+      supplier_ids: p.supplier_ids ?? (p.supplier_id ? [p.supplier_id] : []),
+      suppliers: (p.supplier_ids ?? (p.supplier_id ? [p.supplier_id] : []))
+        .map((id) => allSuppliers.find((supplier) => supplier.id === id))
+        .filter((supplier): supplier is Supplier => Boolean(supplier)),
       measurement_link: isSupabaseConfigured ? p.measurement_link ?? null : mock.getMeasurementLinkByProject(p.id) ?? null,
     }),
     [allCustomers, allContactPersons, allProfiles, allSuppliers]
@@ -445,7 +449,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const deleteSupplier: StoreShape["deleteSupplier"] = useCallback(
     (id) => {
       if (!can(role, "suppliers", "delete")) return { ok: false, reason: "Du saknar behörighet att radera leverantörer." };
-      const linkedProjects = allProjects.filter((p) => p.supplier_id === id);
+      const linkedProjects = allProjects.filter((p) => p.supplier_id === id || p.supplier_ids?.includes(id));
       if (linkedProjects.length > 0) {
         return { ok: false, reason: `Leverantören har ${linkedProjects.length} kopplade projekt och kan inte raderas.` };
       }

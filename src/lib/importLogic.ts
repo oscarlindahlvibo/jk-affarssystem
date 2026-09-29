@@ -26,6 +26,11 @@ export type ImportFieldKey =
   | "responsible"
   | "supplier"
   | "carrierOrderNumber"
+  | "carrierContactStatus"
+  | "routeChecked"
+  | "customerContactStatus"
+  | "escortVtl"
+  | "mobileCrane"
   | "price"
   | "cost"
   | "comment"
@@ -66,6 +71,11 @@ export const IMPORT_FIELDS: ImportFieldDef[] = [
   { key: "responsible", label: "Ansvarig", synonyms: ["ansvarig", "handläggare"] },
   { key: "supplier", label: "Transportör / leverantör", synonyms: ["transportör", "leverantör", "åkeri"] },
   { key: "carrierOrderNumber", label: "Transportörens ordernummer", synonyms: ["b-ordernummer", "b ordernummer", "transportörens ordernummer"] },
+  { key: "carrierContactStatus", label: "Transportör kontaktad", synonyms: ["åkeri ringt/mejlat tid", "transportör kontaktad"] },
+  { key: "routeChecked", label: "Rekat", synonyms: ["rekat", "rutt kontrollerad", "ruttkontroll"] },
+  { key: "customerContactStatus", label: "Kund kontaktad", synonyms: ["kund ringt/mejlat tid", "kund kontaktad"] },
+  { key: "escortVtl", label: "Följebil / VTL", synonyms: ["följebil/vtl", "följebil", "vtl"] },
+  { key: "mobileCrane", label: "Mobilkran", synonyms: ["mobilkran", "kran"] },
   { key: "price", label: "Pris / offertbelopp", synonyms: ["pris", "offertbelopp", "offert"] },
   { key: "cost", label: "Kostnad", synonyms: ["kostnad", "inköpspris"] },
   { key: "comment", label: "Kommentar", synonyms: ["kommentar", "anteckning", "notering"] },
@@ -77,6 +87,28 @@ export type ColumnMapping = Partial<Record<ImportFieldKey, number>>;
 
 function normalize(s: string): string {
   return s.toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+export function normalizeEntityName(value: string): string {
+  return value
+    .normalize("NFKC")
+    .toLocaleLowerCase("sv-SE")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[.,]+$/g, "");
+}
+
+export function splitSupplierNames(value: string): string[] {
+  const seen = new Set<string>();
+  return cleanCell(value)
+    .split(/\s*(?:\/|;|\n|\s+\+\s+|\s+&\s+|\s+och\s+)\s*/i)
+    .map((name) => name.trim())
+    .filter((name) => {
+      const key = normalizeEntityName(name);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
 export function guessMapping(headers: string[]): ColumnMapping {
@@ -96,7 +128,10 @@ export function guessMapping(headers: string[]): ColumnMapping {
     const norm = normalize(header);
     for (const field of IMPORT_FIELDS) {
       if (mapping[field.key] !== undefined) continue;
-      if (field.synonyms.some((syn) => norm.includes(normalize(syn)))) {
+      if (field.synonyms.some((syn) => {
+        const normalizedSynonym = normalize(syn);
+        return normalizedSynonym.length >= 6 && norm.includes(normalizedSynonym);
+      })) {
         mapping[field.key] = index;
       }
     }
@@ -128,7 +163,13 @@ export interface MappedRowData {
   status: string;
   responsible: string;
   supplier: string;
+  supplierNames: string[];
   carrierOrderNumber: string;
+  carrierContactStatus: string;
+  routeChecked: string;
+  customerContactStatus: string;
+  escortVtl: string;
+  mobileCrane: string;
   price: number | null;
   cost: number | null;
   comment: string;
@@ -190,6 +231,7 @@ function cleanPlace(raw: string): string {
 }
 
 const DIMENSION_PATTERN = /(\d+(?:[.,]\d+)?)\s*[xX×]\s*(\d+(?:[.,]\d+)?)\s*[xX×]\s*(\d+(?:[.,]\d+)?)/;
+const QUANTITY_PATTERN = /^\s*(\d+)\s*(?:st\.?|kolli|pall)\b/i;
 
 export function parseDimensionsFromText(text: string): { length: number; width: number; height: number } | null {
   const match = DIMENSION_PATTERN.exec(text);
@@ -197,6 +239,11 @@ export function parseDimensionsFromText(text: string): { length: number; width: 
   const [, l, w, h] = match;
   const toNum = (s: string) => parseFloat(s.replace(",", "."));
   return { length: toNum(l), width: toNum(w), height: toNum(h) };
+}
+
+export function parseQuantityFromText(text: string): number | null {
+  const match = QUANTITY_PATTERN.exec(text);
+  return match ? Number(match[1]) : null;
 }
 
 export function mapRow(row: string[], mapping: ColumnMapping): MappedRowData {
@@ -207,6 +254,7 @@ export function mapRow(row: string[], mapping: ColumnMapping): MappedRowData {
 
   const cargo = get("cargo");
   const dims = parseDimensionsFromText(cargo);
+  const supplier = get("supplier");
 
   return {
     projectNumber: get("projectNumber"),
@@ -225,14 +273,20 @@ export function mapRow(row: string[], mapping: ColumnMapping): MappedRowData {
     width: parseNumber(get("width")) ?? dims?.width ?? null,
     height: parseNumber(get("height")) ?? dims?.height ?? null,
     weight: parseWeightTons(get("weight")),
-    quantity: parseNumber(get("quantity")),
+    quantity: parseNumber(get("quantity")) ?? parseQuantityFromText(cargo),
     transportType: get("transportType"),
     vehicle: get("vehicle"),
     driver: get("driver"),
     status: get("status"),
     responsible: get("responsible"),
-    supplier: get("supplier"),
+    supplier,
+    supplierNames: splitSupplierNames(supplier),
     carrierOrderNumber: get("carrierOrderNumber"),
+    carrierContactStatus: get("carrierContactStatus"),
+    routeChecked: get("routeChecked"),
+    customerContactStatus: get("customerContactStatus"),
+    escortVtl: get("escortVtl"),
+    mobileCrane: get("mobileCrane"),
     price: parseNumber(get("price")),
     cost: parseNumber(get("cost")),
     comment: get("comment"),
@@ -268,12 +322,12 @@ export interface DuplicateMatch {
 export function findDuplicate(row: MappedRowData, existingProjects: Project[]): DuplicateMatch | null {
   for (const project of existingProjects) {
     const reasons: string[] = [];
-    const sameCustomer = row.customer && project.customer?.company_name.toLowerCase() === row.customer.toLowerCase();
-    const loading = project.locations?.find((l) => l.type === "lastning")?.name?.toLowerCase();
-    const unloading = project.locations?.find((l) => l.type === "lossning")?.name?.toLowerCase();
-    const sameLoading = row.loadingPlace && loading === row.loadingPlace.toLowerCase();
-    const sameUnloading = row.unloadingPlace && unloading === row.unloadingPlace.toLowerCase();
-    const sameNumber = row.projectNumber && project.project_number.toLowerCase() === row.projectNumber.toLowerCase();
+    const sameCustomer = row.customer && normalizeEntityName(project.customer?.company_name ?? "") === normalizeEntityName(row.customer);
+    const loading = normalizeEntityName(project.locations?.find((l) => l.type === "lastning")?.name ?? "");
+    const unloading = normalizeEntityName(project.locations?.find((l) => l.type === "lossning")?.name ?? "");
+    const sameLoading = row.loadingPlace && loading === normalizeEntityName(row.loadingPlace);
+    const sameUnloading = row.unloadingPlace && unloading === normalizeEntityName(row.unloadingPlace);
+    const sameNumber = row.projectNumber && normalizeEntityName(project.project_number) === normalizeEntityName(row.projectNumber);
     const cargoDesc = project.cargo_items?.[0]?.description?.toLowerCase() ?? "";
     const similarCargo = row.cargo && cargoDesc && (cargoDesc.includes(row.cargo.toLowerCase()) || row.cargo.toLowerCase().includes(cargoDesc));
     const closeDate =
@@ -299,12 +353,30 @@ export interface ImportRow {
   data: MappedRowData;
   status: ImportStatusKey;
   duplicate: DuplicateMatch | null;
+  issues: ImportIssue[];
   action: "import" | "skip" | "update";
+}
+
+export type ImportIssueSeverity = "error" | "warning" | "info";
+
+export interface ImportIssue {
+  code: string;
+  severity: ImportIssueSeverity;
+  message: string;
 }
 
 export function evaluateRow(index: number, row: string[], mapping: ColumnMapping, existingProjects: Project[]): ImportRow {
   const data = mapRow(row, mapping);
   const duplicate = findDuplicate(data, existingProjects);
+  const issues: ImportIssue[] = [];
+
+  if (!data.customer) issues.push({ code: "missing_customer", severity: "error", message: "Kund saknas." });
+  if (!data.loadingPlace) issues.push({ code: "missing_loading", severity: "error", message: "Lastningsort saknas." });
+  if (!data.unloadingPlace) issues.push({ code: "missing_unloading", severity: "error", message: "Lossningsort saknas." });
+  if (!data.height && !data.weight) issues.push({ code: "missing_dimensions", severity: "warning", message: "Höjd och vikt saknas. Komplettera projektet efter import." });
+  if (!data.projectNumber) issues.push({ code: "missing_project_number", severity: "warning", message: "Bokningsnummer saknas och genereras av systemet." });
+  if (data.supplierNames.length > 1) issues.push({ code: "multiple_suppliers", severity: "info", message: `${data.supplierNames.length} transportörer kopplas till projektet.` });
+  if (duplicate) issues.push({ code: "possible_duplicate", severity: "warning", message: `Möjlig dubblett: ${duplicate.reasons.join(", ")}.` });
 
   let status: ImportStatusKey = "klar";
   if (!data.customer) status = "saknar_kund";
@@ -314,9 +386,9 @@ export function evaluateRow(index: number, row: string[], mapping: ColumnMapping
   else if (duplicate) status = "dubblett";
   else if (!data.projectNumber) status = "granska";
 
-  const action: ImportRow["action"] = status === "saknar_kund" ? "skip" : duplicate ? "skip" : "import";
+  const action: ImportRow["action"] = issues.some((issue) => issue.severity === "error") || duplicate ? "skip" : "import";
 
-  return { index, data, status, duplicate, action };
+  return { index, data, status, duplicate, issues, action };
 }
 
 // JK:s Excel-status skiljer sig från systemets statusflöde. Mappa deras

@@ -299,7 +299,12 @@ export function ProjectDetail() {
               {waypoints.length > 0 && (
                 <InfoItem label="Mellanadress / via" value={waypoints.map((w) => w.address || w.name).join(", ")} />
               )}
-              <InfoItem label="Transportör" value={project.supplier?.company_name} />
+              <InfoItem
+                label="Transportörer"
+                value={(project.suppliers?.length ? project.suppliers : project.supplier ? [project.supplier] : [])
+                  .map((supplier) => supplier.company_name)
+                  .join(", ") || undefined}
+              />
               <InfoItem label="Fordon" value={project.vehicle} />
               <InfoItem label="Chaufför" value={project.driver_name} />
               <InfoItem label="Kundens ordernummer" value={project.customer_reference} />

@@ -39,7 +39,7 @@ function assertResult(error: { message: string } | null, operation: string) {
 
 export async function loadLiveStoreData(): Promise<LiveStoreData> {
   const db = client();
-  const [customers, contacts, projects, suppliers, profiles, customerUsers, inquiries, locations, cargo, documents, notes, tasks, measurements, config, log] =
+  const [customers, contacts, projects, suppliers, profiles, customerUsers, inquiries, locations, cargo, documents, notes, tasks, projectSuppliers, measurements, config, log] =
     await Promise.all([
       db.from("customers").select("*").order("company_name"),
       db.from("contact_persons").select("*").order("name"),
@@ -53,6 +53,7 @@ export async function loadLiveStoreData(): Promise<LiveStoreData> {
       db.from("documents").select("*").order("uploaded_at", { ascending: false }),
       db.from("notes").select("*").order("date", { ascending: false }),
       db.from("tasks").select("*"),
+      db.from("project_suppliers").select("project_id, supplier_id, is_primary"),
       db.from("measurement_links").select("*"),
       db.from("freight_calculator_configs").select("config").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
       db.from("freight_calculator_change_log").select("id, changed_at, changed_by_name, changes").order("changed_at", { ascending: false }),
@@ -61,7 +62,7 @@ export async function loadLiveStoreData(): Promise<LiveStoreData> {
   for (const [result, label] of [
     [customers, "Kunder"], [contacts, "Kontaktpersoner"], [projects, "Projekt"], [suppliers, "Leverantörer"],
     [profiles, "Personal"], [customerUsers, "Kundanvändare"], [inquiries, "Förfrågningar"], [locations, "Platser"], [cargo, "Gods"], [documents, "Dokument"], [notes, "Kommentarer"],
-    [tasks, "Uppgifter"], [measurements, "Mätningar"], [config, "Räknesnurra"], [log, "Ändringslogg"],
+    [tasks, "Uppgifter"], [projectSuppliers, "Projekttransportörer"], [measurements, "Mätningar"], [config, "Räknesnurra"], [log, "Ändringslogg"],
   ] as const) assertResult(result.error, `Kunde inte läsa ${label.toLowerCase()}`);
 
   const projectRows = (projects.data ?? []) as Project[];
@@ -81,6 +82,7 @@ export async function loadLiveStoreData(): Promise<LiveStoreData> {
   }
   const noteRows = (notes.data ?? []) as ProjectNote[];
   const taskRows = (tasks.data ?? []) as ProjectTask[];
+  const projectSupplierRows = (projectSuppliers.data ?? []) as Array<{ project_id: string; supplier_id: string; is_primary: boolean }>;
   const measurementRows = (measurements.data ?? []) as MeasurementLink[];
 
   return {
@@ -90,8 +92,14 @@ export async function loadLiveStoreData(): Promise<LiveStoreData> {
     profiles: (profiles.data ?? []) as Profile[],
     customerUsers: (customerUsers.data ?? []) as CustomerUser[],
     contactSubmissions: (inquiries.data ?? []) as ContactSubmission[],
-    projects: projectRows.map((project) => ({
-      ...project,
+    projects: projectRows.map((project) => {
+      const supplierIds = projectSupplierRows
+        .filter((row) => row.project_id === project.id)
+        .sort((a, b) => Number(b.is_primary) - Number(a.is_primary))
+        .map((row) => row.supplier_id);
+      return {
+        ...project,
+        supplier_ids: supplierIds.length > 0 ? supplierIds : project.supplier_id ? [project.supplier_id] : [],
       locations: locationRows.filter((row) => row.project_id === project.id),
       cargo_items: cargoRows.filter((row) => row.project_id === project.id),
       documents: documentRows
@@ -104,7 +112,8 @@ export async function loadLiveStoreData(): Promise<LiveStoreData> {
       notes: noteRows.filter((row) => row.project_id === project.id),
       tasks: taskRows.filter((row) => row.project_id === project.id),
       measurement_link: measurementRows.find((row) => row.project_id === project.id) ?? null,
-    })),
+      };
+    }),
     freightCalculatorConfig: (config.data?.config as FreightCalculatorConfig | undefined) ?? null,
     freightCalculatorChangeLog: ((log.data ?? []) as Array<Record<string, unknown>>).map((row) => {
       const payload = (row.changes ?? {}) as Partial<FreightCalculatorChangeLogEntry> & { changes?: FreightCalculatorChangeLogEntry["changes"] };
@@ -143,6 +152,7 @@ export async function updateProjectRecord(project: Project) {
 async function saveProject(project: Project, label: string) {
   const payload = {
     ...pick(project, PROJECT_COLUMNS),
+    supplier_ids: project.supplier_ids ?? project.suppliers?.map((supplier) => supplier.id) ?? (project.supplier_id ? [project.supplier_id] : []),
     locations: (project.locations ?? []).map((row) => pick(row, ["id", "project_id", "type", "name", "address", "contact_name", "contact_phone", "order_index"])),
     cargo_items: (project.cargo_items ?? []).map((row) => pick(row, ["id", "project_id", "description", "length_m", "width_m", "height_m", "weight_ton", "quantity", "lift_points", "drawing_reference", "technical_info"])),
     notes: (project.notes ?? []).map((row) => ({ ...pick(row, ["id", "project_id", "date", "user_name", "text", "category", "visibility"]), user_id: null })),
