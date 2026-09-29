@@ -66,6 +66,22 @@ Appen blockerar automatiskt mockinloggning på hosten `projekt.jkprojekt.se`. In
 - Koppla om `StoreProvider` från mock/localStorage till Supabase-queries innan live med riktiga projektdata. Utan det finns riktig Auth, men inte ett persistent rent produktionsregister.
 - Rensa lokal testdata i webbläsaren vid sluttest (`localStorage`/`sessionStorage`) och verifiera med en privat/incognito-session.
 
+## Backup av self-hosted Supabase
+
+[`ops/backup-self-hosted-supabase.sh`](ops/backup-self-hosted-supabase.sh) skapar en
+logisk PostgreSQL-dump samt ett arkiv med Storage och återställningskonfiguration för
+serverns båda befintliga Supabase-instanser. Skriptet verifierar gzip-filer och
+SHA-256-checksummor innan en backup publiceras och behåller 30 dagar på RAID-målet.
+
+På servern körs skriptet var sjätte timme från användaren `vibo`. RAID-mappen behöver
+skapas en gång med administratörsbehörighet:
+
+```bash
+sudo install -d -o vibo -g vibo -m 700 /mnt/md0/supabase-backups
+```
+
+Tills mappen finns används `/home/vibo/supabase-backups` med sju dagars retention.
+
 ## Koppla in Google Drive (dokumentlagring)
 
 Uppladdade dokument (ritningar, tillstånd, offerter m.m.) kan sparas som riktiga filer i en mapp i JK:s

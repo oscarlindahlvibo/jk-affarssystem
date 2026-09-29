@@ -1,0 +1,5 @@
+# Existing Home Assistant backup copy.
+2 */1 * * * /bin/bash -c '[ -d /mnt/md0/ha-backups ] || mkdir -p /mnt/md0/ha-backups; cp -u /home/vibo/homeassistant/config/backups/* /mnt/md0/ha-backups/; ls -1t /mnt/md0/ha-backups | tail -n +6 | xargs -I {} rm -f "/mnt/md0/ha-backups/{}"' >/dev/null 2>&1
+
+# Back up both self-hosted Supabase instances every six hours.
+20 */6 * * * /home/vibo/bin/backup-self-hosted-supabase.sh >/dev/null 2>&1
