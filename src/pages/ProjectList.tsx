@@ -34,6 +34,7 @@ type SortKey =
   | "unloadingPlace"
   | "loadingDate"
   | "deliveryDate"
+  | "length"
   | "height"
   | "width"
   | "weight"
@@ -49,7 +50,7 @@ type SortDirection = "asc" | "desc";
 const SORT_STORAGE_KEY = "jk-project-list-sort";
 const SORT_KEYS: SortKey[] = [
   "project", "customer", "cargo", "loadingPlace", "unloadingPlace", "loadingDate", "deliveryDate",
-  "height", "width", "weight", "status", "responsible", "route", "followVehicle", "invoice", "missing",
+  "length", "width", "height", "weight", "status", "responsible", "route", "followVehicle", "invoice", "missing",
 ];
 
 function readSortPreference(): { key: SortKey | null; direction: SortDirection } {
@@ -182,8 +183,9 @@ function projectSortValue(project: Project, key: SortKey): string | number | nul
     case "unloadingPlace": return unloading?.name ?? null;
     case "loadingDate": return project.planned_loading_date ? `${project.planned_loading_date}T${project.planned_loading_time ?? "00:00"}` : null;
     case "deliveryDate": return project.planned_delivery_date ? `${project.planned_delivery_date}T${project.planned_delivery_time ?? "00:00"}` : null;
-    case "height": return cargo?.height_m ?? null;
+    case "length": return cargo?.length_m ?? null;
     case "width": return cargo?.width_m ?? null;
+    case "height": return cargo?.height_m ?? null;
     case "weight": return cargo?.weight_ton ?? null;
     case "status": return PROJECT_STATUSES.indexOf(project.status);
     case "responsible": return project.responsible?.full_name ?? null;
@@ -318,7 +320,7 @@ export function ProjectList() {
   function handleExport() {
     const header = [
       "Projektnummer", "Kund", "Gods", "Från", "Till", "Lastning", "Lossning",
-      "Höjd", "Bredd", "Vikt", "Status", "Ansvarig", "Ruttmätning", "Kräver följebil", "Fakturering", "Saknade uppgifter",
+      "Längd", "Bredd", "Höjd", "Vikt", "Status", "Ansvarig", "Ruttmätning", "Kräver följebil", "Fakturering", "Saknade uppgifter",
     ];
     const rows = filtered.map((p) => {
       const cargo = p.cargo_items?.[0];
@@ -332,8 +334,9 @@ export function ProjectList() {
         unloading?.name,
         formatDateAndTime(p.planned_loading_date, p.planned_loading_time),
         formatDateAndTime(p.planned_delivery_date, p.planned_delivery_time),
-        cargo?.height_m,
+        cargo?.length_m,
         cargo?.width_m,
+        cargo?.height_m,
         cargo?.weight_ton,
         p.status,
         p.responsible?.full_name,
@@ -477,8 +480,9 @@ export function ProjectList() {
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                {cargo?.height_m && <span>H {cargo.height_m} m</span>}
+                {cargo?.length_m && <span>L {cargo.length_m} m</span>}
                 {cargo?.width_m && <span>B {cargo.width_m} m</span>}
+                {cargo?.height_m && <span>H {cargo.height_m} m</span>}
                 {cargo?.weight_ton && <span>{cargo.weight_ton} t</span>}
                 {(p.cargo_items?.length ?? 0) > 1 && <span>{p.cargo_items?.length} godsrader</span>}
                 <span>{p.invoice_status}</span>
@@ -495,7 +499,7 @@ export function ProjectList() {
       </div>
 
       <div className="hidden overflow-x-auto rounded-xl border border-border bg-panel shadow-sm md:block">
-        <table className="w-full min-w-[1400px] text-left text-sm">
+        <table className="w-full min-w-[1480px] text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <SortableHeader label="Projekt" sortKey="project" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
@@ -505,8 +509,9 @@ export function ProjectList() {
               <SortableHeader label="Till" sortKey="unloadingPlace" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Lastning" sortKey="loadingDate" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Leverans" sortKey="deliveryDate" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
-              <SortableHeader label="Höjd" sortKey="height" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Längd" sortKey="length" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Bredd" sortKey="width" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Höjd" sortKey="height" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Vikt" sortKey="weight" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Status" sortKey="status" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Ansvarig" sortKey="responsible" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
@@ -549,8 +554,9 @@ export function ProjectList() {
                   <td className="px-4 py-3 text-slate-600"><span className="flex items-center gap-1 text-xs"><MapPin size={11} />{unloading?.name ?? "–"}</span></td>
                   <td className="px-4 py-3 text-slate-600">{formatDateAndTime(p.planned_loading_date, p.planned_loading_time)}</td>
                   <td className="px-4 py-3 text-slate-600">{formatDateAndTime(p.planned_delivery_date, p.planned_delivery_time)}</td>
-                  <td className="px-4 py-3 text-slate-600">{cargo?.height_m ? `${cargo.height_m} m` : "–"}</td>
+                  <td className="px-4 py-3 text-slate-600">{cargo?.length_m ? `${cargo.length_m} m` : "–"}</td>
                   <td className="px-4 py-3 text-slate-600">{cargo?.width_m ? `${cargo.width_m} m` : "–"}</td>
+                  <td className="px-4 py-3 text-slate-600">{cargo?.height_m ? `${cargo.height_m} m` : "–"}</td>
                   <td className="px-4 py-3 text-slate-600">{cargo?.weight_ton ? `${cargo.weight_ton} t` : "–"}</td>
                   <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
                   <td className="px-4 py-3 text-slate-600">{p.responsible?.full_name ?? "–"}</td>
@@ -567,7 +573,7 @@ export function ProjectList() {
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={16} className="px-4 py-10 text-center text-sm text-slate-500">
+                <td colSpan={17} className="px-4 py-10 text-center text-sm text-slate-500">
                   Inga projekt matchar filtren.
                 </td>
               </tr>
