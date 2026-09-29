@@ -19,6 +19,7 @@ import {
 import { useAuth } from "../../lib/auth";
 import { useStore } from "../../data/store";
 import { usePermissions } from "../../lib/usePermissions";
+import { isProjectActiveForFollowUp } from "../../lib/validation";
 import { ROLE_LABELS } from "../../types";
 
 const NAV_ITEMS = [
@@ -54,7 +55,9 @@ export function Sidebar({ open = false, onClose }: { open?: boolean; onClose?: (
 
   const myOpenTaskCount = currentProfile
     ? projects.reduce(
-        (sum, p) => sum + (p.tasks ?? []).filter((t) => t.assignee_id === currentProfile.id && t.status !== "Klar").length,
+        (sum, p) => sum + (isProjectActiveForFollowUp(p)
+          ? (p.tasks ?? []).filter((t) => t.assignee_id === currentProfile.id && t.status !== "Klar").length
+          : 0),
         0
       )
     : 0;

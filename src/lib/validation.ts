@@ -12,8 +12,12 @@ const COMPLETENESS_EXEMPT_STATUSES: Project["status"][] = [
   "Avbruten",
 ];
 
+export function isProjectActiveForFollowUp(project: Project): boolean {
+  return !COMPLETENESS_EXEMPT_STATUSES.includes(project.status) && project.invoice_status !== "Fakturerad";
+}
+
 export function getMissingFields(project: Project): MissingField[] {
-  if (COMPLETENESS_EXEMPT_STATUSES.includes(project.status)) return [];
+  if (!isProjectActiveForFollowUp(project)) return [];
 
   const missing: MissingField[] = [];
   const cargo = project.cargo_items?.[0];

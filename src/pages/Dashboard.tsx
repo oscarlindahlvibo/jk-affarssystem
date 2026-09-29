@@ -14,7 +14,7 @@ import { useStore } from "../data/store";
 import { Panel } from "../components/ui/Panel";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { formatDate, timeAgo } from "../lib/format";
-import { getMissingFields } from "../lib/validation";
+import { getMissingFields, isProjectActiveForFollowUp } from "../lib/validation";
 import { TASK_CATEGORY_STYLES } from "../lib/status";
 
 function isThisWeek(dateStr: string | null): boolean {
@@ -60,6 +60,7 @@ export function Dashboard() {
   const openTasks = useMemo(() => {
     const all: { projectNumber: string; projectId: string; task: string; category: string; assignee: string | null; deadline: string | null }[] = [];
     for (const p of projects) {
+      if (!isProjectActiveForFollowUp(p)) continue;
       for (const t of p.tasks ?? []) {
         if (t.status !== "Klar") {
           all.push({ projectNumber: p.project_number, projectId: p.id, task: t.task, category: t.category, assignee: t.assignee, deadline: t.deadline });

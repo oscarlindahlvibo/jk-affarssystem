@@ -7,6 +7,7 @@ import { usePermissions } from "../lib/usePermissions";
 import { Panel } from "../components/ui/Panel";
 import { TASK_CATEGORY_STYLES, TASK_STATUS_STYLES } from "../lib/status";
 import { formatDate } from "../lib/format";
+import { isProjectActiveForFollowUp } from "../lib/validation";
 import { TASK_CATEGORIES, type ProjectTask, type TaskStatus, type Project } from "../types";
 
 interface AssignedTask extends ProjectTask {
@@ -26,6 +27,7 @@ export function MyTasksPage() {
     if (!currentProfile) return [];
     const all: AssignedTask[] = [];
     for (const project of projects) {
+      if (!isProjectActiveForFollowUp(project)) continue;
       for (const task of project.tasks ?? []) {
         if (task.assignee_id === currentProfile.id) {
           all.push({ ...task, project });
