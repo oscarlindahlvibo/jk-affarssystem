@@ -221,6 +221,7 @@ export function ImportPage() {
         const createdSupplier = store.addSupplier({
           company_name: name,
           type: "Åkeri",
+          service_types: ["Åkeri"],
           contact_person: null,
           phone: null,
           email: null,

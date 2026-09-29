@@ -122,11 +122,11 @@ export const customerUsers: CustomerUser[] = [
 ];
 
 const rawSuppliers: Omit<Supplier, "org_id">[] = [
-  { id: "s1", company_name: "Sydtransport AB", type: "Åkeri", contact_person: "Johan Petersson", phone: "0470-100 200", email: "johan@sydtransport.se", area: "Södra Sverige", notes: "Van vid bred- och långtransporter.", created_at: "2025-01-10T08:00:00Z" },
-  { id: "s2", company_name: "Kalmar Kranservice", type: "Kran", contact_person: "Fredrik Åkesson", phone: "0480-500 600", email: "fredrik@kalmarkran.se", area: "Kalmar/Öland", notes: null, created_at: "2025-01-12T08:00:00Z" },
-  { id: "s3", company_name: "Följebil Väst", type: "Följebil", contact_person: "Camilla Strand", phone: "031-700 800", email: "camilla@foljebilvast.se", area: "Västra Sverige", notes: null, created_at: "2025-02-01T08:00:00Z" },
-  { id: "s4", company_name: "Trafikverket Tillstånd", type: "Vägtransportledare", contact_person: "-", phone: null, email: "specialtransporter@trafikverket.se", area: "Riks", notes: "Tillståndsärenden BK-vägar och dispenser.", created_at: "2025-01-05T08:00:00Z" },
-  { id: "s5", company_name: "Västkust Åkeri AB", type: "Åkeri", contact_person: "Petra Lund", phone: "031-500 600", email: "petra@vastkustakeri.se", area: "Västra Sverige", notes: "Testleverantör tillhörande Exempel Spedition AB.", created_at: "2025-09-01T08:00:00Z" },
+  { id: "s1", company_name: "Sydtransport AB", type: "Åkeri", service_types: ["Åkeri", "Följebil"], contact_person: "Johan Petersson", phone: "0470-100 200", email: "johan@sydtransport.se", area: "Södra Sverige", notes: "Van vid bred- och långtransporter.", created_at: "2025-01-10T08:00:00Z" },
+  { id: "s2", company_name: "Kalmar Kranservice", type: "Kran", service_types: ["Kran"], contact_person: "Fredrik Åkesson", phone: "0480-500 600", email: "fredrik@kalmarkran.se", area: "Kalmar/Öland", notes: null, created_at: "2025-01-12T08:00:00Z" },
+  { id: "s3", company_name: "Följebil Väst", type: "Följebil", service_types: ["Följebil", "Vägtransportledare"], contact_person: "Camilla Strand", phone: "031-700 800", email: "camilla@foljebilvast.se", area: "Västra Sverige", notes: null, created_at: "2025-02-01T08:00:00Z" },
+  { id: "s4", company_name: "Trafikverket Tillstånd", type: "Vägtransportledare", service_types: ["Vägtransportledare"], contact_person: "-", phone: null, email: "specialtransporter@trafikverket.se", area: "Riks", notes: "Tillståndsärenden BK-vägar och dispenser.", created_at: "2025-01-05T08:00:00Z" },
+  { id: "s5", company_name: "Västkust Åkeri AB", type: "Åkeri", service_types: ["Åkeri"], contact_person: "Petra Lund", phone: "031-500 600", email: "petra@vastkustakeri.se", area: "Västra Sverige", notes: "Testleverantör tillhörande Exempel Spedition AB.", created_at: "2025-09-01T08:00:00Z" },
 ];
 
 const supplierOrgOverrides: Record<string, string> = { s5: "org2" };

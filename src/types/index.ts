@@ -262,6 +262,7 @@ export interface Supplier {
   org_id: string;
   company_name: string;
   type: SupplierType;
+  service_types?: SupplierType[];
   contact_person: string | null;
   phone: string | null;
   email: string | null;

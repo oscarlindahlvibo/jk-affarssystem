@@ -153,7 +153,7 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
 
   const [showNewSupplier, setShowNewSupplier] = useState(false);
   const [newSupplierName, setNewSupplierName] = useState("");
-  const [newSupplierType, setNewSupplierType] = useState<SupplierType>("Åkeri");
+  const [newSupplierTypes, setNewSupplierTypes] = useState<SupplierType[]>(["Åkeri"]);
   const [newSupplierArea, setNewSupplierArea] = useState("");
   const [newSupplierContact, setNewSupplierContact] = useState("");
   const [newSupplierPhone, setNewSupplierPhone] = useState("");
@@ -204,10 +204,11 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
   }
 
   function handleCreateSupplier() {
-    if (!newSupplierName.trim()) return;
+    if (!newSupplierName.trim() || newSupplierTypes.length === 0) return;
     const created = addSupplier({
       company_name: newSupplierName.trim(),
-      type: newSupplierType,
+      type: newSupplierTypes[0],
+      service_types: newSupplierTypes,
       contact_person: newSupplierContact.trim() || null,
       phone: newSupplierPhone.trim() || null,
       email: newSupplierEmail.trim() || null,
@@ -217,7 +218,7 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
     setSelectedSupplierIds((current) => current.includes(created.id) ? current : [...current, created.id]);
     setShowNewSupplier(false);
     setNewSupplierName("");
-    setNewSupplierType("Åkeri");
+    setNewSupplierTypes(["Åkeri"]);
     setNewSupplierArea("");
     setNewSupplierContact("");
     setNewSupplierPhone("");
@@ -667,9 +668,22 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
                   </div>
                   <input className={inputClass} placeholder="Företagsnamn *" value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} />
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <select className={inputClass} value={newSupplierType} onChange={(e) => setNewSupplierType(e.target.value as SupplierType)}>
-                      {SUPPLIER_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
-                    </select>
+                    <div className="grid grid-cols-2 gap-1.5 rounded-lg border border-border bg-white p-2 sm:col-span-2">
+                      {SUPPLIER_TYPES.map((type) => (
+                        <label key={type} className="flex items-center gap-1.5 text-xs text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={newSupplierTypes.includes(type)}
+                            onChange={() => setNewSupplierTypes((current) => {
+                              if (current.includes(type)) return current.length === 1 ? current : current.filter((item) => item !== type);
+                              return [...current, type];
+                            })}
+                            disabled={newSupplierTypes.length === 1 && newSupplierTypes[0] === type}
+                          />
+                          {type}
+                        </label>
+                      ))}
+                    </div>
                     <input className={inputClass} placeholder="Område" value={newSupplierArea} onChange={(e) => setNewSupplierArea(e.target.value)} />
                   </div>
                   <input className={inputClass} placeholder="Kontaktperson" value={newSupplierContact} onChange={(e) => setNewSupplierContact(e.target.value)} />
@@ -677,7 +691,7 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
                     <input className={inputClass} placeholder="Telefon" value={newSupplierPhone} onChange={(e) => setNewSupplierPhone(e.target.value)} />
                     <input type="email" className={inputClass} placeholder="E-post" value={newSupplierEmail} onChange={(e) => setNewSupplierEmail(e.target.value)} />
                   </div>
-                  <Button type="button" variant="secondary" onClick={handleCreateSupplier} disabled={!newSupplierName.trim()} className="w-full justify-center">
+                  <Button type="button" variant="secondary" onClick={handleCreateSupplier} disabled={!newSupplierName.trim() || newSupplierTypes.length === 0} className="w-full justify-center">
                     Skapa och välj transportör
                   </Button>
                 </div>

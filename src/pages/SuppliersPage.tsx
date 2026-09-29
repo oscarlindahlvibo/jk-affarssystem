@@ -25,8 +25,9 @@ export function SuppliersPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Supplier | null>(null);
 
-  const filtered = type ? suppliers.filter((s) => s.type === type) : suppliers;
-  const types = Array.from(new Set(suppliers.map((s) => s.type)));
+  const supplierTypes = (supplier: Supplier) => supplier.service_types?.length ? supplier.service_types : [supplier.type];
+  const filtered = type ? suppliers.filter((supplier) => supplierTypes(supplier).includes(type as Supplier["type"])) : suppliers;
+  const types = Array.from(new Set(suppliers.flatMap(supplierTypes)));
 
   return (
     <div className="space-y-4">
@@ -58,7 +59,11 @@ export function SuppliersPage() {
                     <div className="text-xs text-slate-500">{s.area ?? "Område ej angivet"}</div>
                   </div>
                 </div>
-                <span className={`status-pill ${TYPE_COLORS[s.type]}`}>{s.type}</span>
+                <div className="flex max-w-[55%] flex-wrap justify-end gap-1">
+                  {supplierTypes(s).map((serviceType) => (
+                    <span key={serviceType} className={`status-pill ${TYPE_COLORS[serviceType]}`}>{serviceType}</span>
+                  ))}
+                </div>
               </div>
               <div className="mt-3 space-y-1 text-xs text-slate-500">
                 {s.contact_person && <div>Kontakt: {s.contact_person}</div>}

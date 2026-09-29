@@ -10,6 +10,7 @@ const SUPPLIER_TYPES: SupplierType[] = ["Åkeri", "Kran", "Följebil", "Vägtran
 type FormState = {
   company_name: string;
   type: SupplierType;
+  service_types: SupplierType[];
   contact_person: string;
   phone: string;
   email: string;
@@ -21,6 +22,7 @@ function toFormState(supplier?: Supplier): FormState {
   return {
     company_name: supplier?.company_name ?? "",
     type: supplier?.type ?? "Åkeri",
+    service_types: supplier?.service_types?.length ? supplier.service_types : [supplier?.type ?? "Åkeri"],
     contact_person: supplier?.contact_person ?? "",
     phone: supplier?.phone ?? "",
     email: supplier?.email ?? "",
@@ -59,6 +61,15 @@ export function SupplierModal({
     if (!result.ok) setDeleteError(result.reason ?? "Leverantören kunde inte raderas.");
   }
 
+  function toggleServiceType(type: SupplierType) {
+    const selected = form.service_types.includes(type);
+    const serviceTypes = selected
+      ? form.service_types.filter((item) => item !== type)
+      : [...form.service_types, type];
+    if (serviceTypes.length === 0) return;
+    setForm({ ...form, service_types: serviceTypes, type: serviceTypes[0] });
+  }
+
   return (
     <Modal open={open} onClose={handleClose} title={supplier ? "Redigera leverantör" : "Ny leverantör"} wide>
       <form
@@ -73,12 +84,20 @@ export function SupplierModal({
           <input required className={inputClass} value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} />
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Typ">
-            <select className={inputClass} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as SupplierType })}>
+          <Field label="Tjänster *">
+            <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-white p-3">
               {SUPPLIER_TYPES.map((t) => (
-                <option key={t} value={t}>{t}</option>
+                <label key={t} className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={form.service_types.includes(t)}
+                    onChange={() => toggleServiceType(t)}
+                    disabled={form.service_types.length === 1 && form.service_types[0] === t}
+                  />
+                  {t}
+                </label>
               ))}
-            </select>
+            </div>
           </Field>
           <Field label="Område">
             <input className={inputClass} value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} placeholder="t.ex. Södra Sverige" />
