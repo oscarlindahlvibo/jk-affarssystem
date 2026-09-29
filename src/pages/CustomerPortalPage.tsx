@@ -1,15 +1,35 @@
 import { useMemo, useState } from "react";
-import { CheckCircle2, Clock, LogOut, MapPin, MessageSquareText, Package, Plus, Route, Send, Truck, X } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock,
+  FileSignature,
+  FileText,
+  Loader2,
+  LogOut,
+  MapPin,
+  MessageSquareText,
+  Package,
+  Pencil,
+  Plus,
+  Route,
+  Send,
+  Truck,
+  X,
+} from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useStore, type CustomerBookingCargoInput, type CustomerBookingInput } from "../data/store";
 import { Button } from "../components/ui/Button";
 import { Field, inputClass } from "../components/ui/Field";
 import { AddressAutocomplete } from "../components/ui/AddressAutocomplete";
+import { Modal } from "../components/ui/Modal";
 import { Panel } from "../components/ui/Panel";
 import { StatusBadge } from "../components/ui/StatusBadge";
+import { CustomerFreightCalculatorPanel } from "../components/customers/CustomerFreightCalculatorPanel";
 import { formatDateAndTime, formatDateTime } from "../lib/format";
 import { calculateRouteDistance } from "../lib/routeDistance";
-import { PROJECT_STATUSES, type BookingApprovalStatus, type TransportType } from "../types";
+import { generateShippingDocument, shippingDocumentFileName, type ShippingDocumentKind } from "../lib/shippingDocuments";
+import { isSupabaseConfigured, supabase } from "../lib/supabase";
+import { PROJECT_STATUSES, type BookingApprovalStatus, type Project, type TransportType } from "../types";
 
 const TRANSPORT_TYPES: TransportType[] = ["Specialtransport", "Maskintransport", "Krantransport", "Styckegods", "Container", "Annat"];
 
@@ -59,20 +79,107 @@ function numberValue(value: number | null) {
   return value === null ? "" : String(value);
 }
 
+function canSelfServeBooking(project: Project) {
+  return project.booking_approval_status !== "Väntar på godkännande" && project.booking_approval_status !== "Avvisad" && project.status !== "Avbruten";
+}
+
 export function CustomerPortalPage() {
   const { currentCustomerUser, signOut } = useAuth();
-  const { customers, projects, submitCustomerBooking, isLoading, dataError, retryLoading } = useStore();
+  const {
+    customers,
+    projects,
+    submitCustomerBooking,
+    addCustomerShippingDocument,
+    requestBookingEdit,
+    isLoading,
+    dataError,
+    retryLoading,
+  } = useStore();
   const [form, setForm] = useState<CustomerBookingInput>(initialForm);
   const [createdProjectNumber, setCreatedProjectNumber] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [distanceStatus, setDistanceStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [distanceMessage, setDistanceMessage] = useState<string | null>(null);
+  const [openBookingId, setOpenBookingId] = useState<string | null>(null);
+  const [generatingKind, setGeneratingKind] = useState<ShippingDocumentKind | null>(null);
+  const [docError, setDocError] = useState<string | null>(null);
+  const [editMessage, setEditMessage] = useState("");
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const customer = customers.find((c) => c.id === currentCustomerUser?.customer_id);
   const bookings = useMemo(
     () => [...projects].sort((a, b) => (a.created_at < b.created_at ? 1 : -1)),
     [projects]
   );
+  const openBooking = bookings.find((p) => p.id === openBookingId) ?? null;
+
+  function openBookingDetails(projectId: string) {
+    setOpenBookingId(projectId);
+    setDocError(null);
+    setEditMessage("");
+    setEditError(null);
+  }
+
+  async function handleGenerateDocument(project: Project, kind: ShippingDocumentKind) {
+    setDocError(null);
+    setGeneratingKind(kind);
+    try {
+      const blob = await generateShippingDocument(project, kind);
+      const fileName = shippingDocumentFileName(project, kind);
+      const file = new File([blob], fileName, { type: "application/pdf" });
+      let storagePath: string | null = null;
+      let fileUrl: string | null = null;
+      if (isSupabaseConfigured && supabase) {
+        const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+        storagePath = `${project.id}/${crypto.randomUUID()}-${safeName}`;
+        const uploaded = await supabase.storage.from("project-documents").upload(storagePath, file, {
+          contentType: "application/pdf",
+          upsert: false,
+        });
+        if (uploaded.error) throw new Error(`Dokumentet kunde inte laddas upp: ${uploaded.error.message}`);
+        const signed = await supabase.storage.from("project-documents").createSignedUrl(storagePath, 60 * 60);
+        if (signed.error) throw new Error(`Dokumentlänken kunde inte skapas: ${signed.error.message}`);
+        fileUrl = signed.data.signedUrl;
+      } else {
+        fileUrl = URL.createObjectURL(file);
+      }
+      await addCustomerShippingDocument(project.id, {
+        file_name: fileName,
+        file_type: "pdf",
+        category: "Fraktsedel",
+        storage_path: storagePath,
+        file_url: fileUrl,
+        file_size: file.size,
+        comment: kind === "cmr" ? "Genererad CMR av kund i kundportalen." : "Genererad fraktsedel av kund i kundportalen.",
+      });
+      const link = document.createElement("a");
+      link.href = fileUrl;
+      link.download = fileName;
+      link.click();
+    } catch (err) {
+      setDocError(err instanceof Error ? err.message : "Dokumentet kunde inte skapas.");
+    } finally {
+      setGeneratingKind(null);
+    }
+  }
+
+  async function handleRequestEdit(projectId: string) {
+    setEditError(null);
+    if (!editMessage.trim()) {
+      setEditError("Beskriv vad som ska ändras.");
+      return;
+    }
+    setEditSubmitting(true);
+    try {
+      await requestBookingEdit(projectId, editMessage);
+      setEditMessage("");
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Ändringsbegäran kunde inte skickas.");
+    } finally {
+      setEditSubmitting(false);
+    }
+  }
 
   function update<K extends keyof CustomerBookingInput>(key: K, value: CustomerBookingInput[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -352,6 +459,8 @@ export function CustomerPortalPage() {
         </Panel>
 
         <aside className="space-y-4">
+          {customer?.freight_calculator_enabled && <CustomerFreightCalculatorPanel />}
+
           <Panel title="Mina bokningar">
             <div className="space-y-3">
               {bookings.map((p) => {
@@ -360,7 +469,12 @@ export function CustomerPortalPage() {
                 const approval = p.booking_approval_status;
                 const customerNotes = (p.notes ?? []).filter((note) => note.visibility === "customer");
                 return (
-                  <div key={p.id} className="rounded-lg border border-border p-3">
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => openBookingDetails(p.id)}
+                    className="w-full rounded-lg border border-border p-3 text-left transition hover:border-orange-300 hover:bg-orange-50/40"
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="text-sm font-semibold text-slate-800">{p.project_number}</div>
@@ -371,6 +485,7 @@ export function CustomerPortalPage() {
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {approval && <span className={`status-pill ${APPROVAL_STYLES[approval]}`}>{approval}</span>}
                       <StatusBadge status={PROJECT_STATUSES.includes(p.status) ? p.status : "Ny"} />
+                      {p.edit_requested_at && <span className="status-pill bg-blue-100 text-blue-700">Ändring begärd</span>}
                     </div>
                     <div className="mt-3 space-y-1 text-xs text-slate-500">
                       <div className="flex items-center gap-1">
@@ -398,7 +513,7 @@ export function CustomerPortalPage() {
                         </div>
                       </div>
                     )}
-                  </div>
+                  </button>
                 );
               })}
               {bookings.length === 0 && <p className="text-sm text-slate-500">Inga bokningar ännu.</p>}
@@ -406,6 +521,112 @@ export function CustomerPortalPage() {
           </Panel>
         </aside>
       </main>
+
+      <Modal open={Boolean(openBooking)} onClose={() => setOpenBookingId(null)} title={openBooking?.project_number ?? "Bokning"} wide>
+        {openBooking && (
+          <div className="space-y-5">
+            <div>
+              <div className="text-sm font-medium text-slate-800">{openBooking.name}</div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {openBooking.booking_approval_status && (
+                  <span className={`status-pill ${APPROVAL_STYLES[openBooking.booking_approval_status]}`}>{openBooking.booking_approval_status}</span>
+                )}
+                <StatusBadge status={PROJECT_STATUSES.includes(openBooking.status) ? openBooking.status : "Ny"} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <div className="text-xs text-slate-400">Lastning</div>
+                <div className="text-slate-700">{openBooking.locations?.find((l) => l.type === "lastning")?.name ?? "-"}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-400">Lossning</div>
+                <div className="text-slate-700">{openBooking.locations?.find((l) => l.type === "lossning")?.name ?? "-"}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-400">Planerad lastning</div>
+                <div className="text-slate-700">{formatDateAndTime(openBooking.planned_loading_date, openBooking.planned_loading_time)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-400">Planerad lossning</div>
+                <div className="text-slate-700">{formatDateAndTime(openBooking.planned_delivery_date, openBooking.planned_delivery_time)}</div>
+              </div>
+            </div>
+
+            {(openBooking.cargo_items?.length ?? 0) > 0 && (
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Gods</div>
+                <ul className="space-y-1 text-sm text-slate-600">
+                  {openBooking.cargo_items?.map((item, index) => (
+                    <li key={item.id ?? index}>{item.description}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="border-t border-border pt-4">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Dokument</div>
+              {canSelfServeBooking(openBooking) ? (
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="secondary" disabled={generatingKind !== null} onClick={() => void handleGenerateDocument(openBooking, "domestic-waybill")}>
+                      {generatingKind === "domestic-waybill" ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+                      Generera fraktsedel
+                    </Button>
+                    <Button type="button" variant="secondary" disabled={generatingKind !== null} onClick={() => void handleGenerateDocument(openBooking, "cmr")}>
+                      {generatingKind === "cmr" ? <Loader2 size={14} className="animate-spin" /> : <FileSignature size={14} />}
+                      Generera CMR
+                    </Button>
+                  </div>
+                  {docError && <p className="mt-2 text-xs text-red-600">{docError}</p>}
+                  {(openBooking.documents?.length ?? 0) > 0 && (
+                    <ul className="mt-3 space-y-1 text-xs text-slate-500">
+                      {openBooking.documents?.map((doc) => (
+                        <li key={doc.id}>
+                          {doc.file_url ? (
+                            <a href={doc.file_url} target="_blank" rel="noreferrer" className="text-orange-600 hover:text-orange-700">
+                              {doc.file_name}
+                            </a>
+                          ) : (
+                            doc.file_name
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-slate-500">Dokument kan genereras när bokningen är godkänd av JK.</p>
+              )}
+            </div>
+
+            <div className="border-t border-border pt-4">
+              <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <Pencil size={13} /> Begär ändring
+              </div>
+              {openBooking.edit_requested_at && (
+                <div className="mb-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                  Ändringsbegäran skickad {formatDateTime(openBooking.edit_requested_at)}: {openBooking.edit_request_message}. JK hanterar den så snart som möjligt.
+                </div>
+              )}
+              <textarea
+                className={`${inputClass} min-h-20 resize-y`}
+                value={editMessage}
+                onChange={(e) => setEditMessage(e.target.value)}
+                placeholder="Beskriv vad som behöver ändras i bokningen..."
+              />
+              {editError && <p className="mt-1 text-xs text-red-600">{editError}</p>}
+              <div className="mt-2 flex justify-end">
+                <Button type="button" variant="secondary" disabled={editSubmitting} onClick={() => void handleRequestEdit(openBooking.id)}>
+                  {editSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                  Skicka ändringsbegäran
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

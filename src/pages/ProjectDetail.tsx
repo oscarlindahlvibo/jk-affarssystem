@@ -110,7 +110,7 @@ function FinancePanel({
 
 export function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
-  const { getProject, updateProjectStatus, updateProjectFinance, profiles, approveCustomerBooking, rejectCustomerBooking } = useStore();
+  const { getProject, updateProjectStatus, updateProjectFinance, updateProject, profiles, approveCustomerBooking, rejectCustomerBooking } = useStore();
   const project = id ? getProject(id) : undefined;
   const permissions = usePermissions();
   const canEditProject = permissions.can("projects", "edit");
@@ -248,6 +248,28 @@ export function ProjectDetail() {
               className="mt-3 w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
               placeholder="Anledning vid avvisning, visas i projektets noteringar"
             />
+          </div>
+        )}
+
+        {project.edit_requested_at && (
+          <div className="mt-4 flex flex-col gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-sm font-semibold text-blue-800">
+                <Pencil size={16} /> Kunden begär en ändring
+              </div>
+              <p className="mt-1 text-sm text-blue-700">
+                {project.edit_request_message} <span className="text-blue-400">({formatDateTime(project.edit_requested_at)})</span>
+              </p>
+            </div>
+            {canEditProject && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => updateProject(project.id, { edit_requested_at: null, edit_request_message: null })}
+              >
+                Markera som hanterad
+              </Button>
+            )}
           </div>
         )}
       </div>

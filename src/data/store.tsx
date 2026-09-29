@@ -48,6 +48,16 @@ export interface CustomerBookingCargoInput {
   quantity: number | null;
 }
 
+export interface CustomerShippingDocumentInput {
+  file_name: string;
+  file_type: string;
+  category: string;
+  storage_path: string | null;
+  file_url: string | null;
+  file_size: number | null;
+  comment: string | null;
+}
+
 export interface CustomerBookingInput {
   name: string;
   transport_type: TransportType;
@@ -99,6 +109,8 @@ interface StoreShape {
   submitCustomerBooking: (data: CustomerBookingInput) => Promise<Project>;
   approveCustomerBooking: (projectId: string, data: { responsible_id: string | null; status: ProjectStatus }) => void;
   rejectCustomerBooking: (projectId: string, reason: string) => void;
+  addCustomerShippingDocument: (projectId: string, doc: CustomerShippingDocumentInput) => Promise<void>;
+  requestBookingEdit: (projectId: string, message: string) => Promise<void>;
   updateProjectStatus: (projectId: string, status: ProjectStatus) => void;
   updateProject: (projectId: string, patch: Partial<Project>) => void;
   updateProjectFinance: (projectId: string, patch: Partial<Pick<Project, "price" | "cost" | "invoice_status">>) => void;
@@ -710,6 +722,73 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [allProjects, authorize, currentProfile, persist]
   );
 
+  const addCustomerShippingDocument: StoreShape["addCustomerShippingDocument"] = useCallback(
+    async (projectId, doc) => {
+      if (!currentCustomerUser || currentCustomerUser.status !== "aktiv") {
+        throw new Error("Kundkontot är inte aktivt.");
+      }
+      const now = new Date().toISOString();
+      let created: ProjectDocument = {
+        ...doc,
+        category: doc.category as ProjectDocument["category"],
+        id: newId("d"),
+        project_id: projectId,
+        uploaded_at: now,
+        uploaded_by: currentCustomerUser.full_name,
+        visibility: "customer",
+      };
+      if (isSupabaseConfigured) {
+        if (!supabase) throw new Error("Databasen är inte tillgänglig.");
+        const { data, error } = await supabase.rpc("customer_add_shipping_document", {
+          p_project_id: projectId,
+          p_document: doc,
+        });
+        if (error) throw new Error(`Dokumentet kunde inte sparas: ${error.message}`);
+        created = { ...created, ...(data as ProjectDocument) };
+      }
+      setAllProjects((prev) =>
+        prev.map((p) => (p.id === projectId ? { ...p, documents: [created, ...(p.documents ?? [])] } : p))
+      );
+    },
+    [currentCustomerUser]
+  );
+
+  const requestBookingEdit: StoreShape["requestBookingEdit"] = useCallback(
+    async (projectId, message) => {
+      if (!currentCustomerUser || currentCustomerUser.status !== "aktiv") {
+        throw new Error("Kundkontot är inte aktivt.");
+      }
+      const trimmed = message.trim();
+      if (!trimmed) throw new Error("Beskriv vad som ska ändras.");
+      const now = new Date().toISOString();
+      if (isSupabaseConfigured) {
+        if (!supabase) throw new Error("Databasen är inte tillgänglig.");
+        const { error } = await supabase.rpc("customer_request_booking_edit", {
+          p_project_id: projectId,
+          p_message: trimmed,
+        });
+        if (error) throw new Error(`Ändringsbegäran kunde inte skickas: ${error.message}`);
+      }
+      const note: ProjectNote = {
+        id: newId("n"),
+        project_id: projectId,
+        date: now,
+        user_name: currentCustomerUser.full_name,
+        text: `Kund begär ändring: ${trimmed}`,
+        category: "Kund",
+        visibility: "internal",
+      };
+      setAllProjects((prev) =>
+        prev.map((p) =>
+          p.id === projectId
+            ? { ...p, edit_requested_at: now, edit_request_message: trimmed, notes: [note, ...(p.notes ?? [])] }
+            : p
+        )
+      );
+    },
+    [currentCustomerUser]
+  );
+
   const updateProjectStatus: StoreShape["updateProjectStatus"] = useCallback(
     (projectId, status) => {
       authorize("projects", "edit");
@@ -1004,6 +1083,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       submitCustomerBooking,
       approveCustomerBooking,
       rejectCustomerBooking,
+      addCustomerShippingDocument,
+      requestBookingEdit,
       updateProjectStatus,
       updateProject,
       updateProjectFinance,
@@ -1056,6 +1137,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       submitCustomerBooking,
       approveCustomerBooking,
       rejectCustomerBooking,
+      addCustomerShippingDocument,
+      requestBookingEdit,
       updateProjectStatus,
       updateProject,
       updateProjectFinance,

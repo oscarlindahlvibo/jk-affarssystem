@@ -87,6 +87,9 @@ export interface Customer {
   website: string | null;
   notes: string | null;
   status: "aktiv" | "inaktiv";
+  // Styr om räknesnurran för fraktpris visas i kundportalen för den här kunden
+  // (inte alla kunder ska kunna räkna på pris själva).
+  freight_calculator_enabled?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -351,6 +354,10 @@ export interface Project {
   requested_by_customer_user_id?: string | null;
   approved_at?: string | null;
   approved_by?: string | null;
+  // Sätts när en kund begär en ändring av en bokning via kundportalen.
+  // Rensas av personal när begäran är hanterad.
+  edit_requested_at?: string | null;
+  edit_request_message?: string | null;
   // Referensnummer på källdokumentet (t.ex. Holtabs LTC-nr) som hela ordern/bokningen
   // skapades från – skilt från customer_reference som är per kolli/gods (Order-nr).
   source_document_ref: string | null;

@@ -41,6 +41,7 @@ const rawCustomers: Omit<Customer, "org_id">[] = [
     website: "holtab.se",
     notes: "Tillverkare av transformatorstationer. Kräver ofta specialtransport med bred last.",
     status: "aktiv",
+    freight_calculator_enabled: true,
     created_at: "2025-02-10T08:00:00Z",
     updated_at: "2026-09-02T10:00:00Z",
   },

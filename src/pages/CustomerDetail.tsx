@@ -306,6 +306,7 @@ function EditCustomerForm({
     website: customer.website ?? "",
     notes: customer.notes ?? "",
     status: customer.status,
+    freight_calculator_enabled: customer.freight_calculator_enabled ?? false,
   });
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -359,6 +360,21 @@ function EditCustomerForm({
       <Field label="Anteckningar">
         <textarea rows={3} className={inputClass} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
       </Field>
+
+      <label className="flex items-start gap-2 rounded-lg border border-border px-3 py-2.5 text-sm text-slate-700">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={form.freight_calculator_enabled}
+          onChange={(e) => setForm({ ...form, freight_calculator_enabled: e.target.checked })}
+        />
+        <span>
+          <span className="font-medium">Räknesnurra i kundportalen</span>
+          <span className="block text-xs text-slate-500">
+            Kunden kan själv räkna på ett uppskattat transportpris i portalen. Av som standard – slå bara på för kunder som ska ha tillgång.
+          </span>
+        </span>
+      </label>
 
       {deleteError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{deleteError}</p>}
 
