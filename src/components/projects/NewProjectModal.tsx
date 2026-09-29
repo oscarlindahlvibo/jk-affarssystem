@@ -10,7 +10,7 @@ import { PROJECT_TEMPLATES, TEMPLATE_DESCRIPTIONS, TEMPLATE_TASKS } from "../../
 import { evaluateTransportRules, suggestedTransportTasks, RULE_SOURCE_NOTE } from "../../lib/transportRules";
 import { calculateRouteDistance } from "../../lib/routeDistance";
 import { TransportRuleList } from "./TransportRuleList";
-import { INVOICE_STATUSES, type CargoItem, type TransportType, type ProjectTemplateKey, type Project, type Location, type InvoiceStatus } from "../../types";
+import { INVOICE_STATUSES, type CargoItem, type TransportType, type ProjectTemplateKey, type Project, type Location, type InvoiceStatus, type SupplierType } from "../../types";
 
 const TRANSPORT_TYPES: TransportType[] = [
   "Specialtransport",
@@ -20,6 +20,8 @@ const TRANSPORT_TYPES: TransportType[] = [
   "Container",
   "Annat",
 ];
+
+const SUPPLIER_TYPES: SupplierType[] = ["Åkeri", "Kran", "Följebil", "Vägtransportledare", "Konsult", "Annat"];
 
 export function nextProjectNumber(existing: { project_number: string }[]): string {
   const year = new Date().getFullYear();
@@ -80,7 +82,7 @@ function cargoToDraft(cargo: CargoItem): CargoDraft {
 }
 
 export function ProjectFormModal({ open, onClose, project }: { open: boolean; onClose: () => void; project?: Project }) {
-  const { customers, contactPersons, suppliers, addProject, updateProject, addTask, addCustomer, addContactPerson, projects, profiles } = useStore();
+  const { customers, contactPersons, suppliers, addProject, updateProject, addTask, addCustomer, addContactPerson, addSupplier, projects, profiles } = useStore();
   const navigate = useNavigate();
   const activeProfiles = profiles.filter((p) => p.status === "aktiv");
   const isEdit = Boolean(project);
@@ -147,6 +149,14 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
   const [newContactMobile, setNewContactMobile] = useState("");
   const [newContactEmail, setNewContactEmail] = useState("");
 
+  const [showNewSupplier, setShowNewSupplier] = useState(false);
+  const [newSupplierName, setNewSupplierName] = useState("");
+  const [newSupplierType, setNewSupplierType] = useState<SupplierType>("Åkeri");
+  const [newSupplierArea, setNewSupplierArea] = useState("");
+  const [newSupplierContact, setNewSupplierContact] = useState("");
+  const [newSupplierPhone, setNewSupplierPhone] = useState("");
+  const [newSupplierEmail, setNewSupplierEmail] = useState("");
+
   const contactsForCustomer = contactPersons.filter((c) => c.customer_id === customerId);
 
   function handleCreateCustomer() {
@@ -189,6 +199,27 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
     setNewContactPhone("");
     setNewContactMobile("");
     setNewContactEmail("");
+  }
+
+  function handleCreateSupplier() {
+    if (!newSupplierName.trim()) return;
+    const created = addSupplier({
+      company_name: newSupplierName.trim(),
+      type: newSupplierType,
+      contact_person: newSupplierContact.trim() || null,
+      phone: newSupplierPhone.trim() || null,
+      email: newSupplierEmail.trim() || null,
+      area: newSupplierArea.trim() || null,
+      notes: null,
+    });
+    setSupplierId(created.id);
+    setShowNewSupplier(false);
+    setNewSupplierName("");
+    setNewSupplierType("Åkeri");
+    setNewSupplierArea("");
+    setNewSupplierContact("");
+    setNewSupplierPhone("");
+    setNewSupplierEmail("");
   }
 
   function buildLocations(): Location[] {
@@ -577,12 +608,48 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
               )}
             </div>
             <Field label="Transportör">
-              <select className={inputClass} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-                <option value="">Välj transportör</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>{s.company_name}</option>
-                ))}
-              </select>
+              {!showNewSupplier ? (
+                <div className="flex gap-2">
+                  <select className={inputClass} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+                    <option value="">Välj transportör</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>{s.company_name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewSupplier(true)}
+                    title="Skapa ny transportör"
+                    className="flex shrink-0 items-center gap-1 rounded-lg border border-border bg-white px-2.5 text-sm text-slate-600 hover:bg-slate-50"
+                  >
+                    <Plus size={14} /> Ny
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2 rounded-lg border border-orange-200 bg-orange-50/50 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-slate-600">Ny transportör</span>
+                    <button type="button" onClick={() => setShowNewSupplier(false)} className="text-slate-400 hover:text-slate-600">
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <input className={inputClass} placeholder="Företagsnamn *" value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} />
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <select className={inputClass} value={newSupplierType} onChange={(e) => setNewSupplierType(e.target.value as SupplierType)}>
+                      {SUPPLIER_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+                    </select>
+                    <input className={inputClass} placeholder="Område" value={newSupplierArea} onChange={(e) => setNewSupplierArea(e.target.value)} />
+                  </div>
+                  <input className={inputClass} placeholder="Kontaktperson" value={newSupplierContact} onChange={(e) => setNewSupplierContact(e.target.value)} />
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <input className={inputClass} placeholder="Telefon" value={newSupplierPhone} onChange={(e) => setNewSupplierPhone(e.target.value)} />
+                    <input type="email" className={inputClass} placeholder="E-post" value={newSupplierEmail} onChange={(e) => setNewSupplierEmail(e.target.value)} />
+                  </div>
+                  <Button type="button" variant="secondary" onClick={handleCreateSupplier} disabled={!newSupplierName.trim()} className="w-full justify-center">
+                    Skapa och välj transportör
+                  </Button>
+                </div>
+              )}
             </Field>
             <Field label="Planerat lastningsdatum">
               <input type="date" className={inputClass} value={loadingDate ?? ""} onChange={(e) => setLoadingDate(e.target.value)} />
