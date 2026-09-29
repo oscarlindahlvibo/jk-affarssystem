@@ -50,6 +50,23 @@ mode prompts for the password. Relay mode writes empty credentials and must be
 restricted to the server's static IP in Microsoft 365. Do not use Exchange
 Online Basic Auth credentials for a normal mailbox.
 
+## Central Google Drive storage
+
+Project documents can be stored in the WPE Shared Drive `JK PROJEKT` with ID
+`0AEBJmdIO2OmUUk9PVA`. Create a dedicated Google service account, enable the
+Google Drive API, download its JSON key, and add the service account email to
+the Shared Drive with the Content manager role. Install the key interactively:
+
+```bash
+/home/vibo/jkprojekt/configure-google-drive.sh \
+  /path/to/service-account.json 0AEBJmdIO2OmUUk9PVA
+```
+
+The key is base64-encoded into the server-only Supabase `.env` and injected
+only into the Edge Functions container. It must never be committed or included
+in a frontend build. The `drive-file` function authorizes every request against
+the JK database and creates one folder per project in the Shared Drive.
+
 ## Web application
 
 The production SPA is served by a rootless Nginx container on

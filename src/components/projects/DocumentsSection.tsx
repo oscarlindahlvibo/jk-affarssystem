@@ -11,6 +11,12 @@ import { useGoogleDrive } from "../../lib/googleDriveContext";
 import { uploadFileToDrive, deleteFileFromDrive } from "../../lib/googleDrive";
 import { generateShippingDocument, shippingDocumentFileName, type ShippingDocumentKind } from "../../lib/shippingDocuments";
 import { isSupabaseConfigured, supabase } from "../../lib/supabase";
+import {
+  deleteCentralDriveFile,
+  isCentralDriveEnabled,
+  openCentralDriveFile,
+  uploadCentralDriveFile,
+} from "../../lib/centralDrive";
 
 const CATEGORIES: DocumentCategory[] = ["Ritning", "Tillstånd", "Offert", "Order", "Fraktsedel", "Foto", "Övrigt"];
 
@@ -34,8 +40,27 @@ export function DocumentsSection({ project, documents }: { project: Project; doc
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState<ShippingDocumentKind | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
 
   async function addFileDocument(file: File, documentCategory: DocumentCategory, comment: string | null = null) {
+    if (isCentralDriveEnabled) {
+      const uploaded = await uploadCentralDriveFile(file, projectId);
+      addDocument(projectId, {
+        file_name: file.name,
+        file_type: file.name.split(".").pop() ?? "fil",
+        category: documentCategory,
+        storage_path: `drive:${uploaded.id}`,
+        file_url: uploaded.webViewLink,
+        file_size: file.size,
+        drive_file_id: uploaded.id,
+        uploaded_at: new Date().toISOString(),
+        uploaded_by: currentProfile?.full_name ?? "Okänd",
+        visibility: "internal",
+        comment,
+      });
+      return;
+    }
+
     if (drive.isConnected) {
       const token = await drive.getAccessToken();
       const folderId = await drive.getFolderId(token);
@@ -129,7 +154,14 @@ export function DocumentsSection({ project, documents }: { project: Project; doc
   }
 
   async function handleDelete(doc: ProjectDocument) {
-    if (doc.drive_file_id && drive.isConnected) {
+    if (doc.drive_file_id && isCentralDriveEnabled) {
+      try {
+        await deleteCentralDriveFile(doc.drive_file_id);
+      } catch (error) {
+        setUploadError(error instanceof Error ? error.message : "Filen kunde inte tas bort från Google Drive.");
+        return;
+      }
+    } else if (doc.drive_file_id && drive.isConnected) {
       try {
         const token = await drive.getAccessToken();
         await deleteFileFromDrive(token, doc.drive_file_id);
@@ -145,6 +177,19 @@ export function DocumentsSection({ project, documents }: { project: Project; doc
       }
     }
     deleteDocument(projectId, doc.id);
+  }
+
+  async function handleOpen(doc: ProjectDocument) {
+    if (!doc.drive_file_id || !isCentralDriveEnabled) return;
+    setOpeningId(doc.id);
+    setUploadError(null);
+    try {
+      await openCentralDriveFile(doc.drive_file_id);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Filen kunde inte öppnas från Google Drive.");
+    } finally {
+      setOpeningId(null);
+    }
   }
 
   return (
@@ -185,7 +230,11 @@ export function DocumentsSection({ project, documents }: { project: Project; doc
         )
       }
     >
-      {drive.isConnected ? (
+      {isCentralDriveEnabled ? (
+        <p className="mb-3 flex items-center gap-1.5 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-700">
+          <HardDrive size={13} /> Dokument lagras centralt i WPE:s delade Google Drive.
+        </p>
+      ) : drive.isConnected ? (
         <p className="mb-3 flex items-center gap-1.5 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-700">
           <HardDrive size={13} /> Uppladdade dokument sparas i Google Drive.
         </p>
@@ -202,7 +251,16 @@ export function DocumentsSection({ project, documents }: { project: Project; doc
             <div className="flex min-w-0 items-center gap-2.5">
               <FileText size={16} className="shrink-0 text-slate-400" />
               <div className="min-w-0">
-                {d.file_url ? (
+                {d.drive_file_id && isCentralDriveEnabled ? (
+                  <button
+                    type="button"
+                    onClick={() => handleOpen(d)}
+                    disabled={openingId === d.id}
+                    className="flex max-w-full items-center gap-1 truncate text-left text-sm font-medium text-slate-800 hover:text-orange-600 disabled:opacity-60"
+                  >
+                    {d.file_name} {openingId === d.id ? <Loader2 size={11} className="shrink-0 animate-spin" /> : <ExternalLink size={11} className="shrink-0" />}
+                  </button>
+                ) : d.file_url ? (
                   <a
                     href={d.file_url}
                     target="_blank"
