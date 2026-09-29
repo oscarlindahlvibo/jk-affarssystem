@@ -12,7 +12,9 @@ export type ImportFieldKey =
   | "unloadingPlace"
   | "waypoint"
   | "loadingDate"
+  | "loadingTime"
   | "deliveryDate"
+  | "deliveryTime"
   | "cargo"
   | "length"
   | "width"
@@ -57,7 +59,9 @@ export const IMPORT_FIELDS: ImportFieldDef[] = [
   { key: "unloadingPlace", label: "Lossningsplats", required: true, synonyms: ["till", "lossningsplats", "lossplats", "lossplats/tid", "destination", "leveransplats"] },
   { key: "waypoint", label: "Mellanpunkt / via", synonyms: ["via", "mellanpunkt", "waypoint"] },
   { key: "loadingDate", label: "Lastningsdatum", synonyms: ["lastdatum", "lastningsdatum", "avgångsdatum"] },
+  { key: "loadingTime", label: "Lastningstid", synonyms: ["lastningstid", "lasttid", "avgångstid"] },
   { key: "deliveryDate", label: "Leveransdatum", synonyms: ["leveransdatum", "leverans", "ankomstdatum", "lossningsdatum", "lossdatum"] },
+  { key: "deliveryTime", label: "Lossningstid", synonyms: ["lossningstid", "losstid", "ankomsttid", "leveranstid"] },
   { key: "cargo", label: "Gods", synonyms: ["gods", "godsbeskrivning", "beskrivning"] },
   { key: "length", label: "Längd", synonyms: ["längd", "längd (m)", "l"] },
   { key: "width", label: "Bredd", synonyms: ["bredd", "bredd (m)", "b"] },
@@ -150,7 +154,9 @@ export interface MappedRowData {
   unloadingPlace: string;
   waypoint: string;
   loadingDate: string;
+  loadingTime: string;
   deliveryDate: string;
+  deliveryTime: string;
   cargo: string;
   length: number | null;
   width: number | null;
@@ -224,6 +230,17 @@ function parseDate(raw: string): string {
   return cleaned;
 }
 
+function parseTime(raw: string): string {
+  const cleaned = cleanCell(raw);
+  if (!cleaned) return "";
+  const match = /(?:kl\.?\s*)?(\d{1,2})[.:](\d{2})/i.exec(cleaned);
+  if (!match) return "";
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return "";
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
 // Plats-kolumnerna innehåller ibland en klockslagsangivelse, t.ex. "Tingsryd kl.14".
 // Vi behåller hela texten men kan i framtiden separera ut tiden vid behov.
 function cleanPlace(raw: string): string {
@@ -267,7 +284,9 @@ export function mapRow(row: string[], mapping: ColumnMapping): MappedRowData {
     unloadingPlace: cleanPlace(get("unloadingPlace")),
     waypoint: get("waypoint"),
     loadingDate: parseDate(get("loadingDate")),
+    loadingTime: parseTime(get("loadingTime")),
     deliveryDate: parseDate(get("deliveryDate")),
+    deliveryTime: parseTime(get("deliveryTime")),
     cargo,
     length: parseNumber(get("length")) ?? dims?.length ?? null,
     width: parseNumber(get("width")) ?? dims?.width ?? null,

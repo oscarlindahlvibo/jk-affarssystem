@@ -13,7 +13,7 @@ import {
 import { useStore } from "../data/store";
 import { Panel } from "../components/ui/Panel";
 import { StatusBadge } from "../components/ui/StatusBadge";
-import { formatDate, timeAgo } from "../lib/format";
+import { formatDate, formatDateAndTime, timeAgo } from "../lib/format";
 import { getMissingFields, isProjectActiveForFollowUp } from "../lib/validation";
 import { TASK_CATEGORY_STYLES } from "../lib/status";
 
@@ -120,7 +120,7 @@ export function Dashboard() {
                     {p.project_number} · {p.name}
                   </Link>
                   <div className="text-xs text-slate-500">
-                    {p.customer?.company_name} · lastning {formatDate(p.planned_loading_date)}
+                    {p.customer?.company_name} · lastning {formatDateAndTime(p.planned_loading_date, p.planned_loading_time)}
                   </div>
                 </div>
                 <span className="status-pill shrink-0 bg-amber-100 text-amber-700">Väntar på godkännande</span>

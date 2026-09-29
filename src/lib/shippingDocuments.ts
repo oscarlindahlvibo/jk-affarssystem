@@ -122,13 +122,13 @@ export async function generateCmrPdf(project: Project) {
     `Place / Plats: ${safe(loading?.name)}`,
     `Address / Adress: ${safe(loading?.address)}`,
     `Date / Datum: ${safe(project.planned_loading_date)}`,
-    "Arrival/departure time / Ankomst/avgång: __________",
+    `Arrival/departure time / Ankomst/avgång: ${safe(project.planned_loading_time?.slice(0, 5))}`,
   ].join("\n");
   const delivery = [
     `Place / Plats: ${safe(unloading?.name)}`,
     `Address / Adress: ${safe(unloading?.address)}`,
     `Date / Datum: ${safe(project.planned_delivery_date)}`,
-    "Opening/arrival time / Tid: __________",
+    `Opening/arrival time / Tid: ${safe(project.planned_delivery_time?.slice(0, 5))}`,
   ].join("\n");
   const documents = [project.source_document_ref, project.customer_reference].filter(Boolean).join(", ") || "-";
   const usefulParticulars = [

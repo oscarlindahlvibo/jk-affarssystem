@@ -7,7 +7,7 @@ import { Field, inputClass } from "../components/ui/Field";
 import { AddressAutocomplete } from "../components/ui/AddressAutocomplete";
 import { Panel } from "../components/ui/Panel";
 import { StatusBadge } from "../components/ui/StatusBadge";
-import { formatDate, formatDateTime } from "../lib/format";
+import { formatDateAndTime, formatDateTime } from "../lib/format";
 import { calculateRouteDistance } from "../lib/routeDistance";
 import { PROJECT_STATUSES, type BookingApprovalStatus, type TransportType } from "../types";
 
@@ -26,7 +26,9 @@ const initialForm: CustomerBookingInput = {
   name: "",
   transport_type: "Specialtransport",
   planned_loading_date: "",
+  planned_loading_time: "",
   planned_delivery_date: "",
+  planned_delivery_time: "",
   loading_name: "",
   loading_address: "",
   loading_contact_name: "",
@@ -187,8 +189,14 @@ export function CustomerPortalPage() {
               <Field label="Önskat lastningsdatum">
                 <input type="date" className={inputClass} value={form.planned_loading_date} onChange={(e) => update("planned_loading_date", e.target.value)} />
               </Field>
-              <Field label="Önskat leveransdatum">
+              <Field label="Önskad lastningstid">
+                <input type="time" className={inputClass} value={form.planned_loading_time} onChange={(e) => update("planned_loading_time", e.target.value)} />
+              </Field>
+              <Field label="Önskat lossningsdatum">
                 <input type="date" className={inputClass} value={form.planned_delivery_date} onChange={(e) => update("planned_delivery_date", e.target.value)} />
+              </Field>
+              <Field label="Önskad lossningstid">
+                <input type="time" className={inputClass} value={form.planned_delivery_time} onChange={(e) => update("planned_delivery_time", e.target.value)} />
               </Field>
               <Field label="Kundens referens">
                 <input className={inputClass} value={form.customer_reference} onChange={(e) => update("customer_reference", e.target.value)} placeholder="Ordernummer, projektnummer..." />
@@ -370,7 +378,7 @@ export function CustomerPortalPage() {
                         {(p.cargo_items?.length ?? 0) > 1 ? ` + ${(p.cargo_items?.length ?? 1) - 1} rad(er)` : ""}
                       </div>
                       <div>{loading?.name ?? "Lastning saknas"} → {unloading?.name ?? "Lossning saknas"}</div>
-                      <div className="flex items-center gap-1"><Clock size={12} /> Lastning {formatDate(p.planned_loading_date)}</div>
+                      <div className="flex items-center gap-1"><Clock size={12} /> Lastning {formatDateAndTime(p.planned_loading_date, p.planned_loading_time)}</div>
                     </div>
                     {customerNotes.length > 0 && (
                       <div className="mt-3 border-t border-border pt-3">

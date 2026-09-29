@@ -61,7 +61,9 @@ export function OrderImportPage() {
   const [unloadingContactName, setUnloadingContactName] = useState("");
   const [unloadingContactPhone, setUnloadingContactPhone] = useState("");
   const [loadingDate, setLoadingDate] = useState("");
+  const [loadingTime, setLoadingTime] = useState("");
   const [deliveryDate, setDeliveryDate] = useState("");
+  const [deliveryTime, setDeliveryTime] = useState("");
   const [deliveryTerms, setDeliveryTerms] = useState("");
   const [transportType, setTransportType] = useState<TransportType>("Specialtransport");
   const [supplierId, setSupplierId] = useState("");
@@ -188,7 +190,9 @@ export function OrderImportPage() {
         special_requirements: null,
         delivery_terms: combinedTerms,
         planned_loading_date: loadingDate || null,
+        planned_loading_time: loadingTime || null,
         planned_delivery_date: deliveryDate || null,
+        planned_delivery_time: deliveryTime || null,
         supplier_id: supplierId || null,
         price: null,
         cost: null,
@@ -355,7 +359,9 @@ export function OrderImportPage() {
                 <Field label="Kontakt vid lossning"><input className={inputClass} value={unloadingContactName} onChange={(e) => setUnloadingContactName(e.target.value)} /></Field>
                 <Field label="Telefon"><input className={inputClass} value={unloadingContactPhone} onChange={(e) => setUnloadingContactPhone(e.target.value)} /></Field>
                 <Field label="Planerat lastningsdatum"><input type="date" className={inputClass} value={loadingDate} onChange={(e) => setLoadingDate(e.target.value)} /></Field>
-                <Field label="Planerat leveransdatum"><input type="date" className={inputClass} value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} /></Field>
+                <Field label="Planerad lastningstid"><input type="time" className={inputClass} value={loadingTime} onChange={(e) => setLoadingTime(e.target.value)} /></Field>
+                <Field label="Planerat lossningsdatum"><input type="date" className={inputClass} value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} /></Field>
+                <Field label="Planerad lossningstid"><input type="time" className={inputClass} value={deliveryTime} onChange={(e) => setDeliveryTime(e.target.value)} /></Field>
                 <Field label="Leveransvillkor"><input className={inputClass} value={deliveryTerms} onChange={(e) => setDeliveryTerms(e.target.value)} /></Field>
                 <Field label="Transporttyp">
                   <select className={inputClass} value={transportType} onChange={(e) => setTransportType(e.target.value as TransportType)}>

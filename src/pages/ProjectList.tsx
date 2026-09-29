@@ -6,7 +6,7 @@ import { StatusBadge } from "../components/ui/StatusBadge";
 import { Button } from "../components/ui/Button";
 import { MissingFieldsBadge } from "../components/ui/MissingFieldsBadge";
 import { ProjectFormModal } from "../components/projects/NewProjectModal";
-import { formatDate } from "../lib/format";
+import { formatDateAndTime } from "../lib/format";
 import { downloadCsv } from "../lib/csv";
 import { getMissingFields, isComplete } from "../lib/validation";
 import { needsFollowVehicle } from "../lib/transportRules";
@@ -157,7 +157,7 @@ export function ProjectList() {
 
   function handleExport() {
     const header = [
-      "Projektnummer", "Kund", "Gods", "Från", "Till", "Lastningsdatum", "Leveransdatum",
+      "Projektnummer", "Kund", "Gods", "Från", "Till", "Lastning", "Lossning",
       "Höjd", "Bredd", "Vikt", "Status", "Ansvarig", "Ruttmätning", "Kräver följebil", "Fakturering", "Saknade uppgifter",
     ];
     const rows = filtered.map((p) => {
@@ -170,8 +170,8 @@ export function ProjectList() {
         cargo?.description,
         loading?.name,
         unloading?.name,
-        formatDate(p.planned_loading_date),
-        formatDate(p.planned_delivery_date),
+        formatDateAndTime(p.planned_loading_date, p.planned_loading_time),
+        formatDateAndTime(p.planned_delivery_date, p.planned_delivery_time),
         cargo?.height_m,
         cargo?.width_m,
         cargo?.weight_ton,
@@ -305,7 +305,7 @@ export function ProjectList() {
                 </div>
                 <div>
                   <div className="text-slate-400">Lastning</div>
-                  <div>{formatDate(p.planned_loading_date)}</div>
+                  <div>{formatDateAndTime(p.planned_loading_date, p.planned_loading_time)}</div>
                 </div>
                 <div>
                   <div className="text-slate-400">Ansvarig</div>
@@ -383,8 +383,8 @@ export function ProjectList() {
                   </td>
                   <td className="px-4 py-3 text-slate-600"><span className="flex items-center gap-1 text-xs"><MapPin size={11} />{loading?.name ?? "–"}</span></td>
                   <td className="px-4 py-3 text-slate-600"><span className="flex items-center gap-1 text-xs"><MapPin size={11} />{unloading?.name ?? "–"}</span></td>
-                  <td className="px-4 py-3 text-slate-600">{formatDate(p.planned_loading_date)}</td>
-                  <td className="px-4 py-3 text-slate-600">{formatDate(p.planned_delivery_date)}</td>
+                  <td className="px-4 py-3 text-slate-600">{formatDateAndTime(p.planned_loading_date, p.planned_loading_time)}</td>
+                  <td className="px-4 py-3 text-slate-600">{formatDateAndTime(p.planned_delivery_date, p.planned_delivery_time)}</td>
                   <td className="px-4 py-3 text-slate-600">{cargo?.height_m ? `${cargo.height_m} m` : "–"}</td>
                   <td className="px-4 py-3 text-slate-600">{cargo?.width_m ? `${cargo.width_m} m` : "–"}</td>
                   <td className="px-4 py-3 text-slate-600">{cargo?.weight_ton ? `${cargo.weight_ton} t` : "–"}</td>

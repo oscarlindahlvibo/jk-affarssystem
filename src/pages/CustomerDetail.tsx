@@ -7,7 +7,7 @@ import { Button } from "../components/ui/Button";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { Modal } from "../components/ui/Modal";
 import { Field, inputClass } from "../components/ui/Field";
-import { formatDate } from "../lib/format";
+import { formatDateAndTime } from "../lib/format";
 import { usePermissions } from "../lib/usePermissions";
 
 export function CustomerDetail() {
@@ -103,7 +103,7 @@ export function CustomerDetail() {
                     <Link to={`/projekt/${p.id}`} className="text-sm font-medium text-slate-800 hover:text-orange-600">
                       {p.project_number} · {p.name}
                     </Link>
-                    <div className="text-xs text-slate-500">Lastning {formatDate(p.planned_loading_date)}</div>
+                    <div className="text-xs text-slate-500">Lastning {formatDateAndTime(p.planned_loading_date, p.planned_loading_time)}</div>
                   </div>
                   <StatusBadge status={p.status} />
                 </li>

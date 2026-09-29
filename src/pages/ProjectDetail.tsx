@@ -6,7 +6,7 @@ import { Panel } from "../components/ui/Panel";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { Button } from "../components/ui/Button";
 import { STATUS_STYLES } from "../lib/status";
-import { formatDate, formatDateTime } from "../lib/format";
+import { formatDate, formatDateAndTime, formatDateTime } from "../lib/format";
 import { INVOICE_STATUSES, PROJECT_STATUSES } from "../types";
 import { DocumentsSection } from "../components/projects/DocumentsSection";
 import { NotesSection } from "../components/projects/NotesSection";
@@ -293,8 +293,8 @@ export function ProjectDetail() {
               {(unloading?.contact_name || unloading?.contact_phone) && (
                 <InfoItem label="Kontakt vid lossning" value={[unloading?.contact_name, unloading?.contact_phone].filter(Boolean).join(" · ")} />
               )}
-              <InfoItem label="Planerat lastningsdatum" value={formatDate(project.planned_loading_date)} />
-              <InfoItem label="Planerat leveransdatum" value={formatDate(project.planned_delivery_date)} />
+              <InfoItem label="Planerad lastning" value={formatDateAndTime(project.planned_loading_date, project.planned_loading_time)} />
+              <InfoItem label="Planerad lossning" value={formatDateAndTime(project.planned_delivery_date, project.planned_delivery_time)} />
               <InfoItem label="Transporttyp" value={project.transport_type} />
               {waypoints.length > 0 && (
                 <InfoItem label="Mellanadress / via" value={waypoints.map((w) => w.address || w.name).join(", ")} />

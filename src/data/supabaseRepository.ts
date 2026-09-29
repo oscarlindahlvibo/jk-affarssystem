@@ -131,7 +131,7 @@ export async function loadLiveStoreData(): Promise<LiveStoreData> {
 
 const PROJECT_COLUMNS = [
   "id", "org_id", "project_number", "name", "customer_id", "contact_person_id", "responsible_id", "status",
-  "transport_type", "special_requirements", "planned_loading_date", "planned_delivery_date", "supplier_id", "price", "cost",
+  "transport_type", "special_requirements", "planned_loading_date", "planned_loading_time", "planned_delivery_date", "planned_delivery_time", "supplier_id", "price", "cost",
   "invoice_status", "customer_reference", "booking_source", "booking_approval_status", "requested_by_customer_user_id",
   "approved_at", "approved_by", "source_document_ref", "delivery_terms", "vehicle", "driver_name", "carrier_order_number",
   "route_distance_km", "created_at", "updated_at",

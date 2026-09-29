@@ -1,7 +1,7 @@
 import { useParams, Link } from "react-router-dom";
 import { Printer, ArrowLeft } from "lucide-react";
 import { useStore } from "../data/store";
-import { formatDate, formatDateTime } from "../lib/format";
+import { formatDate, formatDateAndTime, formatDateTime } from "../lib/format";
 
 export function ProjectPrint() {
   const { id } = useParams<{ id: string }>();
@@ -63,8 +63,8 @@ export function ProjectPrint() {
           <Item label="Lossningsadress" value={unloading?.address} />
           <Item label="Mellanadress / via" value={waypoint?.address ?? waypoint?.name} />
           <Item label="Beräknad sträcka" value={project.route_distance_km ? `${project.route_distance_km.toLocaleString("sv-SE")} km` : undefined} />
-          <Item label="Planerat lastningsdatum" value={formatDate(project.planned_loading_date)} />
-          <Item label="Planerat leveransdatum" value={formatDate(project.planned_delivery_date)} />
+          <Item label="Planerad lastning" value={formatDateAndTime(project.planned_loading_date, project.planned_loading_time)} />
+          <Item label="Planerad lossning" value={formatDateAndTime(project.planned_delivery_date, project.planned_delivery_time)} />
           <Item label="Transporttyp" value={project.transport_type} />
           <Item
             label="Transportörer"

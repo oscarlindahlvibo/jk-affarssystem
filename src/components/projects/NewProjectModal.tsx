@@ -101,7 +101,9 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
   const [transportType, setTransportType] = useState<TransportType>(project?.transport_type ?? "Specialtransport");
   const [template, setTemplate] = useState<ProjectTemplateKey | "">("");
   const [loadingDate, setLoadingDate] = useState(project?.planned_loading_date ?? "");
+  const [loadingTime, setLoadingTime] = useState(project?.planned_loading_time?.slice(0, 5) ?? "");
   const [deliveryDate, setDeliveryDate] = useState(project?.planned_delivery_date ?? "");
+  const [deliveryTime, setDeliveryTime] = useState(project?.planned_delivery_time?.slice(0, 5) ?? "");
   const [loadingPlace, setLoadingPlace] = useState(existingLoading?.name ?? "");
   const [loadingAddress, setLoadingAddress] = useState(existingLoading?.address ?? "");
   const [loadingContactName, setLoadingContactName] = useState(existingLoading?.contact_name ?? "");
@@ -356,7 +358,9 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
       special_requirements: specialRequirements || null,
       delivery_terms: deliveryTerms || null,
       planned_loading_date: loadingDate || null,
+      planned_loading_time: loadingTime || null,
       planned_delivery_date: deliveryDate || null,
+      planned_delivery_time: deliveryTime || null,
       supplier_id: selectedSupplierIds[0] ?? null,
       supplier_ids: selectedSupplierIds,
       price: numOrNull(price),
@@ -700,8 +704,14 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
             <Field label="Planerat lastningsdatum">
               <input type="date" className={inputClass} value={loadingDate ?? ""} onChange={(e) => setLoadingDate(e.target.value)} />
             </Field>
-            <Field label="Planerat leveransdatum">
+            <Field label="Planerad lastningstid">
+              <input type="time" className={inputClass} value={loadingTime} onChange={(e) => setLoadingTime(e.target.value)} />
+            </Field>
+            <Field label="Planerat lossningsdatum">
               <input type="date" className={inputClass} value={deliveryDate ?? ""} onChange={(e) => setDeliveryDate(e.target.value)} />
+            </Field>
+            <Field label="Planerad lossningstid">
+              <input type="time" className={inputClass} value={deliveryTime} onChange={(e) => setDeliveryTime(e.target.value)} />
             </Field>
             <Field label="Fordon">
               <input className={inputClass} value={vehicle ?? ""} onChange={(e) => setVehicle(e.target.value)} placeholder="t.ex. 2 axl låglastare" />

@@ -52,7 +52,9 @@ export interface CustomerBookingInput {
   name: string;
   transport_type: TransportType;
   planned_loading_date: string;
+  planned_loading_time: string;
   planned_delivery_date: string;
+  planned_delivery_time: string;
   loading_name: string;
   loading_address: string;
   loading_contact_name: string;
@@ -515,7 +517,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         transport_type: data.transport_type,
         special_requirements: data.special_requirements.trim() || null,
         planned_loading_date: data.planned_loading_date || null,
+        planned_loading_time: data.planned_loading_time || null,
         planned_delivery_date: data.planned_delivery_date || null,
+        planned_delivery_time: data.planned_delivery_time || null,
         supplier_id: null,
         price: null,
         cost: null,

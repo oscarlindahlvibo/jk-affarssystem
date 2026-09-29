@@ -338,7 +338,9 @@ export interface Project {
   transport_type: TransportType;
   special_requirements: string | null;
   planned_loading_date: string | null;
+  planned_loading_time?: string | null;
   planned_delivery_date: string | null;
+  planned_delivery_time?: string | null;
   supplier_id: string | null;
   price: number | null;
   cost: number | null;
