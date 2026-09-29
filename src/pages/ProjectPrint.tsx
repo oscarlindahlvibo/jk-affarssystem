@@ -15,6 +15,7 @@ export function ProjectPrint() {
   const cargoItems = project.cargo_items ?? [];
   const loading = project.locations?.find((l) => l.type === "lastning");
   const unloading = project.locations?.find((l) => l.type === "lossning");
+  const waypoint = project.locations?.find((l) => l.type === "mellanpunkt");
   const link = project.measurement_link;
 
   return (
@@ -60,6 +61,7 @@ export function ProjectPrint() {
           <Item label="Lossningsort" value={unloading?.name} />
           <Item label="Lastningsadress" value={loading?.address} />
           <Item label="Lossningsadress" value={unloading?.address} />
+          <Item label="Mellanadress / via" value={waypoint?.address ?? waypoint?.name} />
           <Item label="Beräknad sträcka" value={project.route_distance_km ? `${project.route_distance_km.toLocaleString("sv-SE")} km` : undefined} />
           <Item label="Planerat lastningsdatum" value={formatDate(project.planned_loading_date)} />
           <Item label="Planerat leveransdatum" value={formatDate(project.planned_delivery_date)} />

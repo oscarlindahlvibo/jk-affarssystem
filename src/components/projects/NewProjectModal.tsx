@@ -106,7 +106,8 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
   const [unloadingAddress, setUnloadingAddress] = useState(existingUnloading?.address ?? "");
   const [unloadingContactName, setUnloadingContactName] = useState(existingUnloading?.contact_name ?? "");
   const [unloadingContactPhone, setUnloadingContactPhone] = useState(existingUnloading?.contact_phone ?? "");
-  const [waypoint, setWaypoint] = useState(existingWaypoint?.name ?? "");
+  const [waypointPlace, setWaypointPlace] = useState(existingWaypoint?.name ?? "");
+  const [waypointAddress, setWaypointAddress] = useState(existingWaypoint?.address ?? existingWaypoint?.name ?? "");
   const [routeDistanceKm, setRouteDistanceKm] = useState(project?.route_distance_km?.toString() ?? "");
   const [distanceStatus, setDistanceStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [distanceMessage, setDistanceMessage] = useState<string | null>(null);
@@ -203,7 +204,15 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
         contact_phone: loadingContactPhone || null,
         order_index: 0,
       });
-    if (waypoint) locations.push({ id: existingWaypoint?.id ?? "loc-mellan", project_id: "", type: "mellanpunkt", name: waypoint, address: null, order_index: 1 });
+    if (waypointPlace || waypointAddress)
+      locations.push({
+        id: existingWaypoint?.id ?? "loc-mellan",
+        project_id: "",
+        type: "mellanpunkt",
+        name: waypointPlace || waypointAddress,
+        address: waypointAddress || null,
+        order_index: 1,
+      });
     if (unloadingPlace)
       locations.push({
         id: existingUnloading?.id ?? "loc-lossning",
@@ -222,7 +231,11 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
     setDistanceStatus("loading");
     setDistanceMessage(null);
     try {
-      const result = await calculateRouteDistance([loadingAddress || loadingPlace, waypoint, unloadingAddress || unloadingPlace]);
+      const result = await calculateRouteDistance([
+        loadingAddress || loadingPlace,
+        waypointAddress || waypointPlace,
+        unloadingAddress || unloadingPlace,
+      ]);
       setRouteDistanceKm(result.distanceKm.toString());
       setDistanceStatus("success");
       setDistanceMessage(
@@ -520,8 +533,18 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
                 <input className={inputClass} value={unloadingContactPhone ?? ""} onChange={(e) => setUnloadingContactPhone(e.target.value)} />
               </Field>
             </div>
-            <Field label="Mellanpunkt / via">
-              <input className={inputClass} value={waypoint} onChange={(e) => setWaypoint(e.target.value)} placeholder="Valfritt" />
+            <Field label="Mellanadress / via">
+              <AddressAutocomplete
+                value={waypointAddress}
+                onChange={(value) => {
+                  setWaypointAddress(value);
+                  setWaypointPlace("");
+                }}
+                onSelect={(suggestion) => {
+                  setWaypointPlace(suggestion.place || suggestion.address);
+                }}
+                placeholder="Valfri adress längs rutten"
+              />
             </Field>
             <Field label="Beräknad sträcka">
               <div className="flex items-center gap-2">
@@ -543,7 +566,11 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
                 disabled={distanceStatus === "loading" || (!loadingPlace && !loadingAddress) || (!unloadingPlace && !unloadingAddress)}
               >
                 {distanceStatus === "loading" ? <Route size={14} /> : <MapPin size={14} />}
-                {distanceStatus === "loading" ? "Beräknar sträcka..." : "Beräkna sträcka mellan adresser"}
+                {distanceStatus === "loading"
+                  ? "Beräknar sträcka..."
+                  : waypointAddress || waypointPlace
+                    ? "Beräkna sträcka via mellanadress"
+                    : "Beräkna sträcka mellan adresser"}
               </Button>
               {distanceMessage && (
                 <p className={`mt-2 text-xs ${distanceStatus === "error" ? "text-red-600" : "text-slate-500"}`}>{distanceMessage}</p>

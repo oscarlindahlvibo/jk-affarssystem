@@ -297,7 +297,7 @@ export function ProjectDetail() {
               <InfoItem label="Planerat leveransdatum" value={formatDate(project.planned_delivery_date)} />
               <InfoItem label="Transporttyp" value={project.transport_type} />
               {waypoints.length > 0 && (
-                <InfoItem label="Mellanpunkter" value={waypoints.map((w) => w.name).join(", ")} />
+                <InfoItem label="Mellanadress / via" value={waypoints.map((w) => w.address || w.name).join(", ")} />
               )}
               <InfoItem label="Transportör" value={project.supplier?.company_name} />
               <InfoItem label="Fordon" value={project.vehicle} />
