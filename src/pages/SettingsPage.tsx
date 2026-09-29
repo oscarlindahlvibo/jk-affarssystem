@@ -1,14 +1,12 @@
 import { Link } from "react-router-dom";
-import { Calculator, Database, CheckCircle2, XCircle, HardDrive, Loader2 } from "lucide-react";
+import { Calculator, Users } from "lucide-react";
 import { Panel } from "../components/ui/Panel";
-import { Button } from "../components/ui/Button";
-import { isSupabaseConfigured } from "../lib/supabase";
-import { useGoogleDrive } from "../lib/googleDriveContext";
-import { profiles } from "../data/mockData";
-import { PROJECT_STATUSES } from "../types";
+import { useStore } from "../data/store";
+import { PROJECT_STATUSES, ROLE_LABELS, USER_STATUS_LABELS } from "../types";
 
 export function SettingsPage() {
-  const drive = useGoogleDrive();
+  const { profiles } = useStore();
+  const sortedProfiles = [...profiles].sort((a, b) => a.full_name.localeCompare(b.full_name, "sv"));
 
   return (
     <div className="space-y-6">
@@ -28,72 +26,35 @@ export function SettingsPage() {
               </p>
             </div>
           </Link>
-        </div>
-      </Panel>
-
-      <Panel title="Anslutningar">
-        <div className="flex flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-center">
-          <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${isSupabaseConfigured ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
-            <Database size={18} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium text-slate-800">Supabase (kunder, projekt, statusar)</div>
-            <div className="text-xs text-slate-500">
-              {isSupabaseConfigured
-                ? "Ansluten – appen läser och skriver mot Supabase."
-                : "Ej ansluten – appen körs mot mockdata. Lägg till VITE_SUPABASE_URL och VITE_SUPABASE_ANON_KEY i .env för att aktivera."}
+          <Link
+            to="/personal"
+            className="flex items-start gap-3 rounded-lg border border-border p-4 transition hover:border-orange-200 hover:bg-orange-50/60"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-700">
+              <Users size={18} />
             </div>
-          </div>
-          {isSupabaseConfigured ? (
-            <CheckCircle2 size={18} className="text-green-600" />
-          ) : (
-            <XCircle size={18} className="text-amber-600" />
-          )}
-        </div>
-        <p className="mt-3 text-xs text-slate-500">
-          SQL-schema för databasen finns i <code className="rounded bg-slate-100 px-1.5 py-0.5">supabase/migrations/</code>,
-          redo att köras direkt i ett Supabase-projekt.
-        </p>
-
-        <div className="mt-4 flex flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-center">
-          <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${drive.isConnected ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
-            <HardDrive size={18} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium text-slate-800">Google Drive (dokumentfiler)</div>
-            <div className="text-xs text-slate-500">
-              {!drive.isConfigured
-                ? "Ej konfigurerad – lägg till VITE_GOOGLE_CLIENT_ID i .env. Se README för steg-för-steg-guide."
-                : drive.isConnected
-                ? "Ansluten – uppladdade dokument sparas i mappen \"JK Projektlogistik - Dokument\" i din Google Drive."
-                : "Konfigurerad men inte ansluten. Klicka Anslut för att logga in med Google."}
+            <div>
+              <div className="text-sm font-medium text-slate-800">Personal och behörigheter</div>
+              <p className="mt-1 text-xs text-slate-500">
+                Bjud in användare och administrera roller för JK:s personal.
+              </p>
             </div>
-            {drive.error && <div className="mt-1 text-xs text-red-600">{drive.error}</div>}
-          </div>
-          {drive.isConfigured && (
-            drive.isConnected ? (
-              <Button variant="secondary" onClick={drive.disconnect}>Koppla bort</Button>
-            ) : (
-              <Button onClick={drive.connect} disabled={drive.isConnecting}>
-                {drive.isConnecting ? <Loader2 size={14} className="animate-spin" /> : <HardDrive size={14} />}
-                Anslut till Google Drive
-              </Button>
-            )
-          )}
+          </Link>
         </div>
-        <p className="mt-3 text-xs text-slate-500">
-          Appen begär endast åtkomst till filer den själv skapar (scope <code className="rounded bg-slate-100 px-1 py-0.5">drive.file</code>) –
-          den kan inte se övriga filer i din Google Drive.
-        </p>
       </Panel>
 
       <Panel title="Användare / roller">
         <div className="space-y-3 md:hidden">
-          {profiles.map((p) => (
+          {sortedProfiles.map((p) => (
             <div key={p.id} className="rounded-lg border border-border p-3">
               <div className="font-medium text-slate-800">{p.full_name}</div>
               <div className="mt-0.5 break-all text-xs text-slate-500">{p.email}</div>
-              <span className="status-pill mt-2 bg-navy-900/5 text-navy-900">{p.role}</span>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className="status-pill bg-navy-900/5 text-navy-900">{ROLE_LABELS[p.role]}</span>
+                <span className={`status-pill ${p.status === "aktiv" ? "bg-green-100 text-green-700" : p.status === "inbjuden" ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-500"}`}>
+                  {USER_STATUS_LABELS[p.status]}
+                </span>
+              </div>
             </div>
           ))}
         </div>
@@ -103,20 +64,27 @@ export function SettingsPage() {
               <th className="py-2 font-medium">Namn</th>
               <th className="py-2 font-medium">E-post</th>
               <th className="py-2 font-medium">Roll</th>
+              <th className="py-2 font-medium">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {profiles.map((p) => (
+            {sortedProfiles.map((p) => (
               <tr key={p.id}>
                 <td className="py-2.5 font-medium text-slate-800">{p.full_name}</td>
                 <td className="py-2.5 text-slate-600">{p.email}</td>
                 <td className="py-2.5">
-                  <span className="status-pill bg-navy-900/5 text-navy-900">{p.role}</span>
+                  <span className="status-pill bg-navy-900/5 text-navy-900">{ROLE_LABELS[p.role]}</span>
+                </td>
+                <td className="py-2.5">
+                  <span className={`status-pill ${p.status === "aktiv" ? "bg-green-100 text-green-700" : p.status === "inbjuden" ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-500"}`}>
+                    {USER_STATUS_LABELS[p.status]}
+                  </span>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+        {sortedProfiles.length === 0 && <p className="text-sm text-slate-500">Inga användare registrerade.</p>}
       </Panel>
 
       <Panel title="Statusflöde för projekt">
