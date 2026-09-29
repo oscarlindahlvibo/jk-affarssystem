@@ -46,7 +46,7 @@ as $$
   select org_id from profiles where id = auth.uid() and status = 'aktiv';
 $$;
 
-create or replace function current_role()
+create or replace function current_profile_role()
 returns text
 language sql
 security definer

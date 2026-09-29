@@ -128,7 +128,10 @@ prune_backups() {
 
   [[ -d "${backup_root}" ]] || return 0
 
-  for instance_root in "${backup_root}/shared" "${backup_root}/accounted"; do
+  for instance_root in \
+    "${backup_root}/shared" \
+    "${backup_root}/accounted" \
+    "${backup_root}/jk"; do
     [[ -d "${instance_root}" ]] || continue
 
     while IFS= read -r -d '' expired_dir; do
@@ -153,6 +156,11 @@ backup_instance \
   "accounted" \
   "supabase-accounted-db" \
   "/home/vibo/accounted/supabase"
+
+backup_instance \
+  "jk" \
+  "supabase-jk-db" \
+  "/home/vibo/jkprojekt/supabase"
 
 prune_backups "${BACKUP_ROOT}" "${RETENTION_DAYS}"
 if [[ "${BACKUP_ROOT}" != "${FALLBACK_BACKUP_ROOT}" ]]; then

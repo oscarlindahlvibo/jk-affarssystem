@@ -1,0 +1,57 @@
+name: supabase-jk
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "3"
+
+services:
+  studio:
+    container_name: supabase-jk-studio
+    logging: *default-logging
+
+  api-gw:
+    container_name: supabase-jk-envoy
+    ports: !override
+      - 127.0.0.1:${API_GW_HTTP_PORT:-28000}:8000/tcp
+    logging: *default-logging
+
+  auth:
+    container_name: supabase-jk-auth
+    logging: *default-logging
+
+  rest:
+    container_name: supabase-jk-rest
+    logging: *default-logging
+
+  realtime:
+    container_name: realtime-dev.supabase-jk-realtime
+    logging: *default-logging
+
+  storage:
+    container_name: supabase-jk-storage
+    logging: *default-logging
+
+  imgproxy:
+    container_name: supabase-jk-imgproxy
+    logging: *default-logging
+
+  meta:
+    container_name: supabase-jk-meta
+    logging: *default-logging
+
+  functions:
+    container_name: supabase-jk-edge-functions
+    logging: *default-logging
+
+  db:
+    container_name: supabase-jk-db
+    logging: *default-logging
+
+  supavisor:
+    container_name: supabase-jk-pooler
+    ports: !override
+      - 127.0.0.1:${POSTGRES_PORT:-25432}:5432/tcp
+      - 127.0.0.1:${POOLER_PROXY_PORT_TRANSACTION:-26543}:6543/tcp
+    logging: *default-logging

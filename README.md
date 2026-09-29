@@ -70,7 +70,7 @@ Appen blockerar automatiskt mockinloggning på hosten `projekt.jkprojekt.se`. In
 
 [`ops/backup-self-hosted-supabase.sh`](ops/backup-self-hosted-supabase.sh) skapar en
 logisk PostgreSQL-dump samt ett arkiv med Storage och återställningskonfiguration för
-serverns båda befintliga Supabase-instanser. Skriptet verifierar gzip-filer och
+serverns Supabase-instanser. Skriptet verifierar gzip-filer och
 SHA-256-checksummor innan en backup publiceras och behåller 30 dagar på RAID-målet.
 
 På servern körs skriptet var sjätte timme från användaren `vibo`. RAID-mappen behöver
