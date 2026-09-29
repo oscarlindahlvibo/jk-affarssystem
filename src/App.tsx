@@ -23,6 +23,7 @@ import { ProjectPrint } from "./pages/ProjectPrint";
 import { CustomerPortalPage } from "./pages/CustomerPortalPage";
 import { FreightCalculatorSettingsPage } from "./pages/FreightCalculatorSettingsPage";
 import { ContactSubmissionsPage } from "./pages/ContactSubmissionsPage";
+import { SetPasswordPage } from "./pages/SetPasswordPage";
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -61,6 +62,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/set-password" element={<SetPasswordPage />} />
       <Route
         element={
           <RequireAuth>

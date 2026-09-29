@@ -158,10 +158,11 @@ export function PersonnelPage() {
       <InviteModal
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
-        onInvite={(data) => {
-          const result = invitePersonnel(data);
+        onInvite={async (data) => {
+          const result = await invitePersonnel(data);
           if (result.ok) setInviteOpen(false);
           else setError(result.reason ?? null);
+          return result.ok;
         }}
       />
 
@@ -188,11 +189,12 @@ function InviteModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onInvite: (data: { full_name: string; email: string; role: UserRole }) => void;
+  onInvite: (data: { full_name: string; email: string; role: UserRole }) => Promise<boolean>;
 }) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<UserRole>("projektledare");
+  const [sending, setSending] = useState(false);
 
   function handleClose() {
     setFullName("");
@@ -204,13 +206,17 @@ function InviteModal({
   return (
     <Modal open={open} onClose={handleClose} title="Bjud in användare">
       <form
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
           if (!fullName.trim() || !email.trim()) return;
-          onInvite({ full_name: fullName.trim(), email: email.trim(), role });
-          setFullName("");
-          setEmail("");
-          setRole("projektledare");
+          setSending(true);
+          const sent = await onInvite({ full_name: fullName.trim(), email: email.trim(), role });
+          setSending(false);
+          if (sent) {
+            setFullName("");
+            setEmail("");
+            setRole("projektledare");
+          }
         }}
         className="space-y-4"
       >
@@ -233,8 +239,8 @@ function InviteModal({
           aktiverats.
         </p>
         <div className="flex justify-end gap-2 border-t border-border pt-4">
-          <Button type="button" variant="secondary" onClick={handleClose}>Avbryt</Button>
-          <Button type="submit">Skicka inbjudan</Button>
+          <Button type="button" variant="secondary" onClick={handleClose} disabled={sending}>Avbryt</Button>
+          <Button type="submit" disabled={sending}>{sending ? "Skickar..." : "Skicka inbjudan"}</Button>
         </div>
       </form>
     </Modal>

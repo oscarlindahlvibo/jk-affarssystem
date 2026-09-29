@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Phone, Mail, Globe, MapPin, Plus, Star, Pencil, ChevronRight, Trash2 } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Globe, MapPin, Plus, Star, Pencil, ChevronRight, Trash2, UserPlus } from "lucide-react";
 import { useStore } from "../data/store";
 import { Panel } from "../components/ui/Panel";
 import { Button } from "../components/ui/Button";
@@ -13,15 +13,18 @@ import { usePermissions } from "../lib/usePermissions";
 export function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getCustomer, getContactsByCustomer, getProjectsByCustomer, updateCustomer, deleteCustomer, addContactPerson } = useStore();
+  const { getCustomer, getContactsByCustomer, getProjectsByCustomer, updateCustomer, deleteCustomer, addContactPerson, customerUsers, inviteCustomerUser } = useStore();
   const permissions = usePermissions();
   const canEditCustomer = permissions.can("customers", "edit");
   const canDeleteCustomer = permissions.can("customers", "delete");
   const canCreateContact = permissions.can("contacts", "create");
+  const canInviteCustomer = permissions.can("users", "create");
   const customer = id ? getCustomer(id) : undefined;
 
   const [editOpen, setEditOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   if (!customer) {
     return (
@@ -36,6 +39,7 @@ export function CustomerDetail() {
 
   const contacts = getContactsByCustomer(customer.id);
   const custProjects = getProjectsByCustomer(customer.id);
+  const portalUsers = customerUsers.filter((user) => user.customer_id === customer.id);
 
   return (
     <div className="space-y-6">
@@ -109,17 +113,18 @@ export function CustomerDetail() {
           </Panel>
         </div>
 
-        <Panel
-          title="Kontaktpersoner"
-          action={
-            canCreateContact && (
-              <Button variant="secondary" onClick={() => setContactOpen(true)} className="!px-2.5 !py-1.5">
-                <Plus size={14} /> Ny kontakt
-              </Button>
-            )
-          }
-        >
-          <ul className="space-y-3">
+        <div className="space-y-6">
+          <Panel
+            title="Kontaktpersoner"
+            action={
+              canCreateContact && (
+                <Button variant="secondary" onClick={() => setContactOpen(true)} className="!px-2.5 !py-1.5">
+                  <Plus size={14} /> Ny kontakt
+                </Button>
+              )
+            }
+          >
+            <ul className="space-y-3">
             {contacts.map((c) => (
               <li key={c.id}>
                 <Link
@@ -143,8 +148,32 @@ export function CustomerDetail() {
               </li>
             ))}
             {contacts.length === 0 && <p className="text-sm text-slate-500">Inga kontaktpersoner tillagda.</p>}
-          </ul>
-        </Panel>
+            </ul>
+          </Panel>
+
+          <Panel
+            title="Kundportal"
+            action={canInviteCustomer ? (
+              <Button variant="secondary" onClick={() => { setInviteError(null); setInviteOpen(true); }} className="!px-2.5 !py-1.5">
+                <UserPlus size={14} /> Bjud in
+              </Button>
+            ) : undefined}
+          >
+            {inviteError && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{inviteError}</p>}
+            <ul className="space-y-2">
+              {portalUsers.map((user) => (
+                <li key={user.id} className="rounded-lg border border-border p-3">
+                  <div className="text-sm font-medium text-slate-800">{user.full_name}</div>
+                  <div className="break-all text-xs text-slate-500">{user.email}</div>
+                  <span className={`mt-2 inline-flex status-pill ${user.status === "aktiv" ? "bg-green-100 text-green-700" : user.status === "inbjuden" ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-500"}`}>
+                    {user.status === "aktiv" ? "Aktiv" : user.status === "inbjuden" ? "Inbjuden" : "Inaktiverad"}
+                  </span>
+                </li>
+              ))}
+              {portalUsers.length === 0 && <p className="text-sm text-slate-500">Inga användare har tillgång till kundportalen.</p>}
+            </ul>
+          </Panel>
+        </div>
       </div>
 
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Redigera kund" wide>
@@ -169,7 +198,88 @@ export function CustomerDetail() {
           onCancel={() => setContactOpen(false)}
         />
       </Modal>
+
+      <CustomerInviteModal
+        open={inviteOpen}
+        contacts={contacts}
+        onClose={() => setInviteOpen(false)}
+        onInvite={async (data) => {
+          const result = await inviteCustomerUser({ ...data, customer_id: customer.id });
+          if (!result.ok) {
+            setInviteError(result.reason ?? "Inbjudan kunde inte skickas.");
+            return false;
+          }
+          setInviteError(null);
+          setInviteOpen(false);
+          return true;
+        }}
+      />
     </div>
+  );
+}
+
+function CustomerInviteModal({
+  open,
+  contacts,
+  onClose,
+  onInvite,
+}: {
+  open: boolean;
+  contacts: ReturnType<typeof useStore>["contactPersons"];
+  onClose: () => void;
+  onInvite: (data: { contact_person_id: string | null; full_name: string; email: string }) => Promise<boolean>;
+}) {
+  const [contactId, setContactId] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [sending, setSending] = useState(false);
+
+  function selectContact(id: string) {
+    setContactId(id);
+    const contact = contacts.find((item) => item.id === id);
+    if (contact) {
+      setFullName(contact.name);
+      setEmail(contact.email ?? "");
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Bjud in till kundportalen">
+      <form
+        className="space-y-4"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          setSending(true);
+          const sent = await onInvite({ contact_person_id: contactId || null, full_name: fullName.trim(), email: email.trim() });
+          setSending(false);
+          if (sent) {
+            setContactId("");
+            setFullName("");
+            setEmail("");
+          }
+        }}
+      >
+        {contacts.length > 0 && (
+          <Field label="Kontaktperson">
+            <select className={inputClass} value={contactId} onChange={(event) => selectContact(event.target.value)}>
+              <option value="">Ingen kopplad kontaktperson</option>
+              {contacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name}</option>)}
+            </select>
+          </Field>
+        )}
+        <Field label="Namn *">
+          <input required className={inputClass} value={fullName} onChange={(event) => setFullName(event.target.value)} />
+        </Field>
+        <Field label="E-post *">
+          <input required type="email" className={inputClass} value={email} onChange={(event) => setEmail(event.target.value)} />
+        </Field>
+        <p className="text-xs text-slate-500">Användaren får endast åtkomst till det här företagets projekt och kundsynliga information.</p>
+        <div className="flex justify-end gap-2 border-t border-border pt-4">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={sending}>Avbryt</Button>
+          <Button type="submit" disabled={sending}>{sending ? "Skickar..." : "Skicka inbjudan"}</Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

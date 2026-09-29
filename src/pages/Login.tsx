@@ -6,6 +6,7 @@ import { usePersonnel } from "../data/personnel";
 import { customerUsers, customers } from "../data/mockData";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { allowMockAuth, requireSupabase } from "../lib/runtimeMode";
+import { supabase } from "../lib/supabase";
 import { Field, inputClass } from "../components/ui/Field";
 import { Button } from "../components/ui/Button";
 import { ROLE_LABELS, USER_STATUS_LABELS } from "../types";
@@ -18,6 +19,8 @@ export function Login() {
   const [mockTab, setMockTab] = useState<"internal" | "customer">("internal");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const canUseMockAuth = allowMockAuth();
 
   if (isAuthenticated) {
@@ -31,6 +34,23 @@ export function Login() {
     const err = await signIn(email, password);
     setLoading(false);
     if (err) setError(err);
+  }
+
+  async function handlePasswordReset(e: React.FormEvent) {
+    e.preventDefault();
+    if (!supabase) return;
+    setLoading(true);
+    setError(null);
+    setNotice(null);
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/set-password`,
+    });
+    setLoading(false);
+    if (resetError) {
+      setError(resetError.message);
+      return;
+    }
+    setNotice("Om adressen finns i systemet har en återställningslänk skickats.");
   }
 
   function handleMockLogin(userEmail: string) {
@@ -58,17 +78,27 @@ export function Login() {
         </div>
 
         {isSupabaseConfigured ? (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={forgotMode ? handlePasswordReset : handleSubmit} className="space-y-4">
             <Field label="E-post">
-              <input type="email" required className={inputClass} value={email} onChange={(e) => setEmail(e.target.value)} />
+              <input autoComplete="email" type="email" required className={inputClass} value={email} onChange={(e) => setEmail(e.target.value)} />
             </Field>
-            <Field label="Lösenord">
-              <input type="password" required className={inputClass} value={password} onChange={(e) => setPassword(e.target.value)} />
-            </Field>
+            {!forgotMode && (
+              <Field label="Lösenord">
+                <input autoComplete="current-password" type="password" required className={inputClass} value={password} onChange={(e) => setPassword(e.target.value)} />
+              </Field>
+            )}
             {error && <p className="text-sm text-red-600">{error}</p>}
+            {notice && <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">{notice}</p>}
             <Button type="submit" disabled={loading} className="w-full justify-center">
-              {loading ? "Loggar in..." : "Logga in"}
+              {loading ? "Skickar..." : forgotMode ? "Skicka återställningslänk" : "Logga in"}
             </Button>
+            <button
+              type="button"
+              onClick={() => { setForgotMode((value) => !value); setError(null); setNotice(null); }}
+              className="w-full text-center text-sm text-slate-500 hover:text-orange-600"
+            >
+              {forgotMode ? "Tillbaka till inloggningen" : "Glömt lösenord?"}
+            </button>
           </form>
         ) : canUseMockAuth ? (
           <div className="space-y-4">

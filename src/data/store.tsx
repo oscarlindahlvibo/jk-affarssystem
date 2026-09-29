@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
   Customer,
+  CustomerUser,
   ContactPerson,
   ContactSubmission,
   ContactSubmissionStatus,
@@ -36,6 +37,7 @@ import {
   updateProjectRecord,
   updateRow,
 } from "./supabaseRepository";
+import { inviteCustomerAccount, invitePersonnelAccount } from "../lib/userInvitations";
 
 export interface CustomerBookingCargoInput {
   description: string;
@@ -74,6 +76,7 @@ interface StoreShape {
   projects: Project[];
   suppliers: Supplier[];
   profiles: Profile[];
+  customerUsers: CustomerUser[];
   contactSubmissions: ContactSubmission[];
   currentRole: UserRole | null;
   freightCalculatorConfig: FreightCalculatorConfig;
@@ -110,7 +113,8 @@ interface StoreShape {
   getContactsByCustomer: (customerId: string) => ContactPerson[];
   getProjectsByCustomer: (customerId: string) => Project[];
   // Personal/användarhantering (admin-only, se lib/permissions.ts)
-  invitePersonnel: (data: { full_name: string; email: string; role: UserRole }) => { ok: boolean; reason?: string; profile?: Profile };
+  invitePersonnel: (data: { full_name: string; email: string; role: UserRole }) => Promise<{ ok: boolean; reason?: string; profile?: Profile }>;
+  inviteCustomerUser: (data: { customer_id: string; contact_person_id: string | null; full_name: string; email: string }) => Promise<{ ok: boolean; reason?: string; user?: CustomerUser }>;
   updatePersonnel: (id: string, patch: Partial<Pick<Profile, "full_name" | "email" | "role">>) => { ok: boolean; reason?: string };
   deactivatePersonnel: (id: string) => { ok: boolean; reason?: string };
   reactivatePersonnel: (id: string) => { ok: boolean; reason?: string };
@@ -185,6 +189,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [allProjects, setAllProjects] = useState<Project[]>(isSupabaseConfigured ? [] : loadProjects);
   const [allSuppliers, setAllSuppliers] = useState<Supplier[]>(isSupabaseConfigured ? [] : mock.suppliers);
   const [allProfiles, setAllProfiles] = useState<Profile[]>(isSupabaseConfigured ? [] : personnel.allProfiles);
+  const [allCustomerUsers, setAllCustomerUsers] = useState<CustomerUser[]>(isSupabaseConfigured ? [] : mock.customerUsers);
   const [contactSubmissions, setContactSubmissions] = useState<ContactSubmission[]>([]);
   const [isLoading, setIsLoading] = useState(isSupabaseConfigured);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -221,6 +226,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setAllProjects(data.projects);
         setAllSuppliers(data.suppliers);
         setAllProfiles(data.profiles);
+        setAllCustomerUsers(data.customerUsers);
         setContactSubmissions(data.contactSubmissions);
         setFreightCalculatorConfig(data.freightCalculatorConfig ?? DEFAULT_FREIGHT_CALCULATOR_CONFIG);
         setFreightCalculatorChangeLog(data.freightCalculatorChangeLog);
@@ -325,6 +331,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [allProjects, orgId, currentCustomerUser]);
   const suppliers = useMemo(() => allSuppliers.filter((s) => s.org_id === orgId), [allSuppliers, orgId]);
   const profiles = useMemo(() => allProfiles.filter((p) => p.org_id === orgId), [allProfiles, orgId]);
+  const customerUsers = useMemo(() => allCustomerUsers.filter((user) => user.org_id === orgId), [allCustomerUsers, orgId]);
 
   const updateContactSubmissionStatus = useCallback(
     (id: string, status: ContactSubmissionStatus) => {
@@ -872,10 +879,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const invitePersonnel: StoreShape["invitePersonnel"] = useCallback(
-    (data) => {
+    async (data) => {
       if (!can(role, "users", "create")) return { ok: false, reason: "Du saknar behörighet att bjuda in användare." };
       if (isSupabaseConfigured) {
-        return { ok: false, reason: "E-postinbjudningar aktiveras när SMTP är konfigurerat på servern." };
+        const result = await invitePersonnelAccount(data);
+        if (!result.ok) return result;
+        setAllProfiles((prev) => [result.user, ...prev]);
+        return { ok: true, profile: result.user };
       }
       if (allProfiles.some((profile) => profile.email.toLowerCase() === data.email.toLowerCase())) return { ok: false, reason: "Det finns redan en användare med den e-postadressen." };
       const profile = personnel.addProfile({ ...data, org_id: orgId });
@@ -883,6 +893,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return { ok: true, profile };
     },
     [allProfiles, role, personnel, orgId]
+  );
+
+  const inviteCustomerUser: StoreShape["inviteCustomerUser"] = useCallback(
+    async (data) => {
+      if (!can(role, "users", "create")) return { ok: false, reason: "Du saknar behörighet att bjuda in kundanvändare." };
+      if (isSupabaseConfigured) {
+        const result = await inviteCustomerAccount(data);
+        if (!result.ok) return result;
+        setAllCustomerUsers((prev) => [result.user, ...prev]);
+        return { ok: true, user: result.user };
+      }
+      if (allCustomerUsers.some((user) => user.email.toLowerCase() === data.email.toLowerCase())) {
+        return { ok: false, reason: "Det finns redan en användare med den e-postadressen." };
+      }
+      const now = new Date().toISOString();
+      const user: CustomerUser = {
+        id: nextId("cu"),
+        org_id: orgId,
+        ...data,
+        status: "inbjuden",
+        initials: data.full_name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join(""),
+        invited_at: now,
+      };
+      setAllCustomerUsers((prev) => [user, ...prev]);
+      return { ok: true, user };
+    },
+    [allCustomerUsers, orgId, role]
   );
 
   const updatePersonnel: StoreShape["updatePersonnel"] = useCallback(
@@ -938,6 +975,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       projects: projects.map(enrich),
       suppliers,
       profiles,
+      customerUsers,
       contactSubmissions,
       currentRole: role,
       freightCalculatorConfig,
@@ -974,6 +1012,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       getContactsByCustomer,
       getProjectsByCustomer,
       invitePersonnel,
+      inviteCustomerUser,
       updatePersonnel,
       deactivatePersonnel,
       reactivatePersonnel,
@@ -987,6 +1026,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       projects,
       suppliers,
       profiles,
+      customerUsers,
       contactSubmissions,
       role,
       freightCalculatorConfig,
@@ -1024,6 +1064,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       getContactsByCustomer,
       getProjectsByCustomer,
       invitePersonnel,
+      inviteCustomerUser,
       updatePersonnel,
       deactivatePersonnel,
       reactivatePersonnel,

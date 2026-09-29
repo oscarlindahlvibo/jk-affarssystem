@@ -3,6 +3,7 @@ import type {
   ContactSubmission,
   ContactPerson,
   Customer,
+  CustomerUser,
   Location,
   MeasurementLink,
   Profile,
@@ -21,6 +22,7 @@ export interface LiveStoreData {
   projects: Project[];
   suppliers: Supplier[];
   profiles: Profile[];
+  customerUsers: CustomerUser[];
   contactSubmissions: ContactSubmission[];
   freightCalculatorConfig: FreightCalculatorConfig | null;
   freightCalculatorChangeLog: FreightCalculatorChangeLogEntry[];
@@ -37,13 +39,14 @@ function assertResult(error: { message: string } | null, operation: string) {
 
 export async function loadLiveStoreData(): Promise<LiveStoreData> {
   const db = client();
-  const [customers, contacts, projects, suppliers, profiles, inquiries, locations, cargo, documents, notes, tasks, measurements, config, log] =
+  const [customers, contacts, projects, suppliers, profiles, customerUsers, inquiries, locations, cargo, documents, notes, tasks, measurements, config, log] =
     await Promise.all([
       db.from("customers").select("*").order("company_name"),
       db.from("contact_persons").select("*").order("name"),
       db.from("projects").select("*").order("created_at", { ascending: false }),
       db.from("suppliers").select("*").order("company_name"),
       db.from("profiles").select("id, org_id, full_name, email, role, status, initials, invited_at").order("full_name"),
+      db.from("customer_users").select("id, org_id, customer_id, contact_person_id, full_name, email, status, initials, invited_at").order("full_name"),
       db.from("contact_submissions").select("*").order("created_at", { ascending: false }),
       db.from("locations").select("*").order("order_index"),
       db.from("cargo_items").select("*"),
@@ -57,7 +60,7 @@ export async function loadLiveStoreData(): Promise<LiveStoreData> {
 
   for (const [result, label] of [
     [customers, "Kunder"], [contacts, "Kontaktpersoner"], [projects, "Projekt"], [suppliers, "Leverantörer"],
-    [profiles, "Personal"], [inquiries, "Förfrågningar"], [locations, "Platser"], [cargo, "Gods"], [documents, "Dokument"], [notes, "Kommentarer"],
+    [profiles, "Personal"], [customerUsers, "Kundanvändare"], [inquiries, "Förfrågningar"], [locations, "Platser"], [cargo, "Gods"], [documents, "Dokument"], [notes, "Kommentarer"],
     [tasks, "Uppgifter"], [measurements, "Mätningar"], [config, "Räknesnurra"], [log, "Ändringslogg"],
   ] as const) assertResult(result.error, `Kunde inte läsa ${label.toLowerCase()}`);
 
@@ -85,6 +88,7 @@ export async function loadLiveStoreData(): Promise<LiveStoreData> {
     contactPersons: (contacts.data ?? []) as ContactPerson[],
     suppliers: (suppliers.data ?? []) as Supplier[],
     profiles: (profiles.data ?? []) as Profile[],
+    customerUsers: (customerUsers.data ?? []) as CustomerUser[],
     contactSubmissions: (inquiries.data ?? []) as ContactSubmission[],
     projects: projectRows.map((project) => ({
       ...project,

@@ -29,6 +29,27 @@ Create an immediate backup with:
 Do not commit the production `.env`; it contains database credentials and API
 secrets. Supabase Studio is intentionally not routed through public Nginx.
 
+## Email and account invitations
+
+The `invite-user` Edge Function accepts requests only from an active admin and
+derives the organization from that admin's profile. Configure either the
+IP-restricted Microsoft 365 relay or an authenticated transactional provider:
+
+```bash
+# Microsoft 365 relay after the server IP has been allowed in a connector:
+/home/vibo/jkprojekt/configure-smtp.sh --relay \
+  jkprojekt-se.mail.protection.outlook.com 25 system@jkprojekt.se
+
+# Authenticated transactional SMTP provider:
+/home/vibo/jkprojekt/configure-smtp.sh --authenticated \
+  SMTP_HOST 587 SMTP_USER system@jkprojekt.se
+```
+
+The script backs up `.env` and recreates only the Auth container. Authenticated
+mode prompts for the password. Relay mode writes empty credentials and must be
+restricted to the server's static IP in Microsoft 365. Do not use Exchange
+Online Basic Auth credentials for a normal mailbox.
+
 ## Web application
 
 The production SPA is served by a rootless Nginx container on
