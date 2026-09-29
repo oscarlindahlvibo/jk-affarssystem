@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowDown, ArrowUp, ArrowUpDown, Plus, MapPin, Ruler, Search, Download, Upload, TriangleAlert } from "lucide-react";
 import { useStore } from "../data/store";
@@ -45,6 +45,31 @@ type SortKey =
   | "missing";
 
 type SortDirection = "asc" | "desc";
+
+const SORT_STORAGE_KEY = "jk-project-list-sort";
+const SORT_KEYS: SortKey[] = [
+  "project", "customer", "cargo", "loadingPlace", "unloadingPlace", "loadingDate", "deliveryDate",
+  "height", "width", "weight", "status", "responsible", "route", "followVehicle", "invoice", "missing",
+];
+
+function readSortPreference(): { key: SortKey | null; direction: SortDirection } {
+  if (typeof window === "undefined") return { key: null, direction: "asc" };
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(SORT_STORAGE_KEY) ?? "null") as {
+      key?: string;
+      direction?: string;
+    } | null;
+    if (stored?.key && SORT_KEYS.includes(stored.key as SortKey)) {
+      return {
+        key: stored.key as SortKey,
+        direction: stored.direction === "desc" ? "desc" : "asc",
+      };
+    }
+  } catch {
+    // En trasig lokal inställning ska inte blockera projektlistan.
+  }
+  return { key: null, direction: "asc" };
+}
 
 function SortableHeader({
   label,
@@ -183,6 +208,10 @@ function isArchivedOrInvoiced(project: Project): boolean {
   return ["Avslutad", "Avbruten"].includes(project.status) || project.invoice_status === "Fakturerad";
 }
 
+function isClosedProject(project: Project): boolean {
+  return ["Avslutad", "Avbruten"].includes(project.status);
+}
+
 export function ProjectList() {
   const { projects, customers } = useStore();
   const navigate = useNavigate();
@@ -197,12 +226,22 @@ export function ProjectList() {
   const [responsible, setResponsible] = useState("");
   const [measurement, setMeasurement] = useState<"" | "finns" | "saknas">("");
   const [dateFrom, setDateFrom] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey | null>(null);
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [showClosed, setShowClosed] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey | null>(() => readSortPreference().key);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(() => readSortPreference().direction);
   const filterParam = searchParams.get("filter") as QuickFilter | null;
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(
     filterParam && QUICK_FILTERS.some((f) => f.key === filterParam) ? filterParam : "alla"
   );
+
+  useEffect(() => {
+    if (!sortKey) return;
+    try {
+      window.localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ key: sortKey, direction: sortDirection }));
+    } catch {
+      // Sorteringen fungerar fortfarande för den öppna vyn även utan lagring.
+    }
+  }, [sortKey, sortDirection]);
 
   const responsibleNames = useMemo(
     () => Array.from(new Set(projects.map((p) => p.responsible?.full_name).filter(Boolean))) as string[],
@@ -210,8 +249,9 @@ export function ProjectList() {
   );
 
   const quickCounts = useMemo(() => {
+    const countableProjects = showClosed ? projects : projects.filter((project) => !isClosedProject(project));
     const counts: Record<QuickFilter, number> = {
-      alla: projects.length,
+      alla: countableProjects.length,
       nya: 0,
       kundbokningar: 0,
       planering: 0,
@@ -223,16 +263,17 @@ export function ProjectList() {
       "saknar-uppgifter": 0,
       "kraver-foljebil": 0,
     };
-    for (const p of projects) {
+    for (const p of countableProjects) {
       for (const f of QUICK_FILTERS) {
         if (f.key !== "alla" && matchesQuickFilter(p, f.key)) counts[f.key]++;
       }
     }
     return counts;
-  }, [projects]);
+  }, [projects, showClosed]);
 
   const filtered = useMemo(() => {
     const matchingProjects = projects.filter((p) => {
+      if (!showClosed && !status && isClosedProject(p)) return false;
       if (!matchesQuickFilter(p, quickFilter)) return false;
       if (search) {
         const q = search.toLowerCase();
@@ -263,7 +304,7 @@ export function ProjectList() {
         return valueDifference || a.originalIndex - b.originalIndex;
       })
       .map(({ project }) => project);
-  }, [projects, search, status, customerId, responsible, measurement, dateFrom, quickFilter, sortKey, sortDirection]);
+  }, [projects, search, status, customerId, responsible, measurement, dateFrom, quickFilter, showClosed, sortKey, sortDirection]);
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -383,9 +424,13 @@ export function ProjectList() {
           <span className="shrink-0 text-sm text-slate-500">Lastning från</span>
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-border bg-white px-3 py-2 text-sm xl:flex-none" />
         </div>
-        {(status || customerId || responsible || measurement || dateFrom || search) && (
+        <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-700">
+          <input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} />
+          Visa avslutade
+        </label>
+        {(status || customerId || responsible || measurement || dateFrom || search || showClosed) && (
           <button
-            onClick={() => { setStatus(""); setCustomerId(""); setResponsible(""); setMeasurement(""); setDateFrom(""); setSearch(""); }}
+            onClick={() => { setStatus(""); setCustomerId(""); setResponsible(""); setMeasurement(""); setDateFrom(""); setSearch(""); setShowClosed(false); }}
             className="text-sm text-orange-600 hover:text-orange-700"
           >
             Rensa filter
