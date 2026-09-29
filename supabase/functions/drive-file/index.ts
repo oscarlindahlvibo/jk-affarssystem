@@ -235,8 +235,15 @@ Deno.serve(async (request) => {
     if (request.method === "DELETE" && fileId) {
       const document = await documentFor(identity, fileId, true);
       if (!document) return json({ error: "Document not found or access denied" }, 404, origin);
-      const deleted = await driveFetch(`/drive/v3/files/${encodeURIComponent(fileId)}?supportsAllDrives=true`, { method: "DELETE" });
-      if (!deleted.ok && deleted.status !== 404) return json({ error: "Filen kunde inte tas bort från Google Drive." }, 502, origin);
+      const deleted = await driveFetch(
+        `/drive/v3/files/${encodeURIComponent(fileId)}?supportsAllDrives=true&fields=id,trashed`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ trashed: true }),
+        }
+      );
+      if (!deleted.ok && deleted.status !== 404) return json({ error: "Filen kunde inte flyttas till Google Drives papperskorg." }, 502, origin);
       return new Response(null, { status: 204, headers: corsHeaders(origin) });
     }
 
