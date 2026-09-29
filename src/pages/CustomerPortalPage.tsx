@@ -59,7 +59,7 @@ function numberValue(value: number | null) {
 
 export function CustomerPortalPage() {
   const { currentCustomerUser, signOut } = useAuth();
-  const { customers, projects, submitCustomerBooking } = useStore();
+  const { customers, projects, submitCustomerBooking, isLoading, dataError, retryLoading } = useStore();
   const [form, setForm] = useState<CustomerBookingInput>(initialForm);
   const [createdProjectNumber, setCreatedProjectNumber] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +115,7 @@ export function CustomerPortalPage() {
     }
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setCreatedProjectNumber(null);
@@ -124,12 +124,27 @@ export function CustomerPortalPage() {
       return;
     }
     try {
-      const project = submitCustomerBooking(form);
+      const project = await submitCustomerBooking(form);
       setCreatedProjectNumber(project.project_number);
       setForm(initialForm);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Bokningen kunde inte skickas.");
     }
+  }
+
+  if (isLoading) {
+    return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">Läser kundportalen...</div>;
+  }
+
+  if (dataError && customers.length === 0) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
+        <div className="max-w-md rounded-md border border-red-200 bg-white p-5 text-center">
+          <p className="text-sm text-red-700">{dataError}</p>
+          <Button className="mt-4" variant="secondary" onClick={retryLoading}>Försök igen</Button>
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -10,6 +10,7 @@ import { usePermissions } from "../../lib/usePermissions";
 import { useGoogleDrive } from "../../lib/googleDriveContext";
 import { uploadFileToDrive, deleteFileFromDrive } from "../../lib/googleDrive";
 import { generateShippingDocument, shippingDocumentFileName, type ShippingDocumentKind } from "../../lib/shippingDocuments";
+import { isSupabaseConfigured, supabase } from "../../lib/supabase";
 
 const CATEGORIES: DocumentCategory[] = ["Ritning", "Tillstånd", "Offert", "Order", "Fraktsedel", "Foto", "Övrigt"];
 
@@ -47,6 +48,34 @@ export function DocumentsSection({ project, documents }: { project: Project; doc
         file_url: uploaded.webViewLink,
         file_size: file.size,
         drive_file_id: uploaded.id,
+        uploaded_at: new Date().toISOString(),
+        uploaded_by: currentProfile?.full_name ?? "Okänd",
+        visibility: "internal",
+        comment,
+      });
+      return;
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const storagePath = `${projectId}/${crypto.randomUUID()}-${safeName}`;
+      const uploaded = await supabase.storage.from("project-documents").upload(storagePath, file, {
+        contentType: file.type || "application/octet-stream",
+        upsert: false,
+      });
+      if (uploaded.error) throw new Error(`Filen kunde inte laddas upp: ${uploaded.error.message}`);
+      const signed = await supabase.storage.from("project-documents").createSignedUrl(storagePath, 60 * 60);
+      if (signed.error) {
+        await supabase.storage.from("project-documents").remove([storagePath]);
+        throw new Error(`Dokumentlänken kunde inte skapas: ${signed.error.message}`);
+      }
+      addDocument(projectId, {
+        file_name: file.name,
+        file_type: file.name.split(".").pop() ?? "fil",
+        category: documentCategory,
+        storage_path: storagePath,
+        file_url: signed.data.signedUrl,
+        file_size: file.size,
         uploaded_at: new Date().toISOString(),
         uploaded_by: currentProfile?.full_name ?? "Okänd",
         visibility: "internal",
@@ -108,6 +137,13 @@ export function DocumentsSection({ project, documents }: { project: Project; doc
         // Filen kan redan vara borttagen i Drive – ta bort referensen ändå.
       }
     }
+    if (doc.storage_path && !doc.storage_path.startsWith("drive:") && isSupabaseConfigured && supabase) {
+      const removed = await supabase.storage.from("project-documents").remove([doc.storage_path]);
+      if (removed.error) {
+        setUploadError(`Filen kunde inte tas bort: ${removed.error.message}`);
+        return;
+      }
+    }
     deleteDocument(projectId, doc.id);
   }
 
@@ -153,12 +189,12 @@ export function DocumentsSection({ project, documents }: { project: Project; doc
         <p className="mb-3 flex items-center gap-1.5 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-700">
           <HardDrive size={13} /> Uppladdade dokument sparas i Google Drive.
         </p>
-      ) : (
+      ) : !isSupabaseConfigured ? (
         <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
           Google Drive är inte anslutet – dokument sparas endast i webbläsarens minne under sessionen. Anslut i
           Inställningar för permanent lagring.
         </p>
-      )}
+      ) : null}
       {uploadError && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{uploadError}</p>}
       <ul className="divide-y divide-border">
         {documents.map((d) => (

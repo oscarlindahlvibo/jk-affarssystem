@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
   Customer,
   ContactPerson,
@@ -24,6 +24,16 @@ import {
   type FreightCalculatorConfig,
 } from "../lib/freightCalculator";
 import { suggestedTransportTasks } from "../lib/transportRules";
+import { isSupabaseConfigured, supabase } from "../lib/supabase";
+import {
+  deleteRow,
+  insertProject,
+  insertRow,
+  loadLiveStoreData,
+  saveFreightCalculator,
+  updateProjectRecord,
+  updateRow,
+} from "./supabaseRepository";
 
 export interface CustomerBookingCargoInput {
   description: string;
@@ -54,6 +64,9 @@ export interface CustomerBookingInput {
 }
 
 interface StoreShape {
+  isLoading: boolean;
+  dataError: string | null;
+  retryLoading: () => void;
   customers: Customer[];
   contactPersons: ContactPerson[];
   projects: Project[];
@@ -74,7 +87,7 @@ interface StoreShape {
   updateSupplier: (id: string, patch: Partial<Supplier>) => void;
   deleteSupplier: (id: string) => { ok: boolean; reason?: string };
   addProject: (p: Omit<Project, "id" | "org_id" | "created_at" | "updated_at">) => Project;
-  submitCustomerBooking: (data: CustomerBookingInput) => Project;
+  submitCustomerBooking: (data: CustomerBookingInput) => Promise<Project>;
   approveCustomerBooking: (projectId: string, data: { responsible_id: string | null; status: ProjectStatus }) => void;
   rejectCustomerBooking: (projectId: string, reason: string) => void;
   updateProjectStatus: (projectId: string, status: ProjectStatus) => void;
@@ -108,6 +121,14 @@ let idCounter = 2000;
 function nextId(prefix: string) {
   idCounter += 1;
   return `${prefix}${idCounter}`;
+}
+
+function newId(prefix: string) {
+  return isSupabaseConfigured ? crypto.randomUUID() : nextId(prefix);
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function loadProjects(): Project[] {
@@ -155,23 +176,72 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const orgId = currentProfile?.org_id ?? currentCustomerUser?.org_id ?? "";
   const role = currentProfile?.role ?? null;
 
-  const [allCustomers, setAllCustomers] = useState<Customer[]>(mock.customers);
-  const [allContactPersons, setAllContactPersons] = useState<ContactPerson[]>(mock.contactPersons);
-  const [allProjects, setAllProjects] = useState<Project[]>(loadProjects);
-  const [allSuppliers, setAllSuppliers] = useState<Supplier[]>(mock.suppliers);
-  const [freightCalculatorConfig, setFreightCalculatorConfig] = useState<FreightCalculatorConfig>(loadFreightCalculatorConfig);
+  const [allCustomers, setAllCustomers] = useState<Customer[]>(isSupabaseConfigured ? [] : mock.customers);
+  const [allContactPersons, setAllContactPersons] = useState<ContactPerson[]>(isSupabaseConfigured ? [] : mock.contactPersons);
+  const [allProjects, setAllProjects] = useState<Project[]>(isSupabaseConfigured ? [] : loadProjects);
+  const [allSuppliers, setAllSuppliers] = useState<Supplier[]>(isSupabaseConfigured ? [] : mock.suppliers);
+  const [allProfiles, setAllProfiles] = useState<Profile[]>(isSupabaseConfigured ? [] : personnel.allProfiles);
+  const [isLoading, setIsLoading] = useState(isSupabaseConfigured);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [loadVersion, setLoadVersion] = useState(0);
+  const mutationQueue = useRef<Promise<void>>(Promise.resolve());
+  const [freightCalculatorConfig, setFreightCalculatorConfig] = useState<FreightCalculatorConfig>(
+    isSupabaseConfigured ? DEFAULT_FREIGHT_CALCULATOR_CONFIG : loadFreightCalculatorConfig
+  );
   const [freightCalculatorChangeLog, setFreightCalculatorChangeLog] =
-    useState<FreightCalculatorChangeLogEntry[]>(loadFreightCalculatorChangeLog);
+    useState<FreightCalculatorChangeLogEntry[]>(isSupabaseConfigured ? [] : loadFreightCalculatorChangeLog);
+
+  const retryLoading = useCallback(() => setLoadVersion((version) => version + 1), []);
+
+  const persist = useCallback((operation: () => Promise<void>) => {
+    if (!isSupabaseConfigured) return;
+    mutationQueue.current = mutationQueue.current
+      .then(operation)
+      .catch((error) => {
+        console.error(error);
+        setDataError(error instanceof Error ? error.message : "Ändringen kunde inte sparas i databasen.");
+      });
+  }, []);
 
   useEffect(() => {
+    if (!isSupabaseConfigured || (!currentProfile && !currentCustomerUser)) return;
+    let active = true;
+    setIsLoading(true);
+    setDataError(null);
+    loadLiveStoreData()
+      .then((data) => {
+        if (!active) return;
+        setAllCustomers(data.customers);
+        setAllContactPersons(data.contactPersons);
+        setAllProjects(data.projects);
+        setAllSuppliers(data.suppliers);
+        setAllProfiles(data.profiles);
+        setFreightCalculatorConfig(data.freightCalculatorConfig ?? DEFAULT_FREIGHT_CALCULATOR_CONFIG);
+        setFreightCalculatorChangeLog(data.freightCalculatorChangeLog);
+      })
+      .catch((error) => {
+        if (active) setDataError(error instanceof Error ? error.message : "Kunde inte läsa data från databasen.");
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [currentCustomerUser, currentProfile, loadVersion]);
+
+  useEffect(() => {
+    if (isSupabaseConfigured) return;
     window.localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(allProjects));
   }, [allProjects]);
 
   useEffect(() => {
+    if (isSupabaseConfigured) return;
     window.localStorage.setItem(FREIGHT_CALCULATOR_STORAGE_KEY, JSON.stringify(freightCalculatorConfig));
   }, [freightCalculatorConfig]);
 
   useEffect(() => {
+    if (isSupabaseConfigured) return;
     window.localStorage.setItem(FREIGHT_CALCULATOR_CHANGE_LOG_STORAGE_KEY, JSON.stringify(freightCalculatorChangeLog));
   }, [freightCalculatorChangeLog]);
 
@@ -199,7 +269,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setFreightCalculatorConfig(next);
       if (changes.length === 0) return null;
       const entry: FreightCalculatorChangeLogEntry = {
-        id: nextId("calc-log"),
+        id: newId("calc-log"),
         changedAt: new Date().toISOString(),
         changedBy: currentProfile?.full_name ?? "JK",
         source: "app",
@@ -207,9 +277,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         changes,
       };
       setFreightCalculatorChangeLog((prev) => [entry, ...prev]);
+      if (currentProfile) persist(() => saveFreightCalculator(next, entry, orgId, currentProfile.id));
       return entry;
     },
-    [authorize, currentProfile, freightCalculatorConfig]
+    [authorize, currentProfile, freightCalculatorConfig, orgId, persist]
   );
 
   const resetFreightCalculatorConfig: StoreShape["resetFreightCalculatorConfig"] = useCallback(() => {
@@ -218,7 +289,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setFreightCalculatorConfig(DEFAULT_FREIGHT_CALCULATOR_CONFIG);
     if (changes.length === 0) return null;
     const entry: FreightCalculatorChangeLogEntry = {
-      id: nextId("calc-log"),
+      id: newId("calc-log"),
       changedAt: new Date().toISOString(),
       changedBy: currentProfile?.full_name ?? "JK",
       source: "app",
@@ -228,8 +299,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       changes,
     };
     setFreightCalculatorChangeLog((prev) => [entry, ...prev]);
+    if (currentProfile) persist(() => saveFreightCalculator(DEFAULT_FREIGHT_CALCULATOR_CONFIG, entry, orgId, currentProfile.id));
     return entry;
-  }, [authorize, currentProfile, freightCalculatorConfig]);
+  }, [authorize, currentProfile, freightCalculatorConfig, orgId, persist]);
 
   const customers = useMemo(() => {
     const orgCustomers = allCustomers.filter((c) => c.org_id === orgId);
@@ -246,29 +318,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return orgProjects;
   }, [allProjects, orgId, currentCustomerUser]);
   const suppliers = useMemo(() => allSuppliers.filter((s) => s.org_id === orgId), [allSuppliers, orgId]);
-  const profiles = useMemo(() => personnel.allProfiles.filter((p) => p.org_id === orgId), [personnel.allProfiles, orgId]);
+  const profiles = useMemo(() => allProfiles.filter((p) => p.org_id === orgId), [allProfiles, orgId]);
 
   const enrich = useCallback(
     (p: Project): Project => ({
       ...p,
       customer: allCustomers.find((c) => c.id === p.customer_id),
       contact_person: allContactPersons.find((c) => c.id === p.contact_person_id) ?? null,
-      responsible: personnel.getById(p.responsible_id ?? "") ?? null,
+      responsible: allProfiles.find((profile) => profile.id === p.responsible_id) ?? null,
       supplier: allSuppliers.find((s) => s.id === p.supplier_id) ?? null,
-      measurement_link: mock.getMeasurementLinkByProject(p.id) ?? null,
+      measurement_link: isSupabaseConfigured ? p.measurement_link ?? null : mock.getMeasurementLinkByProject(p.id) ?? null,
     }),
-    [allCustomers, allContactPersons, allSuppliers, personnel]
+    [allCustomers, allContactPersons, allProfiles, allSuppliers]
   );
 
   const addCustomer: StoreShape["addCustomer"] = useCallback(
     (c) => {
       authorize("customers", "create");
       const now = new Date().toISOString();
-      const newCustomer: Customer = { ...c, id: nextId("c"), org_id: orgId, created_at: now, updated_at: now };
+      const newCustomer: Customer = { ...c, id: newId("c"), org_id: orgId, created_at: now, updated_at: now };
       setAllCustomers((prev) => [newCustomer, ...prev]);
+      persist(() => insertRow("customers", newCustomer, "kunden"));
       return newCustomer;
     },
-    [authorize, orgId]
+    [authorize, orgId, persist]
   );
 
   const updateCustomer: StoreShape["updateCustomer"] = useCallback(
@@ -277,8 +350,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setAllCustomers((prev) =>
         prev.map((c) => (c.id === id ? { ...c, ...patch, updated_at: new Date().toISOString() } : c))
       );
+      persist(() => updateRow("customers", id, patch, "kunden"));
     },
-    [authorize]
+    [authorize, persist]
   );
 
   const deleteCustomer: StoreShape["deleteCustomer"] = useCallback(
@@ -290,27 +364,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       setAllCustomers((prev) => prev.filter((c) => c.id !== id));
       setAllContactPersons((prev) => prev.filter((c) => c.customer_id !== id));
+      persist(() => deleteRow("customers", id, "kunden"));
       return { ok: true };
     },
-    [role, allProjects]
+    [role, allProjects, persist]
   );
 
   const addContactPerson: StoreShape["addContactPerson"] = useCallback(
     (c) => {
       authorize("contacts", "create");
-      const newContact: ContactPerson = { ...c, id: nextId("p"), created_at: new Date().toISOString() };
+      const newContact: ContactPerson = { ...c, id: newId("p"), created_at: new Date().toISOString() };
       setAllContactPersons((prev) => [newContact, ...prev]);
+      persist(() => insertRow("contact_persons", newContact, "kontaktpersonen"));
       return newContact;
     },
-    [authorize]
+    [authorize, persist]
   );
 
   const updateContactPerson: StoreShape["updateContactPerson"] = useCallback(
     (id, patch) => {
       authorize("contacts", "edit");
       setAllContactPersons((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+      persist(() => updateRow("contact_persons", id, patch, "kontaktpersonen"));
     },
-    [authorize]
+    [authorize, persist]
   );
 
   const deleteContactPerson: StoreShape["deleteContactPerson"] = useCallback(
@@ -318,26 +395,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       authorize("contacts", "delete");
       setAllContactPersons((prev) => prev.filter((c) => c.id !== id));
       setAllProjects((prev) => prev.map((p) => (p.contact_person_id === id ? { ...p, contact_person_id: null } : p)));
+      persist(() => deleteRow("contact_persons", id, "kontaktpersonen"));
     },
-    [authorize]
+    [authorize, persist]
   );
 
   const addSupplier: StoreShape["addSupplier"] = useCallback(
     (s) => {
       authorize("suppliers", "create");
-      const newSupplier: Supplier = { ...s, id: nextId("s"), org_id: orgId, created_at: new Date().toISOString() };
+      const newSupplier: Supplier = { ...s, id: newId("s"), org_id: orgId, created_at: new Date().toISOString() };
       setAllSuppliers((prev) => [newSupplier, ...prev]);
+      persist(() => insertRow("suppliers", newSupplier, "leverantören"));
       return newSupplier;
     },
-    [authorize, orgId]
+    [authorize, orgId, persist]
   );
 
   const updateSupplier: StoreShape["updateSupplier"] = useCallback(
     (id, patch) => {
       authorize("suppliers", "edit");
       setAllSuppliers((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+      persist(() => updateRow("suppliers", id, patch, "leverantören"));
     },
-    [authorize]
+    [authorize, persist]
   );
 
   const deleteSupplier: StoreShape["deleteSupplier"] = useCallback(
@@ -348,40 +428,48 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return { ok: false, reason: `Leverantören har ${linkedProjects.length} kopplade projekt och kan inte raderas.` };
       }
       setAllSuppliers((prev) => prev.filter((s) => s.id !== id));
+      persist(() => deleteRow("suppliers", id, "leverantören"));
       return { ok: true };
     },
-    [role, allProjects]
+    [role, allProjects, persist]
   );
 
   const addProject: StoreShape["addProject"] = useCallback(
     (p) => {
       authorize("projects", "create");
       const now = new Date().toISOString();
+      const projectId = newId("pr");
+      const withProjectId = <T extends { id: string; project_id: string }>(row: T, prefix: string): T => ({
+        ...row,
+        id: isSupabaseConfigured && !isUuid(row.id) ? newId(prefix) : row.id,
+        project_id: projectId,
+      });
       const newProject: Project = {
         ...p,
-        id: nextId("pr"),
+        id: projectId,
         org_id: orgId,
         created_at: now,
         updated_at: now,
-        locations: p.locations ?? [],
-        cargo_items: p.cargo_items ?? [],
-        documents: p.documents ?? [],
-        notes: p.notes ?? [],
-        tasks: p.tasks ?? [],
+        locations: (p.locations ?? []).map((row) => withProjectId(row, "l")),
+        cargo_items: (p.cargo_items ?? []).map((row) => withProjectId(row, "g")),
+        documents: (p.documents ?? []).map((row) => withProjectId(row, "d")),
+        notes: (p.notes ?? []).map((row) => withProjectId(row, "n")),
+        tasks: (p.tasks ?? []).map((row) => withProjectId(row, "t")),
       };
       setAllProjects((prev) => [newProject, ...prev]);
+      persist(() => insertProject(newProject));
       return newProject;
     },
-    [authorize, orgId]
+    [authorize, orgId, persist]
   );
 
   const submitCustomerBooking: StoreShape["submitCustomerBooking"] = useCallback(
-    (data) => {
+    async (data) => {
       if (!currentCustomerUser || currentCustomerUser.status !== "aktiv") {
         throw new Error("Kundkontot är inte aktivt.");
       }
       const now = new Date().toISOString();
-      const id = nextId("pr");
+      let id = newId("pr");
       const customer = allCustomers.find((c) => c.id === currentCustomerUser.customer_id);
       const contact = allContactPersons.find((c) => c.id === currentCustomerUser.contact_person_id);
       const projectName =
@@ -392,7 +480,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const newProject: Project = {
         id,
         org_id: currentCustomerUser.org_id,
-        project_number: `WEB-${new Date().getFullYear()}-${id.replace(/\D/g, "").padStart(4, "0")}`,
+        project_number: `WEB-${new Date().getFullYear()}-${id.replace(/\D/g, "").slice(0, 8).padStart(4, "0")}`,
         name: projectName,
         customer_id: currentCustomerUser.customer_id,
         contact_person_id: currentCustomerUser.contact_person_id,
@@ -422,7 +510,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         updated_at: now,
         locations: [
           {
-            id: nextId("l"),
+            id: newId("l"),
             project_id: id,
             type: "lastning",
             name: data.loading_name.trim(),
@@ -432,7 +520,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             order_index: 0,
           },
           {
-            id: nextId("l"),
+            id: newId("l"),
             project_id: id,
             type: "lossning",
             name: data.unloading_name.trim(),
@@ -443,7 +531,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           },
         ],
         cargo_items: cargoItems.map((item) => ({
-          id: nextId("g"),
+          id: newId("g"),
           project_id: id,
           description: item.description.trim(),
           length_m: item.length_m,
@@ -458,7 +546,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         documents: [],
         notes: [
           {
-            id: nextId("n"),
+            id: newId("n"),
             project_id: id,
             date: now,
             user_name: currentCustomerUser.full_name,
@@ -469,7 +557,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ],
         tasks: suggestedTasks.map((task) => ({
           ...task,
-          id: nextId("t"),
+          id: newId("t"),
           project_id: id,
           route_section: null,
           assignee_id: null,
@@ -479,6 +567,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           comment: null,
         })),
       };
+      if (isSupabaseConfigured) {
+        if (!supabase) throw new Error("Databasen är inte tillgänglig.");
+        const { data: created, error } = await supabase.rpc("submit_customer_booking", {
+          p_booking: {
+            ...data,
+            name: projectName,
+            locations: newProject.locations,
+            cargo_items: cargoItems,
+            suggested_tasks: suggestedTasks,
+          },
+        });
+        if (error) throw new Error(`Bokningen kunde inte sparas: ${error.message}`);
+        const createdRow = created as Project;
+        id = createdRow.id;
+        Object.assign(newProject, createdRow, {
+          locations: newProject.locations?.map((row) => ({ ...row, project_id: id })),
+          cargo_items: newProject.cargo_items?.map((row) => ({ ...row, project_id: id })),
+          notes: newProject.notes?.map((row) => ({ ...row, project_id: id })),
+          tasks: newProject.tasks?.map((row) => ({ ...row, project_id: id })),
+        });
+      }
       setAllProjects((prev) => [newProject, ...prev]);
       return newProject;
     },
@@ -489,6 +598,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (projectId, data) => {
       authorize("projects", "edit");
       const now = new Date().toISOString();
+      const current = allProjects.find((project) => project.id === projectId);
+      const updated = current ? {
+        ...current,
+        responsible_id: data.responsible_id,
+        status: data.status,
+        booking_approval_status: "Godkänd" as const,
+        approved_at: now,
+        approved_by: currentProfile?.full_name ?? null,
+        updated_at: now,
+        notes: [{ id: newId("n"), project_id: projectId, date: now, user_name: currentProfile?.full_name ?? "JK", text: "Kundbokningen är godkänd och kan planeras vidare.", category: "Kund" as const, visibility: "internal" as const }, ...(current.notes ?? [])],
+      } : null;
       setAllProjects((prev) =>
         prev.map((p) =>
           p.id === projectId
@@ -502,7 +622,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 updated_at: now,
                 notes: [
                   {
-                    id: nextId("n"),
+                    id: newId("n"),
                     project_id: projectId,
                     date: now,
                     user_name: currentProfile?.full_name ?? "JK",
@@ -516,14 +636,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             : p
         )
       );
+      if (updated) persist(() => updateProjectRecord(updated));
     },
-    [authorize, currentProfile]
+    [allProjects, authorize, currentProfile, persist]
   );
 
   const rejectCustomerBooking: StoreShape["rejectCustomerBooking"] = useCallback(
     (projectId, reason) => {
       authorize("projects", "edit");
       const now = new Date().toISOString();
+      const current = allProjects.find((project) => project.id === projectId);
+      const note: ProjectNote = {
+        id: newId("n"), project_id: projectId, date: now, user_name: currentProfile?.full_name ?? "JK",
+        text: reason.trim() ? `Kundbokningen avvisades: ${reason.trim()}` : "Kundbokningen avvisades.",
+        category: "Kund", visibility: "internal",
+      };
       setAllProjects((prev) =>
         prev.map((p) =>
           p.id === projectId
@@ -534,7 +661,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 updated_at: now,
                 notes: [
                   {
-                    id: nextId("n"),
+                    id: note.id,
                     project_id: projectId,
                     date: now,
                     user_name: currentProfile?.full_name ?? "JK",
@@ -548,8 +675,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             : p
         )
       );
+      if (current) persist(() => updateProjectRecord({ ...current, status: "Avbruten", booking_approval_status: "Avvisad", updated_at: now, notes: [note, ...(current.notes ?? [])] }));
     },
-    [authorize, currentProfile]
+    [allProjects, authorize, currentProfile, persist]
   );
 
   const updateProjectStatus: StoreShape["updateProjectStatus"] = useCallback(
@@ -558,18 +686,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setAllProjects((prev) =>
         prev.map((p) => (p.id === projectId ? { ...p, status, updated_at: new Date().toISOString() } : p))
       );
+      persist(() => updateRow("projects", projectId, { status }, "projektstatusen"));
     },
-    [authorize]
+    [authorize, persist]
   );
 
   const updateProject: StoreShape["updateProject"] = useCallback(
     (projectId, patch) => {
       authorize("projects", "edit");
+      const current = allProjects.find((project) => project.id === projectId);
+      const normalizeChildren = <T extends { id: string; project_id: string }>(rows: T[] | undefined, prefix: string) =>
+        rows?.map((row) => ({ ...row, id: isSupabaseConfigured && !isUuid(row.id) ? newId(prefix) : row.id, project_id: projectId }));
+      const normalizedPatch: Partial<Project> = {
+        ...patch,
+        ...(patch.locations ? { locations: normalizeChildren(patch.locations, "l") } : {}),
+        ...(patch.cargo_items ? { cargo_items: normalizeChildren(patch.cargo_items, "g") } : {}),
+        ...(patch.documents ? { documents: normalizeChildren(patch.documents, "d") } : {}),
+        ...(patch.notes ? { notes: normalizeChildren(patch.notes, "n") } : {}),
+        ...(patch.tasks ? { tasks: normalizeChildren(patch.tasks, "t") } : {}),
+      };
+      const updated = current ? { ...current, ...normalizedPatch, updated_at: new Date().toISOString() } : null;
       setAllProjects((prev) =>
-        prev.map((p) => (p.id === projectId ? { ...p, ...patch, updated_at: new Date().toISOString() } : p))
+        prev.map((p) => (p.id === projectId ? { ...p, ...normalizedPatch, updated_at: new Date().toISOString() } : p))
       );
+      if (updated) persist(() => updateProjectRecord(updated));
     },
-    [authorize]
+    [allProjects, authorize, persist]
   );
 
   const updateProjectFinance: StoreShape["updateProjectFinance"] = useCallback(
@@ -580,36 +722,57 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setAllProjects((prev) =>
         prev.map((p) => (p.id === projectId ? { ...p, ...patch, updated_at: new Date().toISOString() } : p))
       );
+      if (isSupabaseConfigured && supabase) {
+        const db = supabase;
+        persist(async () => {
+          const current = allProjects.find((project) => project.id === projectId);
+          const { error } = await db.rpc("update_project_finance", {
+            p_project_id: projectId,
+            p_price: patch.price ?? current?.price ?? null,
+            p_cost: patch.cost ?? current?.cost ?? null,
+            p_invoice_status: patch.invoice_status ?? current?.invoice_status ?? "Ej fakturerad",
+          });
+          if (error) throw new Error(`Kunde inte uppdatera ekonomin: ${error.message}`);
+        });
+      }
     },
-    [currentProfile, role]
+    [allProjects, currentProfile, persist, role]
   );
 
   const addNote: StoreShape["addNote"] = useCallback(
     (projectId, note) => {
       authorize("projects", "edit");
+      const created = { ...note, id: newId("n"), project_id: projectId };
       setAllProjects((prev) =>
         prev.map((p) =>
           p.id === projectId
-            ? { ...p, notes: [{ ...note, id: nextId("n"), project_id: projectId }, ...(p.notes ?? [])] }
+            ? { ...p, notes: [created, ...(p.notes ?? [])] }
             : p
         )
       );
+      persist(() => insertRow("notes", { ...created, user_id: null }, "kommentaren"));
     },
-    [authorize]
+    [authorize, persist]
   );
 
   const addDocument: StoreShape["addDocument"] = useCallback(
     (projectId, doc) => {
       authorize("documents", "create");
+      const created = { ...doc, id: newId("d"), project_id: projectId };
       setAllProjects((prev) =>
         prev.map((p) =>
           p.id === projectId
-            ? { ...p, documents: [{ ...doc, id: nextId("d"), project_id: projectId }, ...(p.documents ?? [])] }
+            ? { ...p, documents: [created, ...(p.documents ?? [])] }
             : p
         )
       );
+      persist(() => insertRow("documents", {
+        ...created,
+        uploaded_by: currentProfile?.id ?? null,
+        uploaded_by_name: created.uploaded_by,
+      }, "dokumentet"));
     },
-    [authorize]
+    [authorize, currentProfile, persist]
   );
 
   const deleteDocument: StoreShape["deleteDocument"] = useCallback(
@@ -620,22 +783,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           p.id === projectId ? { ...p, documents: (p.documents ?? []).filter((d) => d.id !== documentId) } : p
         )
       );
+      persist(() => deleteRow("documents", documentId, "dokumentet"));
     },
-    [authorize]
+    [authorize, persist]
   );
 
   const addTask: StoreShape["addTask"] = useCallback(
     (projectId, task) => {
       authorize("projects", "edit");
+      const created = { ...task, id: newId("t"), project_id: projectId };
       setAllProjects((prev) =>
         prev.map((p) =>
           p.id === projectId
-            ? { ...p, tasks: [...(p.tasks ?? []), { ...task, id: nextId("t"), project_id: projectId }] }
+            ? { ...p, tasks: [...(p.tasks ?? []), created] }
             : p
         )
       );
+      persist(() => insertRow("tasks", created, "uppgiften"));
     },
-    [authorize]
+    [authorize, persist]
   );
 
   const updateTask: StoreShape["updateTask"] = useCallback(
@@ -648,8 +814,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             : p
         )
       );
+      persist(() => updateRow("tasks", taskId, patch, "uppgiften"));
     },
-    [authorize]
+    [authorize, persist]
   );
 
   const updateTaskStatus: StoreShape["updateTaskStatus"] = useCallback(
@@ -662,8 +829,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             : p
         )
       );
+      persist(() => updateRow("tasks", taskId, { status }, "uppgiften"));
     },
-    [authorize]
+    [authorize, persist]
   );
 
   const getProject = useCallback(
@@ -691,43 +859,65 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const invitePersonnel: StoreShape["invitePersonnel"] = useCallback(
     (data) => {
       if (!can(role, "users", "create")) return { ok: false, reason: "Du saknar behörighet att bjuda in användare." };
-      if (personnel.getByEmail(data.email)) return { ok: false, reason: "Det finns redan en användare med den e-postadressen." };
+      if (isSupabaseConfigured) {
+        return { ok: false, reason: "E-postinbjudningar aktiveras när SMTP är konfigurerat på servern." };
+      }
+      if (allProfiles.some((profile) => profile.email.toLowerCase() === data.email.toLowerCase())) return { ok: false, reason: "Det finns redan en användare med den e-postadressen." };
       const profile = personnel.addProfile({ ...data, org_id: orgId });
+      setAllProfiles((prev) => [profile, ...prev]);
       return { ok: true, profile };
     },
-    [role, personnel, orgId]
+    [allProfiles, role, personnel, orgId]
   );
 
   const updatePersonnel: StoreShape["updatePersonnel"] = useCallback(
     (id, patch) => {
       if (!can(role, "users", "edit")) return { ok: false, reason: "Du saknar behörighet att redigera användare." };
-      personnel.updateProfile(id, patch);
+      if (isSupabaseConfigured) {
+        setAllProfiles((prev) => prev.map((profile) => profile.id === id ? { ...profile, ...patch } : profile));
+        persist(() => updateRow("profiles", id, patch, "användaren"));
+      } else {
+        personnel.updateProfile(id, patch);
+      }
       return { ok: true };
     },
-    [role, personnel]
+    [role, personnel, persist]
   );
 
   const deactivatePersonnel: StoreShape["deactivatePersonnel"] = useCallback(
     (id) => {
       if (!can(role, "users", "delete")) return { ok: false, reason: "Du saknar behörighet att inaktivera användare." };
       if (id === currentProfile?.id) return { ok: false, reason: "Du kan inte inaktivera ditt eget konto." };
-      personnel.deactivateProfile(id);
+      if (isSupabaseConfigured) {
+        setAllProfiles((prev) => prev.map((profile) => profile.id === id ? { ...profile, status: "inaktiverad" } : profile));
+        persist(() => updateRow("profiles", id, { status: "inaktiverad" }, "användaren"));
+      } else {
+        personnel.deactivateProfile(id);
+      }
       return { ok: true };
     },
-    [role, personnel, currentProfile]
+    [role, personnel, currentProfile, persist]
   );
 
   const reactivatePersonnel: StoreShape["reactivatePersonnel"] = useCallback(
     (id) => {
       if (!can(role, "users", "edit")) return { ok: false, reason: "Du saknar behörighet att aktivera användare." };
-      personnel.reactivateProfile(id);
+      if (isSupabaseConfigured) {
+        setAllProfiles((prev) => prev.map((profile) => profile.id === id ? { ...profile, status: "aktiv" } : profile));
+        persist(() => updateRow("profiles", id, { status: "aktiv" }, "användaren"));
+      } else {
+        personnel.reactivateProfile(id);
+      }
       return { ok: true };
     },
-    [role, personnel]
+    [role, personnel, persist]
   );
 
   const value = useMemo<StoreShape>(
     () => ({
+      isLoading,
+      dataError,
+      retryLoading,
       customers,
       contactPersons,
       projects: projects.map(enrich),
@@ -773,6 +963,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }),
     [
       customers,
+      isLoading,
+      dataError,
+      retryLoading,
       contactPersons,
       projects,
       suppliers,
