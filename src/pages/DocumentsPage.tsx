@@ -1,14 +1,17 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { FileText, Lock, Eye, Search } from "lucide-react";
+import { ExternalLink, FileText, Lock, Eye, Loader2, Search } from "lucide-react";
 import { useStore } from "../data/store";
 import { formatDateTime } from "../lib/format";
-import type { DocumentCategory } from "../types";
+import { isCentralDriveEnabled, openCentralDriveFile } from "../lib/centralDrive";
+import type { DocumentCategory, ProjectDocument } from "../types";
 
 export function DocumentsPage() {
   const { projects } = useStore();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<DocumentCategory | "">("");
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
 
   const allDocuments = useMemo(() => {
     return projects.flatMap((p) => (p.documents ?? []).map((d) => ({ ...d, project: p })));
@@ -21,6 +24,27 @@ export function DocumentsPage() {
     if (search && !d.file_name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
+
+  function canOpen(document: ProjectDocument) {
+    return Boolean((document.drive_file_id && isCentralDriveEnabled) || document.file_url);
+  }
+
+  async function handleOpen(document: ProjectDocument) {
+    if (!canOpen(document)) return;
+    setOpeningId(document.id);
+    setOpenError(null);
+    try {
+      if (document.drive_file_id && isCentralDriveEnabled) {
+        await openCentralDriveFile(document.drive_file_id);
+      } else if (document.file_url) {
+        window.open(document.file_url, "_blank", "noopener,noreferrer");
+      }
+    } catch (error) {
+      setOpenError(error instanceof Error ? error.message : "Dokumentet kunde inte öppnas.");
+    } finally {
+      setOpeningId(null);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -42,14 +66,25 @@ export function DocumentsPage() {
         </select>
       </div>
 
+      {openError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{openError}</p>}
+
       <div className="space-y-3 md:hidden">
         {filtered.map((d) => (
-          <Link key={d.id} to={`/projekt/${d.project.id}`} className="block rounded-xl border border-border bg-panel p-4 shadow-sm">
+          <article key={d.id} className="rounded-xl border border-border bg-panel p-4 shadow-sm">
             <div className="flex items-start gap-3">
               <FileText size={18} className="mt-0.5 shrink-0 text-slate-400" />
               <div className="min-w-0 flex-1">
-                <div className="break-words text-sm font-semibold text-slate-800">{d.file_name}</div>
-                <div className="mt-1 text-xs text-slate-500">{d.project.project_number} · {d.category}</div>
+                {canOpen(d) ? (
+                  <button type="button" onClick={() => void handleOpen(d)} disabled={openingId === d.id} className="flex max-w-full items-start gap-1.5 break-words text-left text-sm font-semibold text-slate-800 hover:text-orange-600 disabled:opacity-60">
+                    <span>{d.file_name}</span>
+                    {openingId === d.id ? <Loader2 size={13} className="mt-0.5 shrink-0 animate-spin" /> : <ExternalLink size={13} className="mt-0.5 shrink-0" />}
+                  </button>
+                ) : (
+                  <div className="break-words text-sm font-semibold text-slate-800">{d.file_name}</div>
+                )}
+                <div className="mt-1 text-xs text-slate-500">
+                  <Link to={`/projekt/${d.project.id}`} className="hover:text-orange-600">{d.project.project_number}</Link> · {d.category}
+                </div>
                 <div className="mt-1 text-xs text-slate-500">{formatDateTime(d.uploaded_at)} · {d.uploaded_by}</div>
                 <div className="mt-2 flex items-center gap-1 text-xs text-slate-500">
                   {d.visibility === "internal" ? <Lock size={12} /> : <Eye size={12} />}
@@ -57,7 +92,7 @@ export function DocumentsPage() {
                 </div>
               </div>
             </div>
-          </Link>
+          </article>
         ))}
         {filtered.length === 0 && (
           <div className="rounded-xl border border-border bg-panel px-4 py-10 text-center text-sm text-slate-500">Inga dokument matchar.</div>
@@ -80,9 +115,15 @@ export function DocumentsPage() {
             {filtered.map((d) => (
               <tr key={d.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3">
-                  <span className="flex items-center gap-2 font-medium text-slate-800">
-                    <FileText size={15} className="text-slate-400" /> {d.file_name}
-                  </span>
+                  <div className="flex items-center gap-2 font-medium text-slate-800">
+                    <FileText size={15} className="shrink-0 text-slate-400" />
+                    {canOpen(d) ? (
+                      <button type="button" onClick={() => void handleOpen(d)} disabled={openingId === d.id} className="flex min-w-0 items-center gap-1.5 text-left hover:text-orange-600 disabled:opacity-60">
+                        <span className="truncate">{d.file_name}</span>
+                        {openingId === d.id ? <Loader2 size={12} className="shrink-0 animate-spin" /> : <ExternalLink size={12} className="shrink-0" />}
+                      </button>
+                    ) : d.file_name}
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <Link to={`/projekt/${d.project.id}`} className="text-slate-600 hover:text-orange-600">

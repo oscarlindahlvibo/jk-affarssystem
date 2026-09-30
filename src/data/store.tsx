@@ -106,6 +106,7 @@ interface StoreShape {
   updateSupplier: (id: string, patch: Partial<Supplier>) => void;
   deleteSupplier: (id: string) => { ok: boolean; reason?: string };
   addProject: (p: Omit<Project, "id" | "org_id" | "created_at" | "updated_at">) => Project;
+  waitForPendingMutations: () => Promise<void>;
   submitCustomerBooking: (data: CustomerBookingInput) => Promise<Project>;
   approveCustomerBooking: (projectId: string, data: { responsible_id: string | null; status: ProjectStatus }) => void;
   rejectCustomerBooking: (projectId: string, reason: string) => void;
@@ -209,6 +210,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [dataError, setDataError] = useState<string | null>(null);
   const [loadVersion, setLoadVersion] = useState(0);
   const mutationQueue = useRef<Promise<void>>(Promise.resolve());
+  const mutationError = useRef<unknown>(null);
   const [freightCalculatorConfig, setFreightCalculatorConfig] = useState<FreightCalculatorConfig>(
     isSupabaseConfigured ? DEFAULT_FREIGHT_CALCULATOR_CONFIG : loadFreightCalculatorConfig
   );
@@ -223,8 +225,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .then(operation)
       .catch((error) => {
         console.error(error);
+        mutationError.current = error;
         setDataError(error instanceof Error ? error.message : "Ändringen kunde inte sparas i databasen.");
       });
+  }, []);
+
+  const waitForPendingMutations = useCallback(async () => {
+    await mutationQueue.current;
+    if (mutationError.current) {
+      const error = mutationError.current;
+      mutationError.current = null;
+      throw error;
+    }
   }, []);
 
   useEffect(() => {
@@ -1080,6 +1092,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateSupplier,
       deleteSupplier,
       addProject,
+      waitForPendingMutations,
       submitCustomerBooking,
       approveCustomerBooking,
       rejectCustomerBooking,
@@ -1134,6 +1147,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateSupplier,
       deleteSupplier,
       addProject,
+      waitForPendingMutations,
       submitCustomerBooking,
       approveCustomerBooking,
       rejectCustomerBooking,

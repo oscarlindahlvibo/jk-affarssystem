@@ -31,7 +31,8 @@ export async function uploadCentralDriveFile(file: File, projectId: string) {
 }
 
 export async function openCentralDriveFile(fileId: string) {
-  const target = window.open("", "_blank", "noopener,noreferrer");
+  const target = window.open("about:blank", "_blank");
+  if (target) target.opener = null;
   try {
     const response = await driveRequest(`?file_id=${encodeURIComponent(fileId)}`);
     const blob = await response.blob();

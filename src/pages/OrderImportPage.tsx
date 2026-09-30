@@ -10,6 +10,9 @@ import { MOCK_LTC_ORDER } from "../data/ltcMockOrder";
 import { nextProjectNumber } from "../components/projects/NewProjectModal";
 import { usePermissions } from "../lib/usePermissions";
 import { canonicalCustomerName, normalizeCustomerName } from "../lib/importLogic";
+import { useAuth } from "../lib/auth";
+import { isCentralDriveEnabled, uploadCentralDriveFile } from "../lib/centralDrive";
+import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import type { ContactPerson, TransportType } from "../types";
 
 const TRANSPORT_TYPES: TransportType[] = ["Specialtransport", "Maskintransport", "Krantransport", "Styckegods", "Container", "Annat"];
@@ -45,9 +48,11 @@ function findMatchingContact(contacts: ContactPerson[], customerId: string, orde
 
 export function OrderImportPage() {
   const store = useStore();
+  const { currentProfile } = useAuth();
   const canImport = usePermissions().can("projects", "create");
   const [step, setStep] = useState<Step>(1);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const [parsing, setParsing] = useState(false);
@@ -72,7 +77,9 @@ export function OrderImportPage() {
   const [supplierId, setSupplierId] = useState("");
   const [responsibleId, setResponsibleId] = useState("");
   const [items, setItems] = useState<EditableItem[]>([]);
-  const [result, setResult] = useState<{ created: number } | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ created: number; documentsSaved: number; documentsFailed: number } | null>(null);
 
   const activeProfiles = store.profiles.filter((p) => p.status === "aktiv");
   const contactsForCustomer = store.contactPersons.filter((c) => c.customer_id === customerId);
@@ -114,11 +121,14 @@ export function OrderImportPage() {
 
   async function handleFile(file: File) {
     setParseError(null);
+    setSourceFile(null);
+    replacePreviewUrl(null);
     setParsing(true);
     try {
       const text = await extractPdfText(file);
       const parsed = parseLtcOrder(text);
       setFileName(file.name);
+      setSourceFile(file);
       replacePreviewUrl(file);
       if (parsed.items.length === 0 && !parsed.documentNumber) {
         setParseError("Kunde inte tolka dokumentet automatiskt. Kontrollera att det är en LTC-liknande fraktbeställning, eller fortsätt och fyll i manuellt.");
@@ -134,6 +144,7 @@ export function OrderImportPage() {
   function useExample() {
     setParseError(null);
     setFileName("Exempeldata (LTC-blad Holtab)");
+    setSourceFile(null);
     replacePreviewUrl(null);
     loadOrderIntoForm(MOCK_LTC_ORDER);
   }
@@ -149,23 +160,67 @@ export function OrderImportPage() {
     setContactId(findMatchingContact(store.contactPersons, nextCustomerId, order)?.id ?? "");
   }
 
-  function handleCreate() {
-    let finalCustomerId = customerId;
-    if (!finalCustomerId && newCustomerName.trim()) {
-      const created = store.addCustomer({
-        company_name: canonicalCustomerName(newCustomerName),
-        org_number: null,
-        invoice_address: null,
-        visiting_address: null,
-        phone: null,
-        email: null,
-        website: null,
-        notes: "Skapad via LTC-orderimport.",
-        status: "aktiv",
+  async function saveSourceDocument(file: File, projectId: string) {
+    let storagePath: string | null = null;
+    let fileUrl: string | null = null;
+    let driveFileId: string | null = null;
+
+    if (isCentralDriveEnabled) {
+      const uploaded = await uploadCentralDriveFile(file, projectId);
+      storagePath = `drive:${uploaded.id}`;
+      fileUrl = uploaded.webViewLink;
+      driveFileId = uploaded.id;
+    } else if (isSupabaseConfigured && supabase) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      storagePath = `${projectId}/${crypto.randomUUID()}-${safeName}`;
+      const uploaded = await supabase.storage.from("project-documents").upload(storagePath, file, {
+        contentType: file.type || "application/pdf",
+        upsert: false,
       });
-      finalCustomerId = created.id;
+      if (uploaded.error) throw new Error(uploaded.error.message);
+      const signed = await supabase.storage.from("project-documents").createSignedUrl(storagePath, 60 * 60);
+      if (signed.error) throw new Error(signed.error.message);
+      fileUrl = signed.data.signedUrl;
+    } else {
+      fileUrl = URL.createObjectURL(file);
     }
-    if (!finalCustomerId) return;
+
+    store.addDocument(projectId, {
+      file_name: file.name,
+      file_type: file.name.split(".").pop() ?? "pdf",
+      category: "Order",
+      storage_path: storagePath,
+      file_url: fileUrl,
+      file_size: file.size,
+      drive_file_id: driveFileId,
+      uploaded_at: new Date().toISOString(),
+      uploaded_by: currentProfile?.full_name ?? "Okänd",
+      visibility: "internal",
+      comment: "Originaldokument från LTC-import.",
+    });
+    await store.waitForPendingMutations();
+  }
+
+  async function handleCreate() {
+    setCreating(true);
+    setCreateError(null);
+    let finalCustomerId = customerId;
+    try {
+      if (!finalCustomerId && newCustomerName.trim()) {
+        const created = store.addCustomer({
+          company_name: canonicalCustomerName(newCustomerName),
+          org_number: null,
+          invoice_address: null,
+          visiting_address: null,
+          phone: null,
+          email: null,
+          website: null,
+          notes: "Skapad via LTC-orderimport.",
+          status: "aktiv",
+        });
+        finalCustomerId = created.id;
+      }
+      if (!finalCustomerId) return;
 
     let finalContactId = contactId;
     if (!finalContactId && order?.recipientContact?.trim()) {
@@ -188,9 +243,11 @@ export function OrderImportPage() {
       }
     }
 
-    let created = 0;
-    let workingProjects = store.projects;
-    const customerName = store.customers.find((c) => c.id === finalCustomerId)?.company_name ?? (newCustomerName.trim() || "Kund");
+      let created = 0;
+      let documentsSaved = 0;
+      let documentsFailed = 0;
+      let workingProjects = store.projects;
+      const customerName = store.customers.find((c) => c.id === finalCustomerId)?.company_name ?? (newCustomerName.trim() || "Kund");
 
     for (const item of items) {
       if (!item.include) continue;
@@ -251,16 +308,33 @@ export function OrderImportPage() {
           },
         ],
       });
-      workingProjects = [...workingProjects, newProject];
-      created++;
-    }
+        workingProjects = [...workingProjects, newProject];
+        created++;
+        await store.waitForPendingMutations();
+        if (sourceFile) {
+          try {
+            await saveSourceDocument(sourceFile, newProject.id);
+            documentsSaved++;
+          } catch (error) {
+            console.error("Kunde inte spara LTC-originalet", error);
+            documentsFailed++;
+          }
+        }
+      }
 
-    setResult({ created });
+      setResult({ created, documentsSaved, documentsFailed });
+      setStep(3);
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : "Importen kunde inte slutföras.");
+    } finally {
+      setCreating(false);
+    }
   }
 
   function startOver() {
     setStep(1);
     setFileName(null);
+    setSourceFile(null);
     replacePreviewUrl(null);
     setOrder(null);
     setResult(null);
@@ -467,10 +541,12 @@ export function OrderImportPage() {
 
           <div className="mt-5 flex justify-between border-t border-border pt-4">
             <Button variant="secondary" onClick={() => setStep(1)}><ArrowLeft size={14} /> Tillbaka</Button>
-            <Button onClick={handleCreate} disabled={includedCount === 0 || (!customerId && !newCustomerName.trim())}>
-              Skapa {includedCount} projekt <ArrowRight size={14} />
+            <Button onClick={() => void handleCreate()} disabled={creating || includedCount === 0 || (!customerId && !newCustomerName.trim())}>
+              {creating ? <Loader2 size={14} className="animate-spin" /> : null}
+              {creating ? "Skapar projekt och sparar LTC..." : `Skapa ${includedCount} projekt`} {!creating && <ArrowRight size={14} />}
             </Button>
           </div>
+          {createError && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{createError}</p>}
         </Panel>
       )}
 
@@ -481,6 +557,14 @@ export function OrderImportPage() {
             <div>
               <div className="font-medium">Importen är klar.</div>
               <div className="mt-1 text-green-700/90">{result.created} projekt skapade utifrån ordern.</div>
+              {sourceFile && (
+                <div className="mt-1 text-green-700/90">Originalfilen sparades i {result.documentsSaved} projektmappar.</div>
+              )}
+              {result.documentsFailed > 0 && (
+                <div className="mt-2 rounded-md bg-amber-100 px-3 py-2 text-amber-800">
+                  Originalfilen kunde inte sparas i {result.documentsFailed} projektmappar. Projekten är skapade och filen kan laddas upp manuellt under Dokument.
+                </div>
+              )}
             </div>
           </div>
           <div className="mt-4 flex gap-2">
