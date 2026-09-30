@@ -24,6 +24,7 @@ import { CustomerPortalPage } from "./pages/CustomerPortalPage";
 import { FreightCalculatorSettingsPage } from "./pages/FreightCalculatorSettingsPage";
 import { ContactSubmissionsPage } from "./pages/ContactSubmissionsPage";
 import { SetPasswordPage } from "./pages/SetPasswordPage";
+import { DocumentViewerPage } from "./pages/DocumentViewerPage";
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -75,6 +76,7 @@ function AppRoutes() {
         }
       >
         <Route path="/kundportal" element={<RequireCustomer><CustomerPortalPage /></RequireCustomer>} />
+        <Route path="/dokument/oppna/:fileId" element={<DocumentViewerPage />} />
         <Route element={<RequireInternal><AppLayout /></RequireInternal>}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/mina-uppgifter" element={<MyTasksPage />} />

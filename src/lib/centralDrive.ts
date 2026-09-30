@@ -30,20 +30,13 @@ export async function uploadCentralDriveFile(file: File, projectId: string) {
   return response.json() as Promise<{ id: string; webViewLink: string }>;
 }
 
+export async function getCentralDriveFileUrl(fileId: string) {
+  const response = await driveRequest(`?file_id=${encodeURIComponent(fileId)}`);
+  return URL.createObjectURL(await response.blob());
+}
+
 export async function openCentralDriveFile(fileId: string) {
-  const target = window.open("about:blank", "_blank");
-  if (target) target.opener = null;
-  try {
-    const response = await driveRequest(`?file_id=${encodeURIComponent(fileId)}`);
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    if (target) target.location.href = url;
-    else window.location.href = url;
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  } catch (error) {
-    target?.close();
-    throw error;
-  }
+  window.open(`/dokument/oppna/${encodeURIComponent(fileId)}`, "_blank", "noopener,noreferrer");
 }
 
 export async function deleteCentralDriveFile(fileId: string) {

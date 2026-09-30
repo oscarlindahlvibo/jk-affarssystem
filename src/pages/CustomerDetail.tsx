@@ -25,6 +25,7 @@ export function CustomerDetail() {
   const [contactOpen, setContactOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [showClosedProjects, setShowClosedProjects] = useState(false);
 
   if (!customer) {
     return (
@@ -39,6 +40,9 @@ export function CustomerDetail() {
 
   const contacts = getContactsByCustomer(customer.id);
   const custProjects = getProjectsByCustomer(customer.id);
+  const visibleProjects = custProjects
+    .filter((project) => showClosedProjects || (!["Avslutad", "Avbruten"].includes(project.status) && project.invoice_status !== "Fakturerad"))
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
   const portalUsers = customerUsers.filter((user) => user.customer_id === customer.id);
 
   return (
@@ -95,9 +99,17 @@ export function CustomerDetail() {
             )}
           </Panel>
 
-          <Panel title="Projekt kopplade till kunden">
+          <Panel
+            title="Projekt kopplade till kunden"
+            action={(
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+                <input type="checkbox" checked={showClosedProjects} onChange={(event) => setShowClosedProjects(event.target.checked)} />
+                Visa avslutade
+              </label>
+            )}
+          >
             <ul className="divide-y divide-border">
-              {custProjects.map((p) => (
+              {visibleProjects.map((p) => (
                 <li key={p.id} className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0">
                   <div>
                     <Link to={`/projekt/${p.id}`} className="text-sm font-medium text-slate-800 hover:text-orange-600">
@@ -108,7 +120,11 @@ export function CustomerDetail() {
                   <StatusBadge status={p.status} />
                 </li>
               ))}
-              {custProjects.length === 0 && <p className="py-2 text-sm text-slate-500">Inga projekt kopplade ännu.</p>}
+              {visibleProjects.length === 0 && (
+                <p className="py-2 text-sm text-slate-500">
+                  {custProjects.length === 0 ? "Inga projekt kopplade ännu." : "Inga aktiva projekt. Markera Visa avslutade för att se historiken."}
+                </p>
+              )}
             </ul>
           </Panel>
         </div>
