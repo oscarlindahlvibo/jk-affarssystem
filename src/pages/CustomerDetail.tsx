@@ -42,7 +42,10 @@ export function CustomerDetail() {
   const custProjects = getProjectsByCustomer(customer.id);
   const visibleProjects = custProjects
     .filter((project) => showClosedProjects || (!["Avslutad", "Avbruten"].includes(project.status) && project.invoice_status !== "Fakturerad"))
-    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    .sort((a, b) => {
+      const byCreatedAt = b.created_at.localeCompare(a.created_at);
+      return byCreatedAt || b.project_number.localeCompare(a.project_number, "sv", { numeric: true });
+    });
   const portalUsers = customerUsers.filter((user) => user.customer_id === customer.id);
 
   return (
