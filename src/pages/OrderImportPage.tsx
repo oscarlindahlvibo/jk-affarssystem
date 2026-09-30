@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Upload, FileText, CheckCircle2, AlertTriangle, ArrowLeft, ArrowRight, Loader2, Plus, X } from "lucide-react";
+import { Upload, FileText, CheckCircle2, AlertTriangle, ArrowLeft, ArrowRight, ExternalLink, Loader2, Plus, X } from "lucide-react";
 import { useStore } from "../data/store";
 import { Panel } from "../components/ui/Panel";
 import { Button } from "../components/ui/Button";
@@ -47,6 +47,8 @@ export function OrderImportPage() {
   const canImport = usePermissions().can("projects", "create");
   const [step, setStep] = useState<Step>(1);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [order, setOrder] = useState<ParsedLtcOrder | null>(null);
@@ -76,6 +78,17 @@ export function OrderImportPage() {
   const parsedCustomerContactName = order?.recipientContact?.trim() ?? "";
   const parsedCustomerContactPhone = order?.recipientMobile ?? order?.recipientPhone ?? "";
 
+  useEffect(() => () => {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+  }, []);
+
+  function replacePreviewUrl(file: File | null) {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    const nextUrl = file ? URL.createObjectURL(file) : null;
+    previewUrlRef.current = nextUrl;
+    setPreviewUrl(nextUrl);
+  }
+
   function loadOrderIntoForm(parsed: ParsedLtcOrder) {
     setOrder(parsed);
     const matchedCustomer = store.customers.find((c) => c.company_name.toLowerCase() === (parsed.senderCompany ?? "").toLowerCase());
@@ -103,6 +116,7 @@ export function OrderImportPage() {
       const text = await extractPdfText(file);
       const parsed = parseLtcOrder(text);
       setFileName(file.name);
+      replacePreviewUrl(file);
       if (parsed.items.length === 0 && !parsed.documentNumber) {
         setParseError("Kunde inte tolka dokumentet automatiskt. Kontrollera att det är en LTC-liknande fraktbeställning, eller fortsätt och fyll i manuellt.");
       }
@@ -117,6 +131,7 @@ export function OrderImportPage() {
   function useExample() {
     setParseError(null);
     setFileName("Exempeldata (LTC-blad Holtab)");
+    replacePreviewUrl(null);
     loadOrderIntoForm(MOCK_LTC_ORDER);
   }
 
@@ -243,6 +258,7 @@ export function OrderImportPage() {
   function startOver() {
     setStep(1);
     setFileName(null);
+    replacePreviewUrl(null);
     setOrder(null);
     setResult(null);
     setParseError(null);
@@ -414,6 +430,36 @@ export function OrderImportPage() {
                 )}
               </div>
             </div>
+
+            {previewUrl && (
+              <section className="border-t border-border pt-6" aria-labelledby="ltc-preview-heading">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 id="ltc-preview-heading" className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <FileText size={16} className="text-orange-500" />
+                      Originaldokument
+                    </h3>
+                    <p className="mt-1 text-xs text-slate-500">Jämför uppgifterna ovan med den uppladdade LTC-filen.</p>
+                  </div>
+                  <a
+                    href={previewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <ExternalLink size={14} /> Öppna större
+                  </a>
+                </div>
+                <div className="mt-3 overflow-hidden rounded-lg border border-border bg-slate-100">
+                  <iframe
+                    src={`${previewUrl}#view=FitH`}
+                    title={`Förhandsgranskning av ${fileName ?? "LTC-dokument"}`}
+                    className="h-[70vh] min-h-[520px] w-full bg-white"
+                  />
+                </div>
+                <p className="mt-2 text-xs text-slate-400">Förhandsgranskningen visas lokalt i webbläsaren.</p>
+              </section>
+            )}
           </div>
 
           <div className="mt-5 flex justify-between border-t border-border pt-4">
