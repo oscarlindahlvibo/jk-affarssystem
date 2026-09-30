@@ -3,6 +3,7 @@
 // blankettens etiketter. Detta är en bästa-möjliga-tolkning – layouten kan skilja
 // sig mellan kunder/versioner, så allt presenteras i en granskningsvy där
 // användaren kompletterar och rättar innan projekt skapas.
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 export interface ParsedLtcItem {
   quantity: number | null;
@@ -40,7 +41,9 @@ export interface ParsedLtcOrder {
 
 export async function extractPdfText(file: File): Promise<string> {
   const pdfjs = await import("pdfjs-dist");
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+  // Versionsparametern gör att webbläsare inte återanvänder worker-svaret som
+  // tidigare serverades med fel MIME-typ och lång immutable-cache.
+  pdfjs.GlobalWorkerOptions.workerSrc = `${pdfWorkerUrl}?v=20260930`;
 
   const buffer = await file.arrayBuffer();
   const doc = await pdfjs.getDocument({ data: buffer }).promise;
