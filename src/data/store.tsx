@@ -196,6 +196,8 @@ function loadFreightCalculatorChangeLog(): FreightCalculatorChangeLogEntry[] {
 export function StoreProvider({ children }: { children: ReactNode }) {
   const { currentProfile, currentCustomerUser } = useAuth();
   const personnel = usePersonnel();
+  const currentProfileId = currentProfile?.id ?? null;
+  const currentCustomerUserId = currentCustomerUser?.id ?? null;
   const orgId = currentProfile?.org_id ?? currentCustomerUser?.org_id ?? "";
   const role = currentProfile?.role ?? null;
 
@@ -240,7 +242,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!isSupabaseConfigured || (!currentProfile && !currentCustomerUser)) return;
+    if (!isSupabaseConfigured || (!currentProfileId && !currentCustomerUserId)) return;
     let active = true;
     setIsLoading(true);
     setDataError(null);
@@ -266,7 +268,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [currentCustomerUser, currentProfile, loadVersion]);
+  }, [currentCustomerUserId, currentProfileId, loadVersion]);
 
   useEffect(() => {
     if (isSupabaseConfigured) return;
@@ -498,6 +500,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       const newProject: Project = {
         ...p,
+        booking_source: p.booking_source ?? "internal",
+        booking_approval_status: p.booking_approval_status ?? null,
+        requested_by_customer_user_id: p.requested_by_customer_user_id ?? null,
         id: projectId,
         org_id: orgId,
         created_at: now,
