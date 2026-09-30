@@ -14,6 +14,8 @@ import {
   IMPORT_STATUS_LABEL,
   evaluateRow,
   guessMapping,
+  canonicalCustomerName,
+  normalizeCustomerName,
   normalizeEntityName,
   resolveInvoiceStatus,
   resolveStatus,
@@ -118,7 +120,7 @@ export function ImportPage() {
   }, [evaluatedRows]);
 
   const dryRun = useMemo(() => {
-    const existingCustomerKeys = new Set(store.customers.map((customer) => normalizeEntityName(customer.company_name)));
+    const existingCustomerKeys = new Set(store.customers.map((customer) => normalizeCustomerName(customer.company_name)));
     const existingSupplierKeys = new Set(store.suppliers.map((supplier) => normalizeEntityName(supplier.company_name)));
     const customerNames = new Map<string, Set<string>>();
     const supplierNames = new Map<string, Set<string>>();
@@ -126,7 +128,7 @@ export function ImportPage() {
     for (const row of rowsWithAction) {
       if (row.action === "skip") continue;
       if (row.data.customer) {
-        const key = normalizeEntityName(row.data.customer);
+        const key = normalizeCustomerName(row.data.customer);
         const variants = customerNames.get(key) ?? new Set<string>();
         variants.add(row.data.customer.trim());
         customerNames.set(key, variants);
@@ -157,7 +159,7 @@ export function ImportPage() {
   function runImport() {
     let created = 0, updated = 0, skipped = 0, newCustomers = 0, newSuppliers = 0;
     let workingProjects = store.projects;
-    const customerByName = new Map(store.customers.map((customer) => [normalizeEntityName(customer.company_name), customer]));
+    const customerByName = new Map(store.customers.map((customer) => [normalizeCustomerName(customer.company_name), customer]));
     const supplierByName = new Map(store.suppliers.map((supplier) => [normalizeEntityName(supplier.company_name), supplier]));
     const contactByCustomerAndName = new Map(
       store.contactPersons.map((contact) => [`${contact.customer_id}:${normalizeEntityName(contact.name)}`, contact])
@@ -168,12 +170,12 @@ export function ImportPage() {
       const d = row.data;
 
       let customerId = "";
-      const existingCustomer = customerByName.get(normalizeEntityName(d.customer));
+      const existingCustomer = customerByName.get(normalizeCustomerName(d.customer));
       if (existingCustomer) {
         customerId = existingCustomer.id;
       } else if (d.customer) {
         const newCustomer = store.addCustomer({
-          company_name: d.customer,
+          company_name: canonicalCustomerName(d.customer),
           org_number: null,
           invoice_address: null,
           visiting_address: null,
@@ -184,7 +186,7 @@ export function ImportPage() {
           status: "aktiv",
         });
         customerId = newCustomer.id;
-        customerByName.set(normalizeEntityName(d.customer), newCustomer);
+        customerByName.set(normalizeCustomerName(d.customer), newCustomer);
         newCustomers++;
       } else {
         skipped++;

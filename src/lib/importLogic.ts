@@ -102,6 +102,22 @@ export function normalizeEntityName(value: string): string {
     .replace(/[.,]+$/g, "");
 }
 
+const HOLTAB_CUSTOMER_ALIASES = new Set([
+  "holtab ab",
+  "holtab projekt",
+  "holtab produkt",
+  "holtab service",
+]);
+
+export function normalizeCustomerName(value: string): string {
+  const normalized = normalizeEntityName(value);
+  return HOLTAB_CUSTOMER_ALIASES.has(normalized) ? "holtab ab" : normalized;
+}
+
+export function canonicalCustomerName(value: string): string {
+  return normalizeCustomerName(value) === "holtab ab" ? "Holtab AB" : value.trim();
+}
+
 export function splitSupplierNames(value: string): string[] {
   const seen = new Set<string>();
   return cleanCell(value)
@@ -341,7 +357,7 @@ export interface DuplicateMatch {
 export function findDuplicate(row: MappedRowData, existingProjects: Project[]): DuplicateMatch | null {
   for (const project of existingProjects) {
     const reasons: string[] = [];
-    const sameCustomer = row.customer && normalizeEntityName(project.customer?.company_name ?? "") === normalizeEntityName(row.customer);
+    const sameCustomer = row.customer && normalizeCustomerName(project.customer?.company_name ?? "") === normalizeCustomerName(row.customer);
     const loading = normalizeEntityName(project.locations?.find((l) => l.type === "lastning")?.name ?? "");
     const unloading = normalizeEntityName(project.locations?.find((l) => l.type === "lossning")?.name ?? "");
     const sameLoading = row.loadingPlace && loading === normalizeEntityName(row.loadingPlace);

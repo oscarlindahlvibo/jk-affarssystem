@@ -9,6 +9,7 @@ import { extractPdfText, parseLtcOrder, type ParsedLtcOrder, type ParsedLtcItem 
 import { MOCK_LTC_ORDER } from "../data/ltcMockOrder";
 import { nextProjectNumber } from "../components/projects/NewProjectModal";
 import { usePermissions } from "../lib/usePermissions";
+import { canonicalCustomerName, normalizeCustomerName } from "../lib/importLogic";
 import type { ContactPerson, TransportType } from "../types";
 
 const TRANSPORT_TYPES: TransportType[] = ["Specialtransport", "Maskintransport", "Krantransport", "Styckegods", "Container", "Annat"];
@@ -91,12 +92,14 @@ export function OrderImportPage() {
 
   function loadOrderIntoForm(parsed: ParsedLtcOrder) {
     setOrder(parsed);
-    const matchedCustomer = store.customers.find((c) => c.company_name.toLowerCase() === (parsed.senderCompany ?? "").toLowerCase());
+    const matchedCustomer = store.customers.find(
+      (c) => normalizeCustomerName(c.company_name) === normalizeCustomerName(parsed.senderCompany ?? "")
+    );
     const matchedContact = matchedCustomer ? findMatchingContact(store.contactPersons, matchedCustomer.id, parsed) : undefined;
     setCustomerId(matchedCustomer?.id ?? "");
     setContactId(matchedContact?.id ?? "");
     setShowNewCustomer(!matchedCustomer && Boolean(parsed.senderCompany));
-    setNewCustomerName(parsed.senderCompany ?? "");
+    setNewCustomerName(canonicalCustomerName(parsed.senderCompany ?? ""));
     setLoadingPlace([parsed.senderCity, parsed.senderAddress].filter(Boolean).join(", ") || parsed.senderCity || "");
     const coords = parsed.deliveryCoordinateN && parsed.deliveryCoordinateE ? ` (N: ${parsed.deliveryCoordinateN}, E: ${parsed.deliveryCoordinateE})` : "";
     setUnloadingPlace([parsed.deliveryPostnr, parsed.deliveryCity].filter(Boolean).join(" ") + coords);
@@ -150,7 +153,7 @@ export function OrderImportPage() {
     let finalCustomerId = customerId;
     if (!finalCustomerId && newCustomerName.trim()) {
       const created = store.addCustomer({
-        company_name: newCustomerName.trim(),
+        company_name: canonicalCustomerName(newCustomerName),
         org_number: null,
         invoice_address: null,
         visiting_address: null,
