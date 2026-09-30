@@ -256,7 +256,7 @@ const rawProjects: Omit<
     tasks: [
       { id: "t6", project_id: "pr2", task: "Kontrollera transportmått", category: "Dokumentation", description: null, route_section: null, assignee_id: "u1", assignee: "Jens Karlsson", deadline: "2026-08-12", status: "Klar", comment: null },
       { id: "t7", project_id: "pr2", task: "Reka alternativ rutt förbi tunnel Norrköping", category: "Rekning", description: "Tunneln vid Norrköping klarar inte transporthöjden (4,6 m). Hitta och kontrollera en alternativ väg, exempelvis via Rv34.", route_section: "Västerås → Oskarshamn, delsträcka runt Norrköping", assignee_id: "u1", assignee: "Jens Karlsson", deadline: "2026-09-05", status: "Pågående", comment: "Alternativ rutt utreds pga tunnel." },
-      { id: "t8", project_id: "pr2", task: "Begär pris från transportör", category: "Bokning", description: null, route_section: null, assignee_id: "u1", assignee: "Jens Karlsson", deadline: "2026-09-12", status: "Ej påbörjad", comment: null },
+      { id: "t8", project_id: "pr2", task: "Begär pris från transportör", category: "Bokning av transport", description: null, route_section: null, assignee_id: "u1", assignee: "Jens Karlsson", deadline: "2026-09-12", status: "Ej påbörjad", comment: null },
     ],
   },
   {

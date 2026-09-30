@@ -191,7 +191,7 @@ export function suggestedTransportTasks(cargoItems: CargoDimensions[]): Suggeste
   if (hasRule(PILOT_RULE_IDS)) {
     tasks.push({
       task: "Boka vägtransportledare (VTL)",
-      category: "Följebil",
+      category: "VTL",
       description: `Föreslagen automatiskt utifrån godsets mått. ${ruleSummary(cargoItems, PILOT_RULE_IDS)}`,
     });
   }

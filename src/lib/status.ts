@@ -27,8 +27,10 @@ export const TASK_CATEGORY_STYLES: Record<TaskCategory, string> = {
   Rekning: "bg-cyan-100 text-cyan-700",
   Dispensansökan: "bg-rose-100 text-rose-700",
   Följebil: "bg-orange-100 text-orange-700",
+  VTL: "bg-amber-100 text-amber-800",
   Tillstånd: "bg-purple-100 text-purple-700",
-  Bokning: "bg-sky-100 text-sky-700",
+  "Bokning av transport": "bg-sky-100 text-sky-700",
+  "Bokning av mobilkran": "bg-indigo-100 text-indigo-700",
   Dokumentation: "bg-slate-100 text-slate-600",
   Övrigt: "bg-slate-100 text-slate-500",
 };

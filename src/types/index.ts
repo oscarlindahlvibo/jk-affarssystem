@@ -183,8 +183,10 @@ export type TaskCategory =
   | "Rekning"
   | "Dispensansökan"
   | "Följebil"
+  | "VTL"
   | "Tillstånd"
-  | "Bokning"
+  | "Bokning av transport"
+  | "Bokning av mobilkran"
   | "Dokumentation"
   | "Övrigt";
 
@@ -192,8 +194,10 @@ export const TASK_CATEGORIES: TaskCategory[] = [
   "Rekning",
   "Dispensansökan",
   "Följebil",
+  "VTL",
   "Tillstånd",
-  "Bokning",
+  "Bokning av transport",
+  "Bokning av mobilkran",
   "Dokumentation",
   "Övrigt",
 ];
