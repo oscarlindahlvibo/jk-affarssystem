@@ -1,5 +1,6 @@
-import { Bell, Menu } from "lucide-react";
+import { Menu } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
+import { TaskNotifications } from "./TaskNotifications";
 
 export function Topbar({ title, onMenuClick }: { title: string; onMenuClick: () => void }) {
   return (
@@ -9,17 +10,10 @@ export function Topbar({ title, onMenuClick }: { title: string; onMenuClick: () 
           <Menu size={20} />
         </button>
         <h1 className="truncate text-lg font-semibold text-slate-800">{title}</h1>
-        <button type="button" className="relative ml-auto shrink-0 rounded-lg p-2 text-slate-500 hover:bg-slate-100 sm:hidden" aria-label="Notiser">
-          <Bell size={18} />
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-orange-500" />
-        </button>
       </div>
       <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-4">
         <GlobalSearch />
-        <button type="button" className="relative hidden shrink-0 rounded-lg p-2 text-slate-500 hover:bg-slate-100 sm:block" aria-label="Notiser">
-          <Bell size={18} />
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-orange-500" />
-        </button>
+        <TaskNotifications />
       </div>
     </header>
   );
