@@ -2,6 +2,11 @@
 
 alter table projects alter column priority drop not null;
 
+update projects
+set priority = null,
+    priority_is_manual = false
+where status in ('Levererad', 'Avbokad', 'Fakturerad');
+
 create or replace function set_project_automatic_priority()
 returns trigger
 language plpgsql
@@ -27,8 +32,3 @@ drop trigger if exists projects_set_automatic_priority on projects;
 create trigger projects_set_automatic_priority
 before insert or update of planned_loading_date, priority_is_manual, status on projects
 for each row execute function set_project_automatic_priority();
-
-update projects
-set priority = null,
-    priority_is_manual = false
-where status in ('Levererad', 'Avbokad', 'Fakturerad');
