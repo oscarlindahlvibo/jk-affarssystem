@@ -278,7 +278,7 @@ export interface SupplierBookingDispatch {
   id: string;
   org_id: string;
   project_id: string;
-  supplier_id: string;
+  supplier_id: string | null;
   recipient_email: string;
   recipient_name: string | null;
   sent_at: string;
