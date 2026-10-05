@@ -4,6 +4,7 @@ import { allowMockAuth, requireSupabase } from "./runtimeMode";
 import { usePersonnel } from "../data/personnel";
 import { customerUsers } from "../data/mockData";
 import type { CustomerUser, Profile, UserRole, UserStatus } from "../types";
+import { disableWebPush } from "./webPush";
 
 type AccountType = "internal" | "customer";
 
@@ -230,6 +231,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     if (isSupabaseConfigured && supabase) {
+      try { await disableWebPush(); } catch { console.error("Could not remove server push subscription on logout"); }
       await supabase.auth.signOut();
     } else {
       sessionStorage.removeItem(MOCK_SESSION_KEY);

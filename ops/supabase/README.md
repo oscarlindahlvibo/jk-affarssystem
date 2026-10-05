@@ -63,6 +63,24 @@ läggas i frontendens Vite-miljö.
 Inkorgen tar emot svar från transportörerna, medan systemets utgående mejl går
 via den transaktionsleverantör som konfigurerats ovan.
 
+## Web Push notifications
+
+Generate VAPID keys once on the server, then recreate only the Functions service:
+
+```bash
+node /home/vibo/jkprojekt/configure-web-push.mjs /home/vibo/jkprojekt/supabase/.env
+cd /home/vibo/jkprojekt/supabase
+docker compose -f docker-compose.yml -f docker-compose.jk.yml up -d --no-deps functions
+```
+
+Deploy `push-subscriptions`, `_shared/webPush.ts`, and `notify-task-assignee` under
+`supabase/volumes/functions`. Keys must remain server-side and must not rotate on
+each deployment. Each active employee registers their own device through the bell
+menu. iPhone users must open the Home Screen app before enabling notifications.
+Signing out removes the device subscription; sign in and enable again to reconnect.
+The push service worker handles notifications only and does not cache application
+pages or business data. Expired subscriptions are removed after HTTP 404/410.
+
 ## Central Google Drive storage
 
 Project documents can be stored in the WPE Shared Drive `JK PROJEKT` with ID

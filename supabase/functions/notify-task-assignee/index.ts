@@ -1,4 +1,5 @@
 import nodemailer from "npm:nodemailer@6.9.16";
+import { sendUserPush } from "../_shared/webPush.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -48,7 +49,6 @@ Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(origin) });
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405, origin);
   if (origin && !ALLOWED_ORIGINS.has(origin)) return json({ error: "Origin not allowed" }, 403, origin);
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return json({ error: "E-posttjänsten är inte konfigurerad." }, 503, origin);
   const authorization = request.headers.get("authorization");
   if (!authorization?.startsWith("Bearer ")) return json({ error: "Authentication required" }, 401, origin);
   const userResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: ANON_KEY, Authorization: authorization } });
@@ -65,11 +65,23 @@ Deno.serve(async (request) => {
     const tasks = await rows(`/rest/v1/tasks?id=eq.${encodeURIComponent(taskId)}&select=*`);
     const task = tasks[0];
     if (!task?.assignee_id) return json({ ok: true, skipped: true }, 200, origin);
-    const projects = await rows(`/rest/v1/projects?id=eq.${encodeURIComponent(String(task.project_id))}&org_id=eq.${encodeURIComponent(String(sender.org_id))}&select=id,org_id,project_number,name`);
+    const projects = await rows(`/rest/v1/projects?id=eq.${encodeURIComponent(String(task.project_id))}&org_id=eq.${encodeURIComponent(String(sender.org_id))}&select=id,org_id,project_number,name,status,invoice_status`);
     const project = projects[0];
     if (!project) return json({ error: "Projektet hittades inte." }, 404, origin);
+    if (task.status === "Klar" || ["Levererad", "Avbokad", "Fakturerad"].includes(String(project.status)) || project.invoice_status === "Fakturerad") return json({ ok: true, skipped: true }, 200, origin);
     const assignees = await rows(`/rest/v1/profiles?id=eq.${encodeURIComponent(String(task.assignee_id))}&org_id=eq.${encodeURIComponent(String(sender.org_id))}&status=eq.aktiv&select=id,full_name,email`);
     const assignee = assignees[0];
+    if (!assignee) return json({ error: "Den ansvariga är inte aktiv i bolaget." }, 422, origin);
+
+    // A push failure must not prevent the existing email notification.
+    let pushResult = { sent: 0, failed: 0, configured: false };
+    try {
+      pushResult = await sendUserPush(String(assignee.id), String(project.org_id), {
+        title: `Ny arbetsorder · ${project.project_number}`,
+        body: String(task.task).slice(0, 200), url: `/projekt/${project.id}`, tag: `jk-task-${task.id}`,
+      });
+    } catch { console.error("Task push delivery failed"); }
+    if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return json({ ok: false, push: pushResult, error: "Arbetsordern sparades, men e-posttjänsten är inte konfigurerad." }, 200, origin);
     if (!assignee?.email) return json({ error: "Den ansvariga saknar e-postadress." }, 422, origin);
 
     const subject = `Ny arbetsorder: ${task.task} (${project.project_number})`;
@@ -87,7 +99,7 @@ Deno.serve(async (request) => {
     }
     await api("/rest/v1/task_notification_dispatches", { method: "POST", body: JSON.stringify({ org_id: project.org_id, project_id: project.id, task_id: task.id, assignee_id: assignee.id, recipient_email: assignee.email, status, external_message_id: messageId, error_message: errorMessage }) });
     if (status === "failed") return json({ ok: false, error: "Arbetsordern sparades, men e-postnotisen kunde inte skickas." }, 200, origin);
-    return json({ ok: true }, 200, origin);
+    return json({ ok: true, push: pushResult }, 200, origin);
   } catch (error) {
     console.error("Task notification failed", error);
     return json({ error: "E-postnotisen kunde inte skapas." }, 500, origin);
