@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, MapPin, Building2, User, AlertTriangle, Printer, Pencil, Save, UserCheck, XCircle } from "lucide-react";
+import { ArrowLeft, MapPin, Building2, User, AlertTriangle, Printer, Pencil, Save, Send, UserCheck, XCircle } from "lucide-react";
 import { useStore } from "../data/store";
 import { Panel } from "../components/ui/Panel";
 import { StatusBadge } from "../components/ui/StatusBadge";
@@ -20,6 +20,7 @@ import { evaluateTransportRules, RULE_SOURCE_NOTE } from "../lib/transportRules"
 import { usePermissions } from "../lib/usePermissions";
 import { inputClass } from "../components/ui/Field";
 import type { Project } from "../types";
+import { SupplierBookingModal } from "../components/projects/SupplierBookingModal";
 
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -110,7 +111,7 @@ function FinancePanel({
 
 export function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
-  const { getProject, updateProjectStatus, updateProjectFinance, updateProject, profiles, approveCustomerBooking, rejectCustomerBooking } = useStore();
+  const { getProject, updateProjectStatus, updateProjectFinance, updateProject, sendSupplierBooking, suppliers, profiles, approveCustomerBooking, rejectCustomerBooking } = useStore();
   const project = id ? getProject(id) : undefined;
   const permissions = usePermissions();
   const canEditProject = permissions.can("projects", "edit");
@@ -118,6 +119,7 @@ export function ProjectDetail() {
   const [approvalResponsibleId, setApprovalResponsibleId] = useState(project?.responsible_id ?? "");
   const [approvalStatus, setApprovalStatus] = useState<Project["status"]>("Bekräftad");
   const [rejectReason, setRejectReason] = useState("");
+  const [supplierBookingOpen, setSupplierBookingOpen] = useState(false);
 
   if (!project) {
     return (
@@ -288,7 +290,14 @@ export function ProjectDetail() {
             </div>
           </Panel>
 
-          <Panel title="Transportinformation">
+          <Panel
+            title="Transportinformation"
+            action={canEditProject ? (
+              <Button type="button" variant="secondary" className="px-2.5 py-1.5 text-xs" onClick={() => setSupplierBookingOpen(true)}>
+                <Send size={13} /> <span className="hidden sm:inline">Tilldela transportör / leverantör</span><span className="sm:hidden">Tilldela</span>
+              </Button>
+            ) : undefined}
+          >
             <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 sm:grid-cols-3">
               <InfoItem
                 label="Lastningsort"
@@ -339,6 +348,21 @@ export function ProjectDetail() {
                 <span className="font-medium text-slate-700">Särskilda krav: </span>
                 {project.special_requirements}
               </p>
+            )}
+            {(project.supplier_booking_dispatches?.length ?? 0) > 0 && (
+              <div className="mt-4 border-t border-border pt-3">
+                <div className="text-xs font-medium text-slate-500">Senaste leverantörsutskick</div>
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
+                  {project.supplier_booking_dispatches?.slice(0, 3).map((dispatch) => (
+                    <span key={dispatch.id}>
+                      {dispatch.supplier?.company_name ?? dispatch.recipient_name ?? dispatch.recipient_email}
+                      <span className={dispatch.status === "sent" ? "ml-1 text-emerald-600" : "ml-1 text-red-600"}>
+                        {dispatch.status === "sent" ? "• skickad" : "• misslyckades"}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              </div>
             )}
           </Panel>
 
@@ -400,7 +424,18 @@ export function ProjectDetail() {
       </div>
 
       {canEditProject && (
-        <ProjectFormModal key={project.id} open={editOpen} onClose={() => setEditOpen(false)} project={project} />
+        <>
+          <ProjectFormModal key={project.id} open={editOpen} onClose={() => setEditOpen(false)} project={project} />
+          {supplierBookingOpen && (
+            <SupplierBookingModal
+              open
+              onClose={() => setSupplierBookingOpen(false)}
+              project={project}
+              suppliers={suppliers}
+              onSend={(supplierIds) => sendSupplierBooking(project.id, supplierIds)}
+            />
+          )}
+        </>
       )}
     </div>
   );

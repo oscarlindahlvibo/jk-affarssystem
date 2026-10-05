@@ -272,6 +272,25 @@ export interface Supplier {
   created_at: string;
 }
 
+export type SupplierBookingDispatchStatus = "sent" | "failed";
+
+export interface SupplierBookingDispatch {
+  id: string;
+  org_id: string;
+  project_id: string;
+  supplier_id: string;
+  recipient_email: string;
+  recipient_name: string | null;
+  sent_at: string;
+  sent_by: string | null;
+  sent_by_name: string;
+  subject: string;
+  status: SupplierBookingDispatchStatus;
+  external_message_id: string | null;
+  error_message: string | null;
+  supplier?: Supplier;
+}
+
 export interface Profile {
   id: string;
   org_id: string;
@@ -376,6 +395,7 @@ export interface Project {
   supplier?: Supplier | null;
   supplier_ids?: string[];
   suppliers?: Supplier[];
+  supplier_booking_dispatches?: SupplierBookingDispatch[];
   locations?: Location[];
   cargo_items?: CargoItem[];
   documents?: ProjectDocument[];

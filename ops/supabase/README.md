@@ -50,6 +50,19 @@ mode prompts for the password. Relay mode writes empty credentials and must be
 restricted to the server's static IP in Microsoft 365. Do not use Exchange
 Online Basic Auth credentials for a normal mailbox.
 
+Transportbokningar skickas av Edge Function `send-supplier-booking` med samma
+server-side SMTP-uppgifter. Den tekniska avsändaren är som standard den
+verifierade adressen `system@utskick.jkprojekt.se`, med Reply-To
+`bokning@jkprojekt.se`. När den senare adressen har verifierats som avsändare
+kan `SUPPLIER_BOOKING_FROM_EMAIL` ändras utan en ny kodrelease. Funktionen sparar ett revisionsspår per mottagare och
+kan bara anropas av aktiva administratörer eller projektledare. SMTP-uppgifterna
+injiceras i Functions-containern genom `docker-compose.jk.yml`; de får aldrig
+läggas i frontendens Vite-miljö.
+
+`bokning@jkprojekt.se` bör samtidigt skapas som en delad Microsoft 365-postlåda.
+Inkorgen tar emot svar från transportörerna, medan systemets utgående mejl går
+via den transaktionsleverantör som konfigurerats ovan.
+
 ## Central Google Drive storage
 
 Project documents can be stored in the WPE Shared Drive `JK PROJEKT` with ID

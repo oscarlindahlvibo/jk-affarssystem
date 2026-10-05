@@ -46,6 +46,13 @@ services:
     environment:
       GOOGLE_SERVICE_ACCOUNT_JSON_BASE64: ${GOOGLE_SERVICE_ACCOUNT_JSON_BASE64:-}
       GOOGLE_SHARED_DRIVE_ID: ${GOOGLE_SHARED_DRIVE_ID:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SUPPLIER_BOOKING_FROM_EMAIL: ${SUPPLIER_BOOKING_FROM_EMAIL:-system@utskick.jkprojekt.se}
+      SUPPLIER_BOOKING_FROM_NAME: ${SUPPLIER_BOOKING_FROM_NAME:-JK Projektlogistik Bokning}
+      SUPPLIER_BOOKING_REPLY_TO_EMAIL: ${SUPPLIER_BOOKING_REPLY_TO_EMAIL:-bokning@jkprojekt.se}
     logging: *default-logging
 
   db:

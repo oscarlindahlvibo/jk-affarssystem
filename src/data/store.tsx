@@ -13,6 +13,7 @@ import type {
   ProjectPriority,
   ProjectStatus,
   Supplier,
+  SupplierBookingDispatch,
   TransportType,
   UserRole,
 } from "../types";
@@ -40,6 +41,7 @@ import {
 } from "./supabaseRepository";
 import { inviteCustomerAccount, invitePersonnelAccount } from "../lib/userInvitations";
 import { calculateProjectPriority } from "../lib/projectPriority";
+import { sendSupplierBookingRequest, type SupplierBookingSendResult } from "../lib/supplierBookings";
 
 export interface CustomerBookingCargoInput {
   description: string;
@@ -118,6 +120,7 @@ interface StoreShape {
   updateProjectPriority: (projectId: string, priority: ProjectPriority) => void;
   updateProject: (projectId: string, patch: Partial<Project>) => void;
   updateProjectFinance: (projectId: string, patch: Partial<Pick<Project, "price" | "cost" | "invoice_status">>) => void;
+  sendSupplierBooking: (projectId: string, supplierIds: string[]) => Promise<SupplierBookingSendResult>;
   addNote: (projectId: string, note: Omit<ProjectNote, "id" | "project_id">) => void;
   addDocument: (projectId: string, doc: Omit<ProjectDocument, "id" | "project_id">) => void;
   deleteDocument: (projectId: string, documentId: string) => void;
@@ -384,6 +387,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       suppliers: (p.supplier_ids ?? (p.supplier_id ? [p.supplier_id] : []))
         .map((id) => allSuppliers.find((supplier) => supplier.id === id))
         .filter((supplier): supplier is Supplier => Boolean(supplier)),
+      supplier_booking_dispatches: (p.supplier_booking_dispatches ?? []).map((dispatch) => ({
+        ...dispatch,
+        supplier: allSuppliers.find((supplier) => supplier.id === dispatch.supplier_id),
+      })),
       measurement_link: isSupabaseConfigured ? p.measurement_link ?? null : mock.getMeasurementLinkByProject(p.id) ?? null,
     }),
     [allCustomers, allContactPersons, allProfiles, allSuppliers]
@@ -890,6 +897,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [allProjects, currentProfile, persist, role]
   );
 
+  const sendSupplierBooking: StoreShape["sendSupplierBooking"] = useCallback(
+    async (projectId, supplierIds) => {
+      authorize("projects", "edit");
+      if (supplierIds.length === 0) throw new Error("Välj minst en leverantör.");
+      let result: SupplierBookingSendResult;
+      if (isSupabaseConfigured) {
+        result = await sendSupplierBookingRequest(projectId, supplierIds);
+      } else {
+        const project = allProjects.find((item) => item.id === projectId);
+        const now = new Date().toISOString();
+        const dispatches: SupplierBookingDispatch[] = supplierIds.map((supplierId) => {
+          const supplier = allSuppliers.find((item) => item.id === supplierId);
+          return {
+            id: newId("sb"), org_id: orgId, project_id: projectId, supplier_id: supplierId,
+            recipient_email: supplier?.email ?? "", recipient_name: supplier?.contact_person ?? supplier?.company_name ?? null,
+            sent_at: now, sent_by: currentProfile?.id ?? null, sent_by_name: currentProfile?.full_name ?? "JK",
+            subject: `Bokning ${project?.project_number ?? ""}`, status: "sent", external_message_id: null, error_message: null,
+          };
+        });
+        result = { ok: true, dispatches, message: "Bokningen skickades." };
+      }
+      setAllProjects((previous) => previous.map((item) => item.id === projectId ? {
+        ...item,
+        supplier_id: supplierIds[0] ?? null,
+        supplier_ids: supplierIds,
+        supplier_booking_dispatches: [...result.dispatches, ...(item.supplier_booking_dispatches ?? [])],
+        updated_at: new Date().toISOString(),
+      } : item));
+      return result;
+    },
+    [allProjects, allSuppliers, authorize, currentProfile, orgId]
+  );
+
   const addNote: StoreShape["addNote"] = useCallback(
     (projectId, note) => {
       authorize("projects", "edit");
@@ -1132,6 +1172,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateProjectPriority,
       updateProject,
       updateProjectFinance,
+      sendSupplierBooking,
       addNote,
       addDocument,
       deleteDocument,
@@ -1188,6 +1229,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateProjectPriority,
       updateProject,
       updateProjectFinance,
+      sendSupplierBooking,
       addNote,
       addDocument,
       deleteDocument,
