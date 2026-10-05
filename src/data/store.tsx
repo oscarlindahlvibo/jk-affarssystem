@@ -42,6 +42,7 @@ import {
 import { inviteCustomerAccount, invitePersonnelAccount } from "../lib/userInvitations";
 import { calculateProjectPriority } from "../lib/projectPriority";
 import { sendSupplierBookingRequest, type SupplierBookingSendResult } from "../lib/supplierBookings";
+import { notifyTaskAssignee } from "../lib/taskNotifications";
 
 export interface CustomerBookingCargoInput {
   description: string;
@@ -990,7 +991,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             : p
         )
       );
-      persist(() => insertRow("tasks", created, "uppgiften"));
+      persist(async () => {
+        await insertRow("tasks", created, "uppgiften");
+        if (created.assignee_id) await notifyTaskAssignee(created.id);
+      });
     },
     [authorize, persist]
   );
@@ -998,6 +1002,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const updateTask: StoreShape["updateTask"] = useCallback(
     (projectId, taskId, patch) => {
       authorize("projects", "edit");
+      const currentTask = allProjects.find((project) => project.id === projectId)?.tasks?.find((task) => task.id === taskId);
+      const assigneeChanged = patch.assignee_id !== undefined && patch.assignee_id !== currentTask?.assignee_id;
       setAllProjects((prev) =>
         prev.map((p) =>
           p.id === projectId
@@ -1005,9 +1011,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             : p
         )
       );
-      persist(() => updateRow("tasks", taskId, patch, "uppgiften"));
+      persist(async () => {
+        await updateRow("tasks", taskId, patch, "uppgiften");
+        if (assigneeChanged && patch.assignee_id) await notifyTaskAssignee(taskId);
+      });
     },
-    [authorize, persist]
+    [allProjects, authorize, persist]
   );
 
   const updateTaskStatus: StoreShape["updateTaskStatus"] = useCallback(
