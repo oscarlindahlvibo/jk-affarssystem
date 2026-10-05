@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Plus, Truck } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { useStore } from "../data/store";
 import { Button } from "../components/ui/Button";
 import { SupplierModal } from "../components/suppliers/SupplierModal";
@@ -24,9 +25,14 @@ export function SuppliersPage() {
   const [type, setType] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Supplier | null>(null);
+  const [searchParams] = useSearchParams();
+  const query = (searchParams.get("sok") ?? "").trim().toLocaleLowerCase("sv");
 
   const supplierTypes = (supplier: Supplier) => supplier.service_types?.length ? supplier.service_types : [supplier.type];
-  const filtered = type ? suppliers.filter((supplier) => supplierTypes(supplier).includes(type as Supplier["type"])) : suppliers;
+  const filtered = suppliers.filter((supplier) =>
+    (!type || supplierTypes(supplier).includes(type as Supplier["type"]))
+    && (!query || supplier.company_name.toLocaleLowerCase("sv").includes(query))
+  );
   const types = Array.from(new Set(suppliers.flatMap(supplierTypes)));
 
   return (

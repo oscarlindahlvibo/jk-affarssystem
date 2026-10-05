@@ -239,7 +239,10 @@ export function ProjectList() {
   const canCreate = permissions.can("projects", "create");
   const canEdit = permissions.can("projects", "edit");
 
-  const [search, setSearch] = useState(searchParams.get("sok") ?? "");
+  const urlSearch = searchParams.get("sok") ?? "";
+  const [searchState, setSearchState] = useState({ urlSearch, value: urlSearch });
+  const search = searchState.urlSearch === urlSearch ? searchState.value : urlSearch;
+  const setSearch = (value: string) => setSearchState({ urlSearch, value });
   const [status, setStatus] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [responsible, setResponsible] = useState("");
