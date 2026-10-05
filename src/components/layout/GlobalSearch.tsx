@@ -20,7 +20,7 @@ export function GlobalSearch() {
     };
     return [
       ...projects.filter((p) => matches([p.project_number, p.name, p.customer?.company_name, p.customer_reference,
-        ...(p.locations ?? []).flatMap((l) => [l.name, l.address]),
+        ...(p.locations ?? []).flatMap((l) => [l.name, l.address, l.company_name]),
         ...(p.cargo_items ?? []).map((item) => item.description)]))
         .slice(0, 5).map((p) => ({ key: `project-${p.id}`, title: `${p.project_number} · ${p.name}`, detail: `Projekt · ${p.status}`, to: `/projekt/${p.id}` })),
       ...customers.filter((c) => matches([c.company_name, c.org_number, c.email, c.phone]))

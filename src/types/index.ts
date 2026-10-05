@@ -104,6 +104,7 @@ export interface ContactPerson {
 export type LocationType = "lastning" | "lossning" | "mellanpunkt";
 
 export interface Location {
+  company_name?: string | null;
   id: string;
   project_id: string;
   type: LocationType;

@@ -58,6 +58,8 @@ export function ProjectPrint() {
       <Section title="Transportdata">
         <Grid>
           <Item label="Lastningsort" value={loading?.name} />
+          <Item label="Företag vid lastning" value={loading?.company_name} />
+          <Item label="Företag vid lossning" value={unloading?.company_name} />
           <Item label="Lossningsort" value={unloading?.name} />
           <Item label="Lastningsadress" value={loading?.address} />
           <Item label="Lossningsadress" value={unloading?.address} />

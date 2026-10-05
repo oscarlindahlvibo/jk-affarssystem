@@ -101,11 +101,13 @@ function emailContent(project: DbRow, locations: DbRow[], cargo: DbRow[], suppli
   }).join("");
   const transportRows: Array<[string, unknown]> = [
     ["Lastningsort", loading?.name],
+    ["Företag vid lastning", loading?.company_name],
     ["Lastningsadress", loading?.address],
     ["Planerad lastning", formatDate(project.planned_loading_date, project.planned_loading_time)],
     ["Kontakt vid lastning", [loading?.contact_name, loading?.contact_phone].filter(Boolean).join(" · ")],
     ["Mellanadress / via", waypoints.map((point) => point.address || point.name).join(", ")],
     ["Lossningsort", unloading?.name],
+    ["Företag vid lossning", unloading?.company_name],
     ["Lossningsadress", unloading?.address],
     ["Planerad lossning", formatDate(project.planned_delivery_date, project.planned_delivery_time)],
     ["Kontakt vid lossning", [unloading?.contact_name, unloading?.contact_phone].filter(Boolean).join(" · ")],

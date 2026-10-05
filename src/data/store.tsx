@@ -71,10 +71,12 @@ export interface CustomerBookingInput {
   planned_delivery_date: string;
   planned_delivery_time: string;
   loading_name: string;
+  loading_company_name: string;
   loading_address: string;
   loading_contact_name: string;
   loading_contact_phone: string;
   unloading_name: string;
+  unloading_company_name: string;
   unloading_address: string;
   unloading_contact_name: string;
   unloading_contact_phone: string;
@@ -589,6 +591,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             project_id: id,
             type: "lastning",
             name: data.loading_name.trim(),
+            company_name: data.loading_company_name.trim() || null,
             address: data.loading_address.trim() || null,
             contact_name: data.loading_contact_name.trim() || contact?.name || null,
             contact_phone: data.loading_contact_phone.trim() || contact?.mobile || contact?.phone || null,
@@ -599,6 +602,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             project_id: id,
             type: "lossning",
             name: data.unloading_name.trim(),
+            company_name: data.unloading_company_name.trim() || null,
             address: data.unloading_address.trim() || null,
             contact_name: data.unloading_contact_name.trim() || null,
             contact_phone: data.unloading_contact_phone.trim() || null,

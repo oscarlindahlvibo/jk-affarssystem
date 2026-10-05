@@ -95,7 +95,7 @@ export async function generateCmrPdf(project: Project) {
   const unloading = location(project, "lossning");
   const cargoItems = project.cargo_items ?? [];
   const sender = [
-    project.customer?.company_name,
+    loading?.company_name || project.customer?.company_name,
     loading?.name,
     loading?.address,
     loading?.contact_name ? `Kontakt: ${loading.contact_name}` : null,
@@ -104,6 +104,7 @@ export async function generateCmrPdf(project: Project) {
     .filter(Boolean)
     .join("\n");
   const consignee = [
+    unloading?.company_name,
     unloading?.name,
     unloading?.address,
     unloading?.contact_name ? `Kontakt: ${unloading.contact_name}` : null,
@@ -341,12 +342,12 @@ export async function generateDomesticWaybillPdf(project: Project) {
     "transportföretag",
     project.suppliers?.map((supplier) => supplier.company_name).join(" / ") || project.supplier?.company_name || "JK Projektlogistik AB"
   );
-  setText(form, "adressnamn", project.customer?.company_name);
+  setText(form, "adressnamn", loading?.company_name || project.customer?.company_name);
   setText(form, "gatuadress", loading?.address ?? loading?.name);
   setText(form, "postadress", loading?.name);
   setText(form, "telefon", loading?.contact_phone ?? project.contact_person?.phone ?? project.contact_person?.mobile);
   setText(form, "kundnummer", project.customer_reference ?? project.project_number);
-  setText(form, "mottagare", unloading?.name);
+  setText(form, "mottagare", unloading?.company_name || unloading?.name);
   setText(form, "bestämmelsoert", unloading?.address ?? unloading?.name);
   setText(form, "leveransaavvisning", unloading?.contact_name ? `${unloading.contact_name} ${unloading.contact_phone ?? ""}` : unloading?.contact_phone);
   setText(form, "fraktsedelnummer", project.project_number);

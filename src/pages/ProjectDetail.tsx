@@ -336,6 +336,11 @@ export function ProjectDetail() {
           >
             <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 sm:grid-cols-3">
               <InfoItem
+                label="Företag vid lastning"
+                value={loading?.company_name}
+              />
+              <InfoItem label="Företag vid lossning" value={unloading?.company_name} />
+              <InfoItem
                 label="Lastningsort"
                 value={
                   loading ? (

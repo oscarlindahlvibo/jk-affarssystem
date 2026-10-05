@@ -105,10 +105,12 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
   const [deliveryDate, setDeliveryDate] = useState(project?.planned_delivery_date ?? "");
   const [deliveryTime, setDeliveryTime] = useState(project?.planned_delivery_time?.slice(0, 5) ?? "");
   const [loadingPlace, setLoadingPlace] = useState(existingLoading?.name ?? "");
+  const [loadingCompany, setLoadingCompany] = useState(existingLoading?.company_name ?? "");
   const [loadingAddress, setLoadingAddress] = useState(existingLoading?.address ?? "");
   const [loadingContactName, setLoadingContactName] = useState(existingLoading?.contact_name ?? "");
   const [loadingContactPhone, setLoadingContactPhone] = useState(existingLoading?.contact_phone ?? "");
   const [unloadingPlace, setUnloadingPlace] = useState(existingUnloading?.name ?? "");
+  const [unloadingCompany, setUnloadingCompany] = useState(existingUnloading?.company_name ?? "");
   const [unloadingAddress, setUnloadingAddress] = useState(existingUnloading?.address ?? "");
   const [unloadingContactName, setUnloadingContactName] = useState(existingUnloading?.contact_name ?? "");
   const [unloadingContactPhone, setUnloadingContactPhone] = useState(existingUnloading?.contact_phone ?? "");
@@ -229,12 +231,13 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
 
   function buildLocations(): Location[] {
     const locations: Location[] = [];
-    if (loadingPlace)
+    if (loadingPlace || loadingAddress || loadingCompany.trim())
       locations.push({
         id: existingLoading?.id ?? "loc-lastning",
         project_id: "",
         type: "lastning",
         name: loadingPlace,
+        company_name: loadingCompany.trim() || null,
         address: loadingAddress || null,
         contact_name: loadingContactName || null,
         contact_phone: loadingContactPhone || null,
@@ -249,12 +252,13 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
         address: waypointAddress || null,
         order_index: 1,
       });
-    if (unloadingPlace)
+    if (unloadingPlace || unloadingAddress || unloadingCompany.trim())
       locations.push({
         id: existingUnloading?.id ?? "loc-lossning",
         project_id: "",
         type: "lossning",
         name: unloadingPlace,
+        company_name: unloadingCompany.trim() || null,
         address: unloadingAddress || null,
         contact_name: unloadingContactName || null,
         contact_phone: unloadingContactPhone || null,
@@ -530,6 +534,12 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
         <div className="border-t border-border pt-4">
           <h3 className="mb-3 text-sm font-semibold text-slate-700">Transport</h3>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Företag vid lastning">
+              <input className={inputClass} value={loadingCompany} onChange={(e) => setLoadingCompany(e.target.value)} />
+            </Field>
+            <Field label="Företag vid lossning">
+              <input className={inputClass} value={unloadingCompany} onChange={(e) => setUnloadingCompany(e.target.value)} />
+            </Field>
             <Field label="Lastningsadress">
               <AddressAutocomplete
                 value={loadingAddress}

@@ -50,10 +50,12 @@ const initialForm: CustomerBookingInput = {
   planned_delivery_date: "",
   planned_delivery_time: "",
   loading_name: "",
+  loading_company_name: "",
   loading_address: "",
   loading_contact_name: "",
   loading_contact_phone: "",
   unloading_name: "",
+  unloading_company_name: "",
   unloading_address: "",
   unloading_contact_name: "",
   unloading_contact_phone: "",
@@ -313,6 +315,9 @@ export function CustomerPortalPage() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <section className="space-y-3 border-t border-border pt-4">
                 <h2 className="text-sm font-semibold text-slate-800">Lastning</h2>
+                  <Field label="Företag vid lastning">
+                    <input className={inputClass} value={form.loading_company_name} onChange={(e) => update("loading_company_name", e.target.value)} />
+                  </Field>
                   <Field label="Lastningsadress">
                     <AddressAutocomplete
                       value={form.loading_address}
@@ -335,6 +340,9 @@ export function CustomerPortalPage() {
               </section>
               <section className="space-y-3 border-t border-border pt-4">
                 <h2 className="text-sm font-semibold text-slate-800">Lossning</h2>
+                  <Field label="Företag vid lossning">
+                    <input className={inputClass} value={form.unloading_company_name} onChange={(e) => update("unloading_company_name", e.target.value)} />
+                  </Field>
                   <Field label="Lossningsadress">
                     <AddressAutocomplete
                       value={form.unloading_address}
@@ -538,10 +546,12 @@ export function CustomerPortalPage() {
             <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <div>
                 <div className="text-xs text-slate-400">Lastning</div>
+                <div className="font-medium text-slate-700">{openBooking.locations?.find((l) => l.type === "lastning")?.company_name}</div>
                 <div className="text-slate-700">{openBooking.locations?.find((l) => l.type === "lastning")?.name ?? "-"}</div>
               </div>
               <div>
                 <div className="text-xs text-slate-400">Lossning</div>
+                <div className="font-medium text-slate-700">{openBooking.locations?.find((l) => l.type === "lossning")?.company_name}</div>
                 <div className="text-slate-700">{openBooking.locations?.find((l) => l.type === "lossning")?.name ?? "-"}</div>
               </div>
               <div>

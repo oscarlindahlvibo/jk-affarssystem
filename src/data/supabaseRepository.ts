@@ -158,7 +158,7 @@ async function saveProject(project: Project, label: string) {
   const payload = {
     ...pick(project, PROJECT_COLUMNS),
     supplier_ids: project.supplier_ids ?? project.suppliers?.map((supplier) => supplier.id) ?? (project.supplier_id ? [project.supplier_id] : []),
-    locations: (project.locations ?? []).map((row) => pick(row, ["id", "project_id", "type", "name", "address", "contact_name", "contact_phone", "order_index"])),
+    locations: (project.locations ?? []).map((row) => pick(row, ["id", "project_id", "type", "name", "company_name", "address", "contact_name", "contact_phone", "order_index"])),
     cargo_items: (project.cargo_items ?? []).map((row) => pick(row, ["id", "project_id", "description", "length_m", "width_m", "height_m", "weight_ton", "quantity", "lift_points", "drawing_reference", "technical_info"])),
     notes: (project.notes ?? []).map((row) => ({ ...pick(row, ["id", "project_id", "date", "user_name", "text", "category", "visibility"]), user_id: null })),
     tasks: (project.tasks ?? []).map((row) => pick(row, ["id", "project_id", "task", "category", "description", "route_section", "assignee_id", "assignee", "deadline", "status", "comment"])),
