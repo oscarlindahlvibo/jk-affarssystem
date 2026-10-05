@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, MapPin, Building2, User, AlertTriangle, Printer, Pencil, Save, Send, UserCheck, XCircle } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, MapPin, Building2, User, AlertTriangle, Printer, Pencil, Save, Send, Trash2, UserCheck, XCircle } from "lucide-react";
 import { useStore } from "../data/store";
 import { Panel } from "../components/ui/Panel";
 import { StatusBadge } from "../components/ui/StatusBadge";
@@ -21,6 +21,9 @@ import { usePermissions } from "../lib/usePermissions";
 import { inputClass } from "../components/ui/Field";
 import type { Project } from "../types";
 import { SupplierBookingModal } from "../components/projects/SupplierBookingModal";
+import { Modal } from "../components/ui/Modal";
+import { deleteCentralDriveFile, isCentralDriveEnabled } from "../lib/centralDrive";
+import { isSupabaseConfigured, supabase } from "../lib/supabase";
 
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -111,7 +114,8 @@ function FinancePanel({
 
 export function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
-  const { getProject, updateProjectStatus, updateProjectFinance, updateProject, sendSupplierBooking, suppliers, profiles, approveCustomerBooking, rejectCustomerBooking } = useStore();
+  const navigate = useNavigate();
+  const { getProject, updateProjectStatus, updateProjectFinance, updateProject, deleteProject, sendSupplierBooking, suppliers, profiles, approveCustomerBooking, rejectCustomerBooking } = useStore();
   const project = id ? getProject(id) : undefined;
   const permissions = usePermissions();
   const canEditProject = permissions.can("projects", "edit");
@@ -120,6 +124,9 @@ export function ProjectDetail() {
   const [approvalStatus, setApprovalStatus] = useState<Project["status"]>("Bekräftad");
   const [rejectReason, setRejectReason] = useState("");
   const [supplierBookingOpen, setSupplierBookingOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   if (!project) {
     return (
@@ -146,6 +153,30 @@ export function ProjectDetail() {
     weight_ton: cargo?.weight_ton ?? null,
   });
 
+  async function handleDeleteProject() {
+    if (!project) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      for (const document of project.documents ?? []) {
+        if (document.drive_file_id && isCentralDriveEnabled) await deleteCentralDriveFile(document.drive_file_id);
+      }
+      const storagePaths = (project.documents ?? [])
+        .map((document) => document.storage_path)
+        .filter((path): path is string => Boolean(path && !path.startsWith("drive:")));
+      if (storagePaths.length > 0 && isSupabaseConfigured && supabase) {
+        const removed = await supabase.storage.from("project-documents").remove(storagePaths);
+        if (removed.error) throw new Error(`Dokumentfilerna kunde inte tas bort: ${removed.error.message}`);
+      }
+      await deleteProject(project.id);
+      navigate("/projekt", { replace: true });
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Projektet kunde inte raderas.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -170,6 +201,11 @@ export function ProjectDetail() {
             {canEditProject && (
               <Button variant="secondary" onClick={() => setEditOpen(true)}>
                 <Pencil size={14} /> Redigera
+              </Button>
+            )}
+            {permissions.can("projects", "delete") && (
+              <Button variant="secondary" className="text-red-600 hover:border-red-200 hover:bg-red-50" onClick={() => setDeleteOpen(true)}>
+                <Trash2 size={14} /> <span className="hidden sm:inline">Radera projekt</span>
               </Button>
             )}
             {canEditProject ? (
@@ -437,6 +473,19 @@ export function ProjectDetail() {
           )}
         </>
       )}
+      <Modal open={deleteOpen} onClose={() => !deleting && setDeleteOpen(false)} title="Radera projekt permanent">
+        <p className="text-sm text-slate-600">
+          Projekt <strong>{project.project_number} – {project.name}</strong> och dess gods, arbetsordrar, kommentarer, dokumentreferenser och utskicksloggar tas bort permanent.
+        </p>
+        <p className="mt-3 text-sm font-medium text-red-600">Åtgärden går inte att ångra.</p>
+        {deleteError && <div className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{deleteError}</div>}
+        <div className="mt-5 flex justify-end gap-2 border-t border-border pt-4">
+          <Button type="button" variant="secondary" disabled={deleting} onClick={() => setDeleteOpen(false)}>Avbryt</Button>
+          <Button type="button" className="bg-red-600 hover:bg-red-700" disabled={deleting} onClick={handleDeleteProject}>
+            <Trash2 size={14} /> {deleting ? "Raderar…" : "Radera projekt"}
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

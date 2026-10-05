@@ -120,6 +120,7 @@ interface StoreShape {
   updateProjectStatus: (projectId: string, status: ProjectStatus) => void;
   updateProjectPriority: (projectId: string, priority: ProjectPriority) => void;
   updateProject: (projectId: string, patch: Partial<Project>) => void;
+  deleteProject: (projectId: string) => Promise<void>;
   updateProjectFinance: (projectId: string, patch: Partial<Pick<Project, "price" | "cost" | "invoice_status">>) => void;
   sendSupplierBooking: (projectId: string, supplierIds: string[]) => Promise<SupplierBookingSendResult>;
   addNote: (projectId: string, note: Omit<ProjectNote, "id" | "project_id">) => void;
@@ -873,6 +874,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [allProjects, authorize, persist]
   );
 
+  const deleteProject: StoreShape["deleteProject"] = useCallback(
+    async (projectId) => {
+      authorize("projects", "delete");
+      if (isSupabaseConfigured) await deleteRow("projects", projectId, "projektet");
+      setAllProjects((previous) => previous.filter((project) => project.id !== projectId));
+    },
+    [authorize]
+  );
+
   const updateProjectFinance: StoreShape["updateProjectFinance"] = useCallback(
     (projectId, patch) => {
       if (!currentProfile || currentProfile.status !== "aktiv" || !canEditProjectFinance(role)) {
@@ -1180,6 +1190,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateProjectStatus,
       updateProjectPriority,
       updateProject,
+      deleteProject,
       updateProjectFinance,
       sendSupplierBooking,
       addNote,
@@ -1237,6 +1248,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateProjectStatus,
       updateProjectPriority,
       updateProject,
+      deleteProject,
       updateProjectFinance,
       sendSupplierBooking,
       addNote,
