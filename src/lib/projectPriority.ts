@@ -1,6 +1,11 @@
-import type { Project, ProjectPriority } from "../types";
+import type { Project, ProjectPriority, ProjectStatus } from "../types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const CLOSED_PROJECT_STATUSES: ProjectStatus[] = ["Levererad", "Avbokad", "Fakturerad"];
+
+export function projectHasPriority(status: ProjectStatus): boolean {
+  return !CLOSED_PROJECT_STATUSES.includes(status);
+}
 
 function localDateValue(date: Date): number {
   return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
@@ -21,7 +26,10 @@ export function calculateProjectPriority(
   return "Kommande";
 }
 
-export function effectiveProjectPriority(project: Pick<Project, "planned_loading_date" | "priority" | "priority_is_manual">): ProjectPriority {
+export function effectiveProjectPriority(
+  project: Pick<Project, "planned_loading_date" | "priority" | "priority_is_manual" | "status">
+): ProjectPriority | null {
+  if (!projectHasPriority(project.status)) return null;
   if (project.priority_is_manual && project.priority) return project.priority;
   return calculateProjectPriority(project.planned_loading_date);
 }

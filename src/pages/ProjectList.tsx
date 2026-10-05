@@ -200,7 +200,10 @@ function projectSortValue(project: Project, key: SortKey): string | number | nul
     case "height": return cargo?.height_m ?? null;
     case "weight": return cargo?.weight_ton ?? null;
     case "status": return PROJECT_STATUSES.indexOf(project.status);
-    case "priority": return PROJECT_PRIORITIES.indexOf(effectiveProjectPriority(project));
+    case "priority": {
+      const priority = effectiveProjectPriority(project);
+      return priority ? PROJECT_PRIORITIES.indexOf(priority) : null;
+    }
     case "responsible": return project.responsible?.full_name ?? null;
     case "route": return project.measurement_link ? 1 : 0;
     case "followVehicle": return projectHasOutstandingFollowVehicle(project) ? 1 : 0;
@@ -462,6 +465,7 @@ export function ProjectList() {
           const loading = p.locations?.find((l) => l.type === "lastning");
           const unloading = p.locations?.find((l) => l.type === "lossning");
           const missing = getMissingFields(p);
+          const priority = effectiveProjectPriority(p);
           return (
             <article
               key={p.id}
@@ -493,15 +497,19 @@ export function ProjectList() {
                 </label>
                 <label className="min-w-0 text-xs text-slate-400">
                   Prioriterad
-                  <select
-                    value={effectiveProjectPriority(p)}
-                    disabled={!canEdit}
-                    onClick={(event) => event.stopPropagation()}
-                    onChange={(event) => updateProjectPriority(p.id, event.target.value as ProjectPriority)}
-                    className={`mt-1 w-full rounded-md border-0 px-2 py-1.5 text-xs font-semibold outline-none ring-1 ring-inset ring-black/5 focus:ring-2 focus:ring-orange-400 disabled:opacity-100 ${PRIORITY_STYLES[effectiveProjectPriority(p)]}`}
-                  >
-                    {PROJECT_PRIORITIES.map((item) => <option key={item} value={item}>{item}</option>)}
-                  </select>
+                  {priority ? (
+                    <select
+                      value={priority}
+                      disabled={!canEdit}
+                      onClick={(event) => event.stopPropagation()}
+                      onChange={(event) => updateProjectPriority(p.id, event.target.value as ProjectPriority)}
+                      className={`mt-1 w-full rounded-md border-0 px-2 py-1.5 text-xs font-semibold outline-none ring-1 ring-inset ring-black/5 focus:ring-2 focus:ring-orange-400 disabled:opacity-100 ${PRIORITY_STYLES[priority]}`}
+                    >
+                      {PROJECT_PRIORITIES.map((item) => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  ) : (
+                    <span className="mt-1 block px-2 py-1.5 text-xs text-slate-400">–</span>
+                  )}
                 </label>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-slate-600">
@@ -571,6 +579,7 @@ export function ProjectList() {
               const loading = p.locations?.find((l) => l.type === "lastning");
               const unloading = p.locations?.find((l) => l.type === "lossning");
               const missing = getMissingFields(p);
+              const priority = effectiveProjectPriority(p);
               return (
                 <tr
                   key={p.id}
@@ -618,18 +627,20 @@ export function ProjectList() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    {canEdit ? (
+                    {priority === null ? (
+                      <span className="text-slate-300">–</span>
+                    ) : canEdit ? (
                       <select
                         aria-label={`Prioritering för ${p.project_number}`}
-                        value={effectiveProjectPriority(p)}
+                        value={priority}
                         onClick={(event) => event.stopPropagation()}
                         onChange={(event) => updateProjectPriority(p.id, event.target.value as ProjectPriority)}
-                        className={`w-28 rounded-md border-0 px-2 py-1 text-xs font-semibold outline-none ring-1 ring-inset ring-black/5 focus:ring-2 focus:ring-orange-400 ${PRIORITY_STYLES[effectiveProjectPriority(p)]}`}
+                        className={`w-28 rounded-md border-0 px-2 py-1 text-xs font-semibold outline-none ring-1 ring-inset ring-black/5 focus:ring-2 focus:ring-orange-400 ${PRIORITY_STYLES[priority]}`}
                       >
                         {PROJECT_PRIORITIES.map((item) => <option key={item} value={item}>{item}</option>)}
                       </select>
                     ) : (
-                      <span className={`status-pill ${PRIORITY_STYLES[effectiveProjectPriority(p)]}`}>{effectiveProjectPriority(p)}</span>
+                      <span className={`status-pill ${PRIORITY_STYLES[priority]}`}>{priority}</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{p.responsible?.full_name ?? "–"}</td>

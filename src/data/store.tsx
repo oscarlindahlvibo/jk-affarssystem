@@ -40,7 +40,7 @@ import {
   updateRow,
 } from "./supabaseRepository";
 import { inviteCustomerAccount, invitePersonnelAccount } from "../lib/userInvitations";
-import { calculateProjectPriority } from "../lib/projectPriority";
+import { calculateProjectPriority, projectHasPriority } from "../lib/projectPriority";
 import { sendSupplierBookingRequest, type SupplierBookingSendResult } from "../lib/supplierBookings";
 import { notifyTaskAssignee } from "../lib/taskNotifications";
 
@@ -825,12 +825,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const updateProjectStatus: StoreShape["updateProjectStatus"] = useCallback(
     (projectId, status) => {
       authorize("projects", "edit");
+      const current = allProjects.find((project) => project.id === projectId);
+      const patch: Partial<Project> = projectHasPriority(status)
+        ? {
+            status,
+            ...(current?.priority === null
+              ? {
+                  priority: calculateProjectPriority(current.planned_loading_date),
+                  priority_is_manual: false,
+                }
+              : {}),
+          }
+        : { status, priority: null, priority_is_manual: false };
       setAllProjects((prev) =>
-        prev.map((p) => (p.id === projectId ? { ...p, status, updated_at: new Date().toISOString() } : p))
+        prev.map((p) => (p.id === projectId ? { ...p, ...patch, updated_at: new Date().toISOString() } : p))
       );
-      persist(() => updateRow("projects", projectId, { status }, "projektstatusen"));
+      persist(() => updateRow("projects", projectId, patch, "projektstatusen"));
     },
-    [authorize, persist]
+    [allProjects, authorize, persist]
   );
 
   const updateProjectPriority: StoreShape["updateProjectPriority"] = useCallback(
