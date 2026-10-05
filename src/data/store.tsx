@@ -10,6 +10,7 @@ import type {
   ProjectNote,
   ProjectTask,
   ProjectDocument,
+  ProjectPriority,
   ProjectStatus,
   Supplier,
   TransportType,
@@ -38,6 +39,7 @@ import {
   updateRow,
 } from "./supabaseRepository";
 import { inviteCustomerAccount, invitePersonnelAccount } from "../lib/userInvitations";
+import { calculateProjectPriority } from "../lib/projectPriority";
 
 export interface CustomerBookingCargoInput {
   description: string;
@@ -113,6 +115,7 @@ interface StoreShape {
   addCustomerShippingDocument: (projectId: string, doc: CustomerShippingDocumentInput) => Promise<void>;
   requestBookingEdit: (projectId: string, message: string) => Promise<void>;
   updateProjectStatus: (projectId: string, status: ProjectStatus) => void;
+  updateProjectPriority: (projectId: string, priority: ProjectPriority) => void;
   updateProject: (projectId: string, patch: Partial<Project>) => void;
   updateProjectFinance: (projectId: string, patch: Partial<Pick<Project, "price" | "cost" | "invoice_status">>) => void;
   addNote: (projectId: string, note: Omit<ProjectNote, "id" | "project_id">) => void;
@@ -500,6 +503,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       const newProject: Project = {
         ...p,
+        priority: p.priority ?? calculateProjectPriority(p.planned_loading_date),
+        priority_is_manual: p.priority_is_manual ?? false,
         booking_source: p.booking_source ?? "internal",
         booking_approval_status: p.booking_approval_status ?? null,
         requested_by_customer_user_id: p.requested_by_customer_user_id ?? null,
@@ -542,7 +547,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         customer_id: currentCustomerUser.customer_id,
         contact_person_id: currentCustomerUser.contact_person_id,
         responsible_id: null,
-        status: "Ny",
+        status: "Ny bokning",
+        priority: calculateProjectPriority(data.planned_loading_date),
+        priority_is_manual: false,
         transport_type: data.transport_type,
         special_requirements: data.special_requirements.trim() || null,
         planned_loading_date: data.planned_loading_date || null,
@@ -715,7 +722,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           p.id === projectId
             ? {
                 ...p,
-                status: "Avbruten",
+                status: "Avbokad",
                 booking_approval_status: "Avvisad",
                 updated_at: now,
                 notes: [
@@ -734,7 +741,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             : p
         )
       );
-      if (current) persist(() => updateProjectRecord({ ...current, status: "Avbruten", booking_approval_status: "Avvisad", updated_at: now, notes: [note, ...(current.notes ?? [])] }));
+      if (current) persist(() => updateProjectRecord({ ...current, status: "Avbokad", booking_approval_status: "Avvisad", updated_at: now, notes: [note, ...(current.notes ?? [])] }));
     },
     [allProjects, authorize, currentProfile, persist]
   );
@@ -817,6 +824,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [authorize, persist]
   );
 
+  const updateProjectPriority: StoreShape["updateProjectPriority"] = useCallback(
+    (projectId, priority) => {
+      authorize("projects", "edit");
+      const patch = { priority, priority_is_manual: true };
+      setAllProjects((prev) =>
+        prev.map((p) => (p.id === projectId ? { ...p, ...patch, updated_at: new Date().toISOString() } : p))
+      );
+      persist(() => updateRow("projects", projectId, patch, "projektprioriteringen"));
+    },
+    [authorize, persist]
+  );
+
   const updateProject: StoreShape["updateProject"] = useCallback(
     (projectId, patch) => {
       authorize("projects", "edit");
@@ -825,6 +844,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         rows?.map((row) => ({ ...row, id: isSupabaseConfigured && !isUuid(row.id) ? newId(prefix) : row.id, project_id: projectId }));
       const normalizedPatch: Partial<Project> = {
         ...patch,
+        ...(patch.planned_loading_date !== undefined && !current?.priority_is_manual
+          ? {
+              priority: calculateProjectPriority(patch.planned_loading_date),
+              priority_is_manual: false,
+            }
+          : {}),
         ...(patch.locations ? { locations: normalizeChildren(patch.locations, "l") } : {}),
         ...(patch.cargo_items ? { cargo_items: normalizeChildren(patch.cargo_items, "g") } : {}),
         ...(patch.documents ? { documents: normalizeChildren(patch.documents, "d") } : {}),
@@ -1104,6 +1129,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addCustomerShippingDocument,
       requestBookingEdit,
       updateProjectStatus,
+      updateProjectPriority,
       updateProject,
       updateProjectFinance,
       addNote,
@@ -1159,6 +1185,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addCustomerShippingDocument,
       requestBookingEdit,
       updateProjectStatus,
+      updateProjectPriority,
       updateProject,
       updateProjectFinance,
       addNote,

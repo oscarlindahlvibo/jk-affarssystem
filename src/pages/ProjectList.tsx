@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowDown, ArrowUp, ArrowUpDown, Plus, MapPin, Ruler, Search, Download, Upload, TriangleAlert } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Plus, MapPin, Ruler, Search, Download, Upload, TriangleAlert, CheckCircle2 } from "lucide-react";
 import { useStore } from "../data/store";
-import { StatusBadge } from "../components/ui/StatusBadge";
 import { Button } from "../components/ui/Button";
 import { MissingFieldsBadge } from "../components/ui/MissingFieldsBadge";
 import { ProjectFormModal } from "../components/projects/NewProjectModal";
@@ -11,18 +10,20 @@ import { downloadCsv } from "../lib/csv";
 import { getMissingFields, isComplete } from "../lib/validation";
 import { needsFollowVehicle } from "../lib/transportRules";
 import { usePermissions } from "../lib/usePermissions";
-import { PROJECT_STATUSES, type Project } from "../types";
+import { PROJECT_PRIORITIES, PROJECT_STATUSES, type Project, type ProjectPriority, type ProjectStatus } from "../types";
+import { effectiveProjectPriority } from "../lib/projectPriority";
+import { PRIORITY_STYLES, STATUS_STYLES } from "../lib/status";
 
 type QuickFilter =
   | "alla"
   | "nya"
   | "kundbokningar"
-  | "planering"
-  | "ruttkontroll"
+  | "forfragningar"
+  | "planera"
+  | "prioriterade"
   | "denna-vecka"
-  | "vantar-kund"
-  | "vantar-tillstand"
-  | "klar-fakturering"
+  | "pa-vag"
+  | "levererade"
   | "saknar-uppgifter"
   | "kraver-foljebil";
 
@@ -39,6 +40,7 @@ type SortKey =
   | "width"
   | "weight"
   | "status"
+  | "priority"
   | "responsible"
   | "route"
   | "followVehicle"
@@ -50,7 +52,7 @@ type SortDirection = "asc" | "desc";
 const SORT_STORAGE_KEY = "jk-project-list-sort";
 const SORT_KEYS: SortKey[] = [
   "project", "customer", "cargo", "loadingPlace", "unloadingPlace", "loadingDate", "deliveryDate",
-  "length", "width", "height", "weight", "status", "responsible", "route", "followVehicle", "invoice", "missing",
+  "length", "width", "height", "weight", "status", "priority", "responsible", "route", "followVehicle", "invoice", "missing",
 ];
 
 function readSortPreference(): { key: SortKey | null; direction: SortDirection } {
@@ -108,26 +110,36 @@ function SortableHeader({
 
 const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
   { key: "alla", label: "Alla projekt" },
-  { key: "nya", label: "Nya" },
+  { key: "nya", label: "Nya bokningar" },
   { key: "kundbokningar", label: "Kundbokningar" },
-  { key: "planering", label: "Planering" },
-  { key: "ruttkontroll", label: "Ruttkontroll" },
+  { key: "forfragningar", label: "Förfrågningar" },
+  { key: "planera", label: "Planera" },
+  { key: "prioriterade", label: "Prioriterade" },
   { key: "denna-vecka", label: "Denna vecka" },
-  { key: "vantar-kund", label: "Väntar på kund" },
-  { key: "vantar-tillstand", label: "Väntar på tillstånd" },
-  { key: "klar-fakturering", label: "Klar för fakturering" },
+  { key: "pa-vag", label: "På väg" },
+  { key: "levererade", label: "Levererade" },
   { key: "saknar-uppgifter", label: "Saknar uppgifter" },
   { key: "kraver-foljebil", label: "Kräver följebil" },
 ];
 
 function projectNeedsFollowVehicle(p: Project): boolean {
-  const cargo = p.cargo_items?.[0];
-  return needsFollowVehicle({
-    length_m: cargo?.length_m ?? null,
-    width_m: cargo?.width_m ?? null,
-    height_m: cargo?.height_m ?? null,
-    weight_ton: cargo?.weight_ton ?? null,
-  });
+  return (p.cargo_items ?? []).some((cargo) => needsFollowVehicle({
+    length_m: cargo.length_m ?? null,
+    width_m: cargo.width_m ?? null,
+    height_m: cargo.height_m ?? null,
+    weight_ton: cargo.weight_ton ?? null,
+  }));
+}
+
+function hasCompletedFollowVehicleOrder(p: Project): boolean {
+  return (p.tasks ?? []).some((task) =>
+    task.status === "Klar" &&
+    (task.category === "Följebil" || task.category === "VTL" || /följebil|vägtransportledare|\bvtl\b/i.test(task.task))
+  );
+}
+
+function projectHasOutstandingFollowVehicle(p: Project): boolean {
+  return projectNeedsFollowVehicle(p) && !hasCompletedFollowVehicleOrder(p);
 }
 
 function isThisWeek(dateStr: string | null | undefined): boolean {
@@ -147,25 +159,25 @@ function matchesQuickFilter(p: Project, filter: QuickFilter): boolean {
     case "alla":
       return true;
     case "nya":
-      return p.status === "Ny";
+      return p.status === "Ny bokning";
     case "kundbokningar":
       return p.booking_approval_status === "Väntar på godkännande";
-    case "planering":
-      return ["Planering", "Ruttkontroll", "Order"].includes(p.status);
-    case "ruttkontroll":
-      return p.status === "Ruttkontroll";
+    case "forfragningar":
+      return p.status === "Förfrågan";
+    case "planera":
+      return effectiveProjectPriority(p) === "Planera";
+    case "prioriterade":
+      return effectiveProjectPriority(p) === "Prioriterad";
     case "denna-vecka":
       return isThisWeek(p.planned_loading_date) || isThisWeek(p.planned_delivery_date);
-    case "vantar-kund":
-      return p.status === "Väntar på kund";
-    case "vantar-tillstand":
-      return p.status === "Tillstånd";
-    case "klar-fakturering":
-      return p.status === "Klar för fakturering";
+    case "pa-vag":
+      return p.status === "På väg";
+    case "levererade":
+      return p.status === "Levererad";
     case "saknar-uppgifter":
       return !isComplete(p);
     case "kraver-foljebil":
-      return projectNeedsFollowVehicle(p);
+      return projectHasOutstandingFollowVehicle(p);
     default:
       return true;
   }
@@ -188,9 +200,10 @@ function projectSortValue(project: Project, key: SortKey): string | number | nul
     case "height": return cargo?.height_m ?? null;
     case "weight": return cargo?.weight_ton ?? null;
     case "status": return PROJECT_STATUSES.indexOf(project.status);
+    case "priority": return PROJECT_PRIORITIES.indexOf(effectiveProjectPriority(project));
     case "responsible": return project.responsible?.full_name ?? null;
     case "route": return project.measurement_link ? 1 : 0;
-    case "followVehicle": return projectNeedsFollowVehicle(project) ? 1 : 0;
+    case "followVehicle": return projectHasOutstandingFollowVehicle(project) ? 1 : 0;
     case "invoice": return ["Ej fakturerad", "Klar för fakturering", "Fakturerad"].indexOf(project.invoice_status);
     case "missing": return getMissingFields(project).length;
   }
@@ -207,20 +220,21 @@ function compareSortValues(a: string | number | null, b: string | number | null,
 }
 
 function isArchivedOrInvoiced(project: Project): boolean {
-  return ["Avslutad", "Avbruten"].includes(project.status) || project.invoice_status === "Fakturerad";
+  return ["Avbokad", "Fakturerad"].includes(project.status) || project.invoice_status === "Fakturerad";
 }
 
 function isClosedProject(project: Project): boolean {
-  return ["Avslutad", "Avbruten"].includes(project.status);
+  return ["Avbokad", "Fakturerad"].includes(project.status);
 }
 
 export function ProjectList() {
-  const { projects, customers } = useStore();
+  const { projects, customers, updateProjectStatus, updateProjectPriority } = useStore();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [modalOpen, setModalOpen] = useState(false);
   const permissions = usePermissions();
   const canCreate = permissions.can("projects", "create");
+  const canEdit = permissions.can("projects", "edit");
 
   const [search, setSearch] = useState(searchParams.get("sok") ?? "");
   const [status, setStatus] = useState("");
@@ -256,12 +270,12 @@ export function ProjectList() {
       alla: countableProjects.length,
       nya: 0,
       kundbokningar: 0,
-      planering: 0,
-      ruttkontroll: 0,
+      forfragningar: 0,
+      planera: 0,
+      prioriterade: 0,
       "denna-vecka": 0,
-      "vantar-kund": 0,
-      "vantar-tillstand": 0,
-      "klar-fakturering": 0,
+      "pa-vag": 0,
+      levererade: 0,
       "saknar-uppgifter": 0,
       "kraver-foljebil": 0,
     };
@@ -320,7 +334,7 @@ export function ProjectList() {
   function handleExport() {
     const header = [
       "Projektnummer", "Kund", "Gods", "Från", "Till", "Lastning", "Lossning",
-      "Längd", "Bredd", "Höjd", "Vikt", "Status", "Ansvarig", "Ruttmätning", "Kräver följebil", "Fakturering", "Saknade uppgifter",
+      "Längd", "Bredd", "Höjd", "Vikt", "Status", "Prioriterad", "Ansvarig", "Ruttmätning", "Kräver följebil", "Fakturering", "Saknade uppgifter",
     ];
     const rows = filtered.map((p) => {
       const cargo = p.cargo_items?.[0];
@@ -339,9 +353,10 @@ export function ProjectList() {
         cargo?.height_m,
         cargo?.weight_ton,
         p.status,
+        effectiveProjectPriority(p),
         p.responsible?.full_name,
         p.measurement_link ? "Ja" : "Nej",
-        projectNeedsFollowVehicle(p) ? "Ja" : "Nej",
+        projectHasOutstandingFollowVehicle(p) ? "Ja" : "Nej",
         p.invoice_status,
         getMissingFields(p).map((m) => m.label).join(", "),
       ];
@@ -448,10 +463,10 @@ export function ProjectList() {
           const unloading = p.locations?.find((l) => l.type === "lossning");
           const missing = getMissingFields(p);
           return (
-            <Link
+            <article
               key={p.id}
-              to={`/projekt/${p.id}`}
-              className={`block rounded-xl border border-border bg-panel p-4 shadow-sm ${missing.length > 0 ? "border-amber-200 bg-amber-50/50" : ""}`}
+              onClick={() => navigate(`/projekt/${p.id}`)}
+              className={`cursor-pointer rounded-xl border border-border bg-panel p-4 shadow-sm ${missing.length > 0 ? "border-amber-200 bg-amber-50/50" : ""}`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -459,7 +474,35 @@ export function ProjectList() {
                   <div className="mt-0.5 line-clamp-2 text-sm text-slate-600">{p.name}</div>
                   <div className="mt-1 text-xs text-slate-500">{p.customer?.company_name ?? "Kund saknas"}</div>
                 </div>
-                <StatusBadge status={p.status} />
+                {projectHasOutstandingFollowVehicle(p) && (
+                  <TriangleAlert size={17} className="shrink-0 text-amber-600" aria-label="Kräver följebil eller VTL" />
+                )}
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <label className="min-w-0 text-xs text-slate-400">
+                  Status
+                  <select
+                    value={p.status}
+                    disabled={!canEdit}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(event) => updateProjectStatus(p.id, event.target.value as ProjectStatus)}
+                    className={`mt-1 w-full rounded-md border-0 px-2 py-1.5 text-xs font-semibold outline-none ring-1 ring-inset ring-black/5 focus:ring-2 focus:ring-orange-400 disabled:opacity-100 ${STATUS_STYLES[p.status]}`}
+                  >
+                    {PROJECT_STATUSES.map((item) => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                </label>
+                <label className="min-w-0 text-xs text-slate-400">
+                  Prioriterad
+                  <select
+                    value={effectiveProjectPriority(p)}
+                    disabled={!canEdit}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(event) => updateProjectPriority(p.id, event.target.value as ProjectPriority)}
+                    className={`mt-1 w-full rounded-md border-0 px-2 py-1.5 text-xs font-semibold outline-none ring-1 ring-inset ring-black/5 focus:ring-2 focus:ring-orange-400 disabled:opacity-100 ${PRIORITY_STYLES[effectiveProjectPriority(p)]}`}
+                  >
+                    {PROJECT_PRIORITIES.map((item) => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                </label>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-slate-600">
                 <div className="min-w-0">
@@ -488,7 +531,7 @@ export function ProjectList() {
                 <span>{p.invoice_status}</span>
               </div>
               {missing.length > 0 && <div className="mt-3"><MissingFieldsBadge missing={missing} /></div>}
-            </Link>
+            </article>
           );
         })}
         {filtered.length === 0 && (
@@ -499,7 +542,7 @@ export function ProjectList() {
       </div>
 
       <div className="hidden overflow-x-auto rounded-xl border border-border bg-panel shadow-sm md:block">
-        <table className="w-full min-w-[1480px] text-left text-sm">
+        <table className="w-full min-w-[1680px] text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <SortableHeader label="Projekt" sortKey="project" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
@@ -514,6 +557,7 @@ export function ProjectList() {
               <SortableHeader label="Höjd" sortKey="height" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Vikt" sortKey="weight" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Status" sortKey="status" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortableHeader label="Prioriterad" sortKey="priority" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Ansvarig" sortKey="responsible" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Rutt" sortKey="route" activeKey={sortKey} direction={sortDirection} onSort={handleSort} centered />
               <SortableHeader label="Följebil" sortKey="followVehicle" activeKey={sortKey} direction={sortDirection} onSort={handleSort} centered />
@@ -558,13 +602,46 @@ export function ProjectList() {
                   <td className="px-4 py-3 text-slate-600">{cargo?.width_m ? `${cargo.width_m} m` : "–"}</td>
                   <td className="px-4 py-3 text-slate-600">{cargo?.height_m ? `${cargo.height_m} m` : "–"}</td>
                   <td className="px-4 py-3 text-slate-600">{cargo?.weight_ton ? `${cargo.weight_ton} t` : "–"}</td>
-                  <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
+                  <td className="px-4 py-3">
+                    {canEdit ? (
+                      <select
+                        aria-label={`Status för ${p.project_number}`}
+                        value={p.status}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) => updateProjectStatus(p.id, event.target.value as ProjectStatus)}
+                        className={`w-32 rounded-md border-0 px-2 py-1 text-xs font-semibold outline-none ring-1 ring-inset ring-black/5 focus:ring-2 focus:ring-orange-400 ${STATUS_STYLES[p.status]}`}
+                      >
+                        {PROJECT_STATUSES.map((item) => <option key={item} value={item}>{item}</option>)}
+                      </select>
+                    ) : (
+                      <span className={`status-pill ${STATUS_STYLES[p.status]}`}>{p.status}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {canEdit ? (
+                      <select
+                        aria-label={`Prioritering för ${p.project_number}`}
+                        value={effectiveProjectPriority(p)}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) => updateProjectPriority(p.id, event.target.value as ProjectPriority)}
+                        className={`w-28 rounded-md border-0 px-2 py-1 text-xs font-semibold outline-none ring-1 ring-inset ring-black/5 focus:ring-2 focus:ring-orange-400 ${PRIORITY_STYLES[effectiveProjectPriority(p)]}`}
+                      >
+                        {PROJECT_PRIORITIES.map((item) => <option key={item} value={item}>{item}</option>)}
+                      </select>
+                    ) : (
+                      <span className={`status-pill ${PRIORITY_STYLES[effectiveProjectPriority(p)]}`}>{effectiveProjectPriority(p)}</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-slate-600">{p.responsible?.full_name ?? "–"}</td>
                   <td className="px-4 py-3 text-center">
                     {p.measurement_link ? <Ruler size={16} className="inline text-emerald-600" /> : <span className="text-slate-300">–</span>}
                   </td>
-                  <td className="px-4 py-3 text-center" title={projectNeedsFollowVehicle(p) ? "Kräver följebil enligt godsmåtten" : undefined}>
-                    {projectNeedsFollowVehicle(p) ? <TriangleAlert size={16} className="inline text-amber-600" /> : <span className="text-slate-300">–</span>}
+                  <td className="px-4 py-3 text-center" title={projectHasOutstandingFollowVehicle(p) ? "Kräver bokad följebil eller VTL" : hasCompletedFollowVehicleOrder(p) ? "Följebil eller VTL är bokad och klar" : undefined}>
+                    {projectHasOutstandingFollowVehicle(p)
+                      ? <TriangleAlert size={16} className="inline text-amber-600" />
+                      : hasCompletedFollowVehicleOrder(p)
+                        ? <CheckCircle2 size={16} className="inline text-emerald-600" />
+                        : <span className="text-slate-300">–</span>}
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-600">{p.invoice_status}</td>
                   <td className="px-4 py-3"><MissingFieldsBadge missing={missing} /></td>
@@ -573,7 +650,7 @@ export function ProjectList() {
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={17} className="px-4 py-10 text-center text-sm text-slate-500">
+                <td colSpan={18} className="px-4 py-10 text-center text-sm text-slate-500">
                   Inga projekt matchar filtren.
                 </td>
               </tr>

@@ -116,7 +116,7 @@ export function ProjectDetail() {
   const canEditProject = permissions.can("projects", "edit");
   const [editOpen, setEditOpen] = useState(false);
   const [approvalResponsibleId, setApprovalResponsibleId] = useState(project?.responsible_id ?? "");
-  const [approvalStatus, setApprovalStatus] = useState<Project["status"]>("Planering");
+  const [approvalStatus, setApprovalStatus] = useState<Project["status"]>("Bekräftad");
   const [rejectReason, setRejectReason] = useState("");
 
   if (!project) {
@@ -223,9 +223,9 @@ export function ProjectDetail() {
                   onChange={(e) => setApprovalStatus(e.target.value as Project["status"])}
                   className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
                 >
-                  <option value="Planering">Planering</option>
-                  <option value="Under kalkylering">Under kalkylering</option>
-                  <option value="Order">Order</option>
+                  <option value="Förfrågan">Förfrågan</option>
+                  <option value="Bokad">Bokad</option>
+                  <option value="Bekräftad">Bekräftad</option>
                 </select>
                 <Button
                   type="button"

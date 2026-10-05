@@ -385,7 +385,7 @@ export function ProjectFormModal({ open, onClose, project }: { open: boolean; on
 
     const created = addProject({
       project_number: nextProjectNumber(projects),
-      status: "Ny",
+      status: "Ny bokning",
       ...sharedFields,
     });
 

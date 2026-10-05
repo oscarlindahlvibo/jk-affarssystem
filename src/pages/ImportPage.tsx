@@ -308,7 +308,7 @@ export function ImportPage() {
         customer_id: customerId,
         contact_person_id: contactId,
         responsible_id: responsible?.id ?? null,
-        status: d.status ? resolveStatus(d.status) : "Ny",
+        status: d.status ? resolveStatus(d.status) : "Ny bokning",
         transport_type: d.transportType ? resolveTransportType(d.transportType) : "Annat",
         special_requirements: null,
         planned_loading_date: d.loadingDate || null,

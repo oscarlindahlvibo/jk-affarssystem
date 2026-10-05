@@ -1,37 +1,31 @@
 // Central datamodell för JK Projektlogistik – speglar Supabase/PostgreSQL-schemat i supabase/migrations
 
 export type ProjectStatus =
-  | "Ny"
-  | "Under kalkylering"
-  | "Offert skickad"
-  | "Väntar på kund"
-  | "Order"
-  | "Planering"
-  | "Ruttkontroll"
-  | "Tillstånd"
-  | "Transport bokad"
-  | "Pågående"
+  | "Ny bokning"
+  | "Förfrågan"
+  | "Bokad"
+  | "Bekräftad"
+  | "På väg"
   | "Levererad"
-  | "Klar för fakturering"
-  | "Avslutad"
-  | "Avbruten";
+  | "Avbokad"
+  | "Pausad"
+  | "Fakturerad";
 
 export const PROJECT_STATUSES: ProjectStatus[] = [
-  "Ny",
-  "Under kalkylering",
-  "Offert skickad",
-  "Väntar på kund",
-  "Order",
-  "Planering",
-  "Ruttkontroll",
-  "Tillstånd",
-  "Transport bokad",
-  "Pågående",
+  "Ny bokning",
+  "Förfrågan",
+  "Bokad",
+  "Bekräftad",
+  "På väg",
   "Levererad",
-  "Klar för fakturering",
-  "Avslutad",
-  "Avbruten",
+  "Avbokad",
+  "Pausad",
+  "Fakturerad",
 ];
+
+export type ProjectPriority = "Kommande" | "Planera" | "Prioriterad";
+
+export const PROJECT_PRIORITIES: ProjectPriority[] = ["Kommande", "Planera", "Prioriterad"];
 
 export type TransportType =
   | "Specialtransport"
@@ -342,6 +336,8 @@ export interface Project {
   contact_person_id: string | null;
   responsible_id: string | null;
   status: ProjectStatus;
+  priority?: ProjectPriority | null;
+  priority_is_manual?: boolean;
   transport_type: TransportType;
   special_requirements: string | null;
   planned_loading_date: string | null;

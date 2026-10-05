@@ -80,7 +80,7 @@ function numberValue(value: number | null) {
 }
 
 function canSelfServeBooking(project: Project) {
-  return project.booking_approval_status !== "Väntar på godkännande" && project.booking_approval_status !== "Avvisad" && project.status !== "Avbruten";
+  return project.booking_approval_status !== "Väntar på godkännande" && project.booking_approval_status !== "Avvisad" && project.status !== "Avbokad";
 }
 
 export function CustomerPortalPage() {
@@ -484,7 +484,7 @@ export function CustomerPortalPage() {
                     </div>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {approval && <span className={`status-pill ${APPROVAL_STYLES[approval]}`}>{approval}</span>}
-                      <StatusBadge status={PROJECT_STATUSES.includes(p.status) ? p.status : "Ny"} />
+                      <StatusBadge status={PROJECT_STATUSES.includes(p.status) ? p.status : "Ny bokning"} />
                       {p.edit_requested_at && <span className="status-pill bg-blue-100 text-blue-700">Ändring begärd</span>}
                     </div>
                     <div className="mt-3 space-y-1 text-xs text-slate-500">
@@ -531,7 +531,7 @@ export function CustomerPortalPage() {
                 {openBooking.booking_approval_status && (
                   <span className={`status-pill ${APPROVAL_STYLES[openBooking.booking_approval_status]}`}>{openBooking.booking_approval_status}</span>
                 )}
-                <StatusBadge status={PROJECT_STATUSES.includes(openBooking.status) ? openBooking.status : "Ny"} />
+                <StatusBadge status={PROJECT_STATUSES.includes(openBooking.status) ? openBooking.status : "Ny bokning"} />
               </div>
             </div>
 

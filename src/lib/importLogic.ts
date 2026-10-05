@@ -429,22 +429,33 @@ export function evaluateRow(index: number, row: string[], mapping: ColumnMapping
 // JK:s Excel-status skiljer sig från systemets statusflöde. Mappa deras
 // vardagsspråkliga statusar mot närmaste steg i flödet.
 const STATUS_SYNONYMS: Record<string, ProjectStatus> = {
-  "planerad": "Planering",
-  "på väg": "Pågående",
-  "pågår": "Pågående",
+  "ny": "Ny bokning",
+  "under kalkylering": "Förfrågan",
+  "offert skickad": "Förfrågan",
+  "väntar på kund": "Förfrågan",
+  "planerad": "Bekräftad",
+  "order": "Bekräftad",
+  "planering": "Bekräftad",
+  "ruttkontroll": "Bekräftad",
+  "tillstånd": "Bekräftad",
+  "transport bokad": "Bokad",
+  "pågående": "På väg",
+  "pågår": "På väg",
   "levererad": "Levererad",
-  "fakturerad": "Avslutad",
-  "avbokad": "Avbruten",
-  "avbruten": "Avbruten",
-  "klar": "Klar för fakturering",
+  "klar för fakturering": "Levererad",
+  "avslutad": "Levererad",
+  "fakturerad": "Fakturerad",
+  "avbokad": "Avbokad",
+  "avbruten": "Avbokad",
+  "klar": "Levererad",
 };
 
 export function resolveStatus(raw: string): ProjectStatus {
   const cleaned = cleanCell(raw).toLowerCase();
-  if (!cleaned) return "Ny";
+  if (!cleaned) return "Ny bokning";
   const direct = PROJECT_STATUSES.find((s) => s.toLowerCase() === cleaned);
   if (direct) return direct;
-  return STATUS_SYNONYMS[cleaned] ?? "Ny";
+  return STATUS_SYNONYMS[cleaned] ?? "Ny bokning";
 }
 
 // Om Excel-statusen redan speglar fakturering (t.ex. "Fakturerad") sätts

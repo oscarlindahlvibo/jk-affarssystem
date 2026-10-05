@@ -260,7 +260,7 @@ export function OrderImportPage() {
         customer_id: finalCustomerId,
         contact_person_id: finalContactId || null,
         responsible_id: responsibleId || null,
-        status: "Ny",
+        status: "Ny bokning",
         transport_type: transportType,
         special_requirements: null,
         delivery_terms: combinedTerms,

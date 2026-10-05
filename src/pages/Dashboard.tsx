@@ -4,8 +4,6 @@ import {
   Inbox,
   ClipboardList,
   Truck,
-  Clock,
-  FileWarning,
   CheckCircle2,
   ArrowRight,
   AlertTriangle,
@@ -16,6 +14,7 @@ import { StatusBadge } from "../components/ui/StatusBadge";
 import { formatDate, formatDateAndTime, timeAgo } from "../lib/format";
 import { getMissingFields, isProjectActiveForFollowUp } from "../lib/validation";
 import { TASK_CATEGORY_STYLES } from "../lib/status";
+import { effectiveProjectPriority } from "../lib/projectPriority";
 
 function isThisWeek(dateStr: string | null): boolean {
   if (!dateStr) return false;
@@ -33,18 +32,16 @@ export function Dashboard() {
   const { projects } = useStore();
 
   const stats = useMemo(() => {
-    const nya = projects.filter((p) => p.status === "Ny").length;
+    const nya = projects.filter((p) => p.status === "Ny bokning").length;
     const kundbokningar = projects.filter((p) => p.booking_approval_status === "Väntar på godkännande").length;
-    const planering = projects.filter((p) =>
-      ["Planering", "Ruttkontroll", "Order"].includes(p.status)
-    ).length;
+    const planera = projects.filter((p) => effectiveProjectPriority(p) === "Planera").length;
+    const prioriterade = projects.filter((p) => effectiveProjectPriority(p) === "Prioriterad").length;
     const transporterVecka = projects.filter(
       (p) => isThisWeek(p.planned_loading_date) || isThisWeek(p.planned_delivery_date)
     ).length;
-    const vantarKund = projects.filter((p) => p.status === "Väntar på kund").length;
-    const vantarTillstand = projects.filter((p) => p.status === "Tillstånd").length;
-    const klarFakturering = projects.filter((p) => p.status === "Klar för fakturering").length;
-    return { nya, kundbokningar, planering, transporterVecka, vantarKund, vantarTillstand, klarFakturering };
+    const paVag = projects.filter((p) => p.status === "På väg").length;
+    const levererade = projects.filter((p) => p.status === "Levererad").length;
+    return { nya, kundbokningar, planera, prioriterade, transporterVecka, paVag, levererade };
   }, [projects]);
 
   const pendingCustomerBookings = useMemo(
@@ -72,7 +69,7 @@ export function Dashboard() {
 
   const incompleteProjects = useMemo(() => {
     return projects
-      .filter((p) => !["Avslutad", "Avbruten"].includes(p.status))
+      .filter((p) => !["Avbokad", "Fakturerad"].includes(p.status))
       .map((p) => ({ project: p, missing: getMissingFields(p) }))
       .filter((x) => x.missing.length > 0)
       .sort((a, b) => b.missing.length - a.missing.length)
@@ -80,13 +77,13 @@ export function Dashboard() {
   }, [projects]);
 
   const cards = [
-    { label: "Nya förfrågningar", value: stats.nya, icon: Inbox, color: "bg-slate-100 text-slate-600", to: "/projekt?filter=nya" },
+    { label: "Nya bokningar", value: stats.nya, icon: Inbox, color: "bg-slate-100 text-slate-600", to: "/projekt?filter=nya" },
     { label: "Kundbokningar", value: stats.kundbokningar, icon: CheckCircle2, color: "bg-green-100 text-green-700", to: "/projekt?filter=kundbokningar" },
-    { label: "Under planering", value: stats.planering, icon: ClipboardList, color: "bg-cyan-100 text-cyan-700", to: "/projekt?filter=planering" },
+    { label: "Planera", value: stats.planera, icon: ClipboardList, color: "bg-amber-100 text-amber-700", to: "/projekt?filter=planera" },
+    { label: "Prioriterade", value: stats.prioriterade, icon: AlertTriangle, color: "bg-red-100 text-red-700", to: "/projekt?filter=prioriterade" },
     { label: "Transporter denna vecka", value: stats.transporterVecka, icon: Truck, color: "bg-orange-100 text-orange-700", to: "/projekt?filter=denna-vecka" },
-    { label: "Väntar på kund", value: stats.vantarKund, icon: Clock, color: "bg-amber-100 text-amber-700", to: "/projekt?filter=vantar-kund" },
-    { label: "Väntar på tillstånd", value: stats.vantarTillstand, icon: FileWarning, color: "bg-rose-100 text-rose-700", to: "/projekt?filter=vantar-tillstand" },
-    { label: "Klara för fakturering", value: stats.klarFakturering, icon: CheckCircle2, color: "bg-green-100 text-green-700", to: "/projekt?filter=klar-fakturering" },
+    { label: "På väg", value: stats.paVag, icon: Truck, color: "bg-cyan-100 text-cyan-700", to: "/projekt?filter=pa-vag" },
+    { label: "Levererade", value: stats.levererade, icon: CheckCircle2, color: "bg-green-100 text-green-700", to: "/projekt?filter=levererade" },
   ];
 
   return (

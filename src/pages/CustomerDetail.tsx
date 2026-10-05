@@ -41,7 +41,7 @@ export function CustomerDetail() {
   const contacts = getContactsByCustomer(customer.id);
   const custProjects = getProjectsByCustomer(customer.id);
   const visibleProjects = custProjects
-    .filter((project) => showClosedProjects || (!["Avslutad", "Avbruten"].includes(project.status) && project.invoice_status !== "Fakturerad"))
+    .filter((project) => showClosedProjects || (!["Avbokad", "Fakturerad"].includes(project.status) && project.invoice_status !== "Fakturerad"))
     .sort((a, b) => {
       const byCreatedAt = b.created_at.localeCompare(a.created_at);
       return byCreatedAt || b.project_number.localeCompare(a.project_number, "sv", { numeric: true });

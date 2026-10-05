@@ -7,9 +7,8 @@ export interface MissingField {
 
 const COMPLETENESS_EXEMPT_STATUSES: Project["status"][] = [
   "Levererad",
-  "Klar för fakturering",
-  "Avslutad",
-  "Avbruten",
+  "Avbokad",
+  "Fakturerad",
 ];
 
 export function isProjectActiveForFollowUp(project: Project): boolean {
