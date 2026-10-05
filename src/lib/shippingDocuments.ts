@@ -64,7 +64,7 @@ function drawTextBox(
   y: number,
   width: number,
   height: number,
-  options: { maxChars?: number; fontSize?: number; labelMaxChars?: number; labelLines?: number } = {}
+  options: { maxChars?: number; fontSize?: number; labelMaxChars?: number; labelLines?: number; preserveLineBreaks?: boolean } = {}
 ) {
   page.drawRectangle({ x, y, width, height, borderColor: rgb(0.05, 0.05, 0.05), borderWidth: 0.85 });
   const labelFontSize = 6.5;
@@ -77,7 +77,10 @@ function drawTextBox(
   const fontSize = options.fontSize ?? 7.4;
   const lineHeight = fontSize + 1.3;
   const valueTop = y + height - 13 - labelLines.length * labelLineHeight;
-  splitLines(value, maxChars)
+  const valueLines = options.preserveLineBreaks
+    ? value.split(/\r?\n/).flatMap((line) => splitLines(line, maxChars))
+    : splitLines(value, maxChars);
+  valueLines
     .slice(0, Math.max(1, Math.floor((valueTop - y - 4) / lineHeight)))
     .forEach((line, index) => {
       page.drawText(line, { x: x + 4, y: valueTop - index * lineHeight, size: fontSize, font });
@@ -108,16 +111,7 @@ export async function generateCmrPdf(project: Project) {
   ]
     .filter(Boolean)
     .join("\n");
-  const carrier = [
-    project.suppliers?.map((supplier) => supplier.company_name).join(" / ") || project.supplier?.company_name,
-    project.supplier?.contact_person,
-    project.supplier?.phone,
-    project.vehicle ? `Fordon: ${project.vehicle}` : null,
-    project.driver_name ? `Chaufför: ${project.driver_name}` : null,
-    project.carrier_order_number ? `Ordernr: ${project.carrier_order_number}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const carrier = "JK Projektlogistik AB\nÅseda, 36430.\nSweden.";
   const takingOver = [
     `Place / Plats: ${safe(loading?.name)}`,
     `Address / Adress: ${safe(loading?.address)}`,
@@ -185,6 +179,7 @@ export async function generateCmrPdf(project: Project) {
     drawTextBox(page, font, "6. Carrier (name, address, country, references) / Transportör", carrier || "-", right, 614, columnWidth, 114, {
       maxChars: 47,
       fontSize: 7.1,
+      preserveLineBreaks: true,
     });
     drawTextBox(page, font, "2. Consignee (name, address, country) / Mottagare", consignee || "-", left, 614, columnWidth, 60, {
       maxChars: 46,
