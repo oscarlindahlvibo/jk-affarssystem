@@ -39,7 +39,7 @@ const NAV_ITEMS = [
   },
   {
     to: "/importera-order",
-    label: "Importera order (LTC)",
+    label: "Importera order",
     icon: FileUp,
     show: (p: ReturnType<typeof usePermissions>) => p.can("projects", "create"),
   },

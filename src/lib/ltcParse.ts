@@ -23,6 +23,8 @@ export interface ParsedLtcOrder {
   senderAddress: string | null;
   senderPostnr: string | null;
   senderCity: string | null;
+  customerContact: string | null;
+  customerPhone: string | null;
   loadingDate: string | null;
   deliveryDate: string | null;
   recipientCompany: string | null;
@@ -32,6 +34,7 @@ export interface ParsedLtcOrder {
   recipientEmail: string | null;
   deliveryCoordinateN: string | null;
   deliveryCoordinateE: string | null;
+  deliveryAddress: string | null;
   deliveryPostnr: string | null;
   deliveryCity: string | null;
   deliveryTerms: string | null;
@@ -115,6 +118,39 @@ function findDeliveryTermsAddition(lines: string[]): string | null {
   return additionLine ? cleanTableValue(additionLine.replace(/.*Tillägg leveransvillkor\s*/i, "")) : null;
 }
 
+function parseFreeTextItem(text: string, orderRef: string | null): ParsedLtcItem[] {
+  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+  const goodsIndex = lines.findIndex((line) => /^Gods\s*:/i.test(line));
+  if (goodsIndex < 0) return [];
+
+  const firstLineValue = cleanTableValue(lines[goodsIndex].replace(/^Gods\s*:\s*/i, ""));
+  const followingLines: string[] = [];
+  for (const line of lines.slice(goodsIndex + 1)) {
+    if (/^(Kvitterad fraktsedel|Transport enligt|Märk fakturan|Faktura mailas|---SIDBRYTNING---)/i.test(line)) break;
+    followingLines.push(line);
+  }
+  const description = [firstLineValue, ...followingLines.slice(0, 3)].filter(Boolean).join(" ").trim();
+  if (!description) return [];
+
+  const dimensions = /(\d+(?:[.,]\d+)?)\s*(?:x|×)\s*(\d+(?:[.,]\d+)?)\s*(?:x|×)\s*(\d+(?:[.,]\d+)?)(?:\s*m)?\b/i.exec(description);
+  const singleLength = dimensions ? null : /(\d+(?:[.,]\d+)?)\s*m\b/i.exec(description);
+  const weight = /(\d+(?:[.,]\d+)?)\s*(kg|ton|t)\b/i.exec(description);
+  const quantity = /^(\d+)\s*(?:st|x)\b/i.exec(description);
+  const parsedWeight = weight ? parseNum(weight[1]) : null;
+
+  return [{
+    quantity: quantity ? parseNum(quantity[1]) : 1,
+    typeName: description,
+    orderRef,
+    length_m: parseNum(dimensions?.[1] ?? singleLength?.[1] ?? null),
+    width_m: parseNum(dimensions?.[2] ?? null),
+    height_m: parseNum(dimensions?.[3] ?? null),
+    weight_ton: parsedWeight === null ? null : weight?.[2].toLowerCase() === "kg" ? parsedWeight / 1000 : parsedWeight,
+    goodsMark: null,
+    deliveryTermsAddition: null,
+  }];
+}
+
 function parseItems(text: string): ParsedLtcItem[] {
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
   const deliveryTermsAddition = findDeliveryTermsAddition(lines);
@@ -190,34 +226,69 @@ function parseItems(text: string): ParsedLtcItem[] {
 }
 
 export function parseLtcOrder(text: string): ParsedLtcOrder {
-  const documentNumber = match1(text, /\b(LTC\d+)\b/i) ?? match1(text, /Nr\.\s*([A-Z0-9]+)/i);
-  const senderCompanyRaw = match1(text, /Avsändare\s+(.+)/i);
+  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+  const isTransportOrder = /Beställning Transport/i.test(text) && /Ordernr\s*:/i.test(text);
+  const documentNumber = match1(text, /\b(LTC\d+)\b/i)
+    ?? match1(text, /Ordernr\s*:\s*([A-Z0-9-]+)/i)
+    ?? match1(text, /Nr\.\s*([A-Z0-9]+)/i);
+  const senderCompanyRaw = match1(text, /Avsändare\s*:\s*(.+)/i) ?? match1(text, /Avsändare\s+(.+)/i);
   const senderCompany = senderCompanyRaw ? senderCompanyRaw.replace(/\s*\/\s*[A-Z]{2,5}$/, "").trim() : null;
-  const senderAddress = match1(text, /^Adress\s+(.+)/im);
-  const senderPostnr = match1(text, /Postnr\s+(\d{3}\s?\d{2})/i);
-  const senderCity = match1(text, /Avsändarort\s+(.+)/i);
-  const loadingDate = parseDate(match1(text, /Lastningsdag\s+(\d{4}-\d{2}-\d{2})/i));
-  const deliveryDate = parseDate(match1(text, /Lev\.?dag på plats\s+(\d{4}-\d{2}-\d{2})/i));
-  const recipientCompany = match1(text, /^Kund\s+(.+)/im);
-  const recipientContact = match1(text, /Kontaktperson\s+(.+)/i);
+  const senderIndex = lines.findIndex((line) => /Avsändare\s*:/i.test(line));
+  const customerIndex = lines.findIndex((line) => /^Kund\s*:/i.test(line));
+  const senderBlock = senderIndex >= 0 && customerIndex > senderIndex
+    ? lines.slice(senderIndex + 1, customerIndex).filter((line) => !/^Fraktsedelsnr\s*:/i.test(line))
+    : [];
+  const senderPostalLine = senderBlock.find((line) => /^\d{3}\s?\d{2}\s+.+/.test(line));
+  const senderPostalMatch = senderPostalLine ? /^(\d{3}\s?\d{2})\s+(.+)$/.exec(senderPostalLine) : null;
+  const senderAddress = match1(text, /^Adress\s+(.+)/im) ?? senderBlock.find((line) => line !== senderPostalLine && !/^Sweden$/i.test(line)) ?? null;
+  const senderPostnr = match1(text, /Postnr\s+(\d{3}\s?\d{2})/i) ?? senderPostalMatch?.[1] ?? null;
+  const senderCity = match1(text, /Avsändarort\s+(.+)/i) ?? senderPostalMatch?.[2] ?? null;
+  const customerCompany = match1(text, /^Kund\s*:\s*(.+)/im);
+  const customerContact = match1(text, /Kundens ref\s*:\s*(.+)/i);
+  const customerPhone = isTransportOrder
+    ? lines.slice(customerIndex + 1, Math.max(customerIndex + 2, lines.findIndex((line) => /^Mottagare\s*:/i.test(line))))
+      .find((line) => /^\+?[\d\s-]{6,}$/.test(line)) ?? null
+    : null;
+  const loadingDate = parseDate(match1(text, /(?:Lastningsdag|Lastas)\s*:?\s*(\d{4}-\d{2}-\d{2})/i));
+  const deliveryDate = parseDate(match1(text, /(?:Lev\.?dag på plats|Lossas)\s*:?\s*(\d{4}-\d{2}-\d{2})/i));
+  const recipientCompany = match1(text, /^Mottagare\s*:\s*(.+)/im) ?? match1(text, /^Kund\s+(.+)/im);
+  const deliveryPostalLine = lines.find((line) => /^\d{3}\s?\d{2}\s+.+/.test(line) && line !== senderPostalLine);
+  const deliveryPostalMatch = deliveryPostalLine ? /^(\d{3}\s?\d{2})\s+(.+)$/.exec(deliveryPostalLine) : null;
+  const recipientIndex = lines.findIndex((line) => /^Mottagare\s*:/i.test(line));
+  const goodsIndex = lines.findIndex((line) => /^Gods\s*:/i.test(line));
+  const recipientBlock = recipientIndex >= 0 && goodsIndex > recipientIndex ? lines.slice(recipientIndex + 1, goodsIndex) : [];
+  const recipientContactLine = recipientBlock.find((line) => /^\+?[\d\s-]{6,}\s*,\s*.+/.test(line));
+  const recipientContactMatch = recipientContactLine ? /^(\+?[\d\s-]{6,})\s*,\s*(.+)$/.exec(recipientContactLine) : null;
+  const recipientContact = match1(text, /Kontaktperson\s+(.+)/i) ?? recipientContactMatch?.[2] ?? null;
   const recipientPhone = match1(text, /^Telefon\s+([\d\s+-]+)/im);
-  const recipientMobile = match1(text, /Mobil ?nr\s+([\d\s+-]+)/i);
+  const recipientMobile = match1(text, /Mobil ?nr\s+([\d\s+-]+)/i) ?? recipientContactMatch?.[1]?.trim() ?? null;
   const recipientEmail = match1(text, /E-post\s+([^\s@]+@[^\s@]+\.[^\s@]+)/i);
   const coordN = match1(text, /N:\s*(\d+)/i);
   const coordE = match1(text, /E:\s*(\d+)/i);
   const deliveryPostnrMatch = /Leveransort\s+(\d{3}\s?\d{2})\s+(.+)/i.exec(text);
-  const deliveryPostnr = deliveryPostnrMatch ? deliveryPostnrMatch[1].trim() : null;
-  const deliveryCity = deliveryPostnrMatch ? deliveryPostnrMatch[2].trim() : null;
+  const deliveryPostnr = deliveryPostnrMatch?.[1].trim() ?? deliveryPostalMatch?.[1] ?? null;
+  const deliveryCity = deliveryPostnrMatch?.[2].trim() ?? deliveryPostalMatch?.[2] ?? null;
+  const deliveryAddress = isTransportOrder
+    ? recipientBlock.find((line) =>
+        !/^(Lastas|Lossas)\s*:/i.test(line) &&
+        line !== deliveryPostalLine &&
+        line !== recipientContactLine &&
+        !/^Sweden$/i.test(line)
+      ) ?? null
+    : match1(text, /Leveransadress\s+(.+)/i);
   const deliveryTerms = match1(text, /Leveransvillkor\s+(.+)/i);
 
   const items = parseItems(text);
+  if (items.length === 0) items.push(...parseFreeTextItem(text, documentNumber));
 
   return {
     documentNumber,
-    senderCompany,
+    senderCompany: customerCompany ?? senderCompany,
     senderAddress,
     senderPostnr,
     senderCity,
+    customerContact,
+    customerPhone,
     loadingDate,
     deliveryDate,
     recipientCompany,
@@ -227,6 +298,7 @@ export function parseLtcOrder(text: string): ParsedLtcOrder {
     recipientEmail,
     deliveryCoordinateN: coordN,
     deliveryCoordinateE: coordE,
+    deliveryAddress,
     deliveryPostnr,
     deliveryCity,
     deliveryTerms,

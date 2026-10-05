@@ -32,9 +32,9 @@ function digitsOnly(value: string | null | undefined) {
 }
 
 function findMatchingContact(contacts: ContactPerson[], customerId: string, order: ParsedLtcOrder | null) {
-  const contactName = normalizeText(order?.recipientContact);
+  const contactName = normalizeText(order?.customerContact ?? order?.recipientContact);
   const contactEmail = normalizeText(order?.recipientEmail);
-  const contactPhone = digitsOnly(order?.recipientMobile ?? order?.recipientPhone);
+  const contactPhone = digitsOnly(order?.customerPhone ?? order?.recipientMobile ?? order?.recipientPhone);
   if (!customerId || (!contactName && !contactEmail && !contactPhone)) return undefined;
 
   return contacts.find((contact) => {
@@ -44,6 +44,15 @@ function findMatchingContact(contacts: ContactPerson[], customerId: string, orde
     if (contactPhone && [contact.mobile, contact.phone].some((value) => digitsOnly(value) === contactPhone)) return true;
     return false;
   });
+}
+
+function suggestedTransportType(order: ParsedLtcOrder): TransportType {
+  const goods = order.items.map((item) => item.typeName ?? "").join(" ").toLowerCase();
+  if (/kranbil|mobilkran|\bkran\b/.test(goods)) return "Krantransport";
+  if (/container/.test(goods)) return "Container";
+  if (/maskin|grävmaskin|hjullastare/.test(goods)) return "Maskintransport";
+  if (/styckegods|pallgods|pall/.test(goods)) return "Styckegods";
+  return "Specialtransport";
 }
 
 export function OrderImportPage() {
@@ -83,8 +92,8 @@ export function OrderImportPage() {
 
   const activeProfiles = store.profiles.filter((p) => p.status === "aktiv");
   const contactsForCustomer = store.contactPersons.filter((c) => c.customer_id === customerId);
-  const parsedCustomerContactName = order?.recipientContact?.trim() ?? "";
-  const parsedCustomerContactPhone = order?.recipientMobile ?? order?.recipientPhone ?? "";
+  const parsedCustomerContactName = (order?.customerContact ?? order?.recipientContact)?.trim() ?? "";
+  const parsedCustomerContactPhone = order?.customerPhone ?? order?.recipientMobile ?? order?.recipientPhone ?? "";
 
   useEffect(() => () => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
@@ -107,14 +116,17 @@ export function OrderImportPage() {
     setContactId(matchedContact?.id ?? "");
     setShowNewCustomer(!matchedCustomer && Boolean(parsed.senderCompany));
     setNewCustomerName(canonicalCustomerName(parsed.senderCompany ?? ""));
-    setLoadingPlace([parsed.senderCity, parsed.senderAddress].filter(Boolean).join(", ") || parsed.senderCity || "");
+    const loadingPostalCity = [parsed.senderPostnr, parsed.senderCity].filter(Boolean).join(" ");
+    setLoadingPlace([parsed.senderAddress, loadingPostalCity].filter(Boolean).join(", ") || parsed.senderCity || "");
     const coords = parsed.deliveryCoordinateN && parsed.deliveryCoordinateE ? ` (N: ${parsed.deliveryCoordinateN}, E: ${parsed.deliveryCoordinateE})` : "";
-    setUnloadingPlace([parsed.deliveryPostnr, parsed.deliveryCity].filter(Boolean).join(" ") + coords);
+    const deliveryPostalCity = [parsed.deliveryPostnr, parsed.deliveryCity].filter(Boolean).join(" ");
+    setUnloadingPlace([parsed.deliveryAddress, deliveryPostalCity].filter(Boolean).join(", ") + coords);
     setUnloadingContactName(parsed.recipientCompany ? `${parsed.recipientContact ?? ""} (${parsed.recipientCompany})`.trim() : "");
-    setUnloadingContactPhone(parsed.recipientCompany ? parsed.recipientPhone ?? parsed.recipientMobile ?? "" : "");
+    setUnloadingContactPhone(parsed.recipientCompany ? parsed.recipientMobile ?? parsed.recipientPhone ?? "" : "");
     setLoadingDate(parsed.loadingDate ?? "");
     setDeliveryDate(parsed.deliveryDate ?? "");
     setDeliveryTerms(parsed.deliveryTerms ?? "");
+    setTransportType(suggestedTransportType(parsed));
     setItems(parsed.items.map((i) => ({ ...i, include: true })));
     setStep(2);
   }
@@ -131,7 +143,7 @@ export function OrderImportPage() {
       setSourceFile(file);
       replacePreviewUrl(file);
       if (parsed.items.length === 0 && !parsed.documentNumber) {
-        setParseError("Kunde inte tolka dokumentet automatiskt. Kontrollera att det är en LTC-liknande fraktbeställning, eller fortsätt och fyll i manuellt.");
+        setParseError("Kunde inte tolka dokumentet automatiskt. Kontrollera att PDF-filen har ett läsbart textlager, eller fortsätt och fyll i manuellt.");
       }
       loadOrderIntoForm(parsed);
     } catch {
@@ -196,7 +208,7 @@ export function OrderImportPage() {
       uploaded_at: new Date().toISOString(),
       uploaded_by: currentProfile?.full_name ?? "Okänd",
       visibility: "internal",
-      comment: "Originaldokument från LTC-import.",
+      comment: "Originaldokument från orderimport.",
     });
     await store.waitForPendingMutations();
   }
@@ -215,7 +227,7 @@ export function OrderImportPage() {
           phone: null,
           email: null,
           website: null,
-          notes: "Skapad via LTC-orderimport.",
+          notes: "Skapad via orderimport.",
           status: "aktiv",
         });
         finalCustomerId = created.id;
@@ -223,7 +235,9 @@ export function OrderImportPage() {
       if (!finalCustomerId) return;
 
     let finalContactId = contactId;
-    if (!finalContactId && order?.recipientContact?.trim()) {
+    const customerContactName = order?.customerContact ?? order?.recipientContact;
+    const customerContactPhone = order?.customerPhone ?? order?.recipientPhone;
+    if (!finalContactId && customerContactName?.trim()) {
       const matchedContact = findMatchingContact(store.contactPersons, finalCustomerId, order);
       if (matchedContact) {
         finalContactId = matchedContact.id;
@@ -231,12 +245,12 @@ export function OrderImportPage() {
         const existingContactsForCustomer = store.contactPersons.filter((c) => c.customer_id === finalCustomerId);
         const createdContact = store.addContactPerson({
           customer_id: finalCustomerId,
-          name: order.recipientContact.trim(),
-          role: "Kontakt från LTC",
-          phone: order.recipientPhone ?? null,
-          mobile: order.recipientMobile ?? null,
-          email: order.recipientEmail ?? null,
-          note: "Skapad via LTC-orderimport.",
+          name: customerContactName.trim(),
+          role: "Kontakt från order",
+          phone: customerContactPhone ?? null,
+          mobile: order?.customerPhone ? null : order?.recipientMobile ?? null,
+          email: order?.recipientEmail ?? null,
+          note: "Skapad via orderimport.",
           is_primary: existingContactsForCustomer.length === 0,
         });
         finalContactId = createdContact.id;
@@ -316,7 +330,7 @@ export function OrderImportPage() {
             await saveSourceDocument(sourceFile, newProject.id);
             documentsSaved++;
           } catch (error) {
-            console.error("Kunde inte spara LTC-originalet", error);
+            console.error("Kunde inte spara orderoriginalet", error);
             documentsFailed++;
           }
         }
@@ -362,12 +376,12 @@ export function OrderImportPage() {
       </div>
 
       {step === 1 && (
-        <Panel title="Steg 1: Ladda upp fraktorder (LTC/PDF)">
+        <Panel title="Steg 1: Ladda upp orderblad (PDF)">
           <div className="space-y-4">
             <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-slate-50 py-12 text-center hover:border-orange-300 hover:bg-orange-50/40">
               {parsing ? <Loader2 size={28} className="animate-spin text-slate-400" /> : <Upload size={28} className="text-slate-400" />}
               <div className="text-sm font-medium text-slate-700">{parsing ? "Läser dokumentet..." : "Klicka för att välja PDF"}</div>
-              <div className="text-xs text-slate-500">Digital fraktorder (LTC-blad eller liknande), en fil per order</div>
+              <div className="text-xs text-slate-500">Digital fraktorder, LTC eller annat orderblad med läsbart textlager, en fil per order</div>
               <input type="file" accept=".pdf" className="hidden" disabled={parsing} onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
             </label>
             {parseError && <p className="text-sm text-red-600">{parseError}</p>}
@@ -430,7 +444,7 @@ export function OrderImportPage() {
                   </Field>
                   {parsedCustomerContactName && !contactId && (
                     <p className="mt-2 text-xs text-slate-500">
-                      Skapar kontaktperson från LTC: {parsedCustomerContactName}
+                      Skapar kontaktperson från ordern: {parsedCustomerContactName}
                       {parsedCustomerContactPhone ? ` · ${parsedCustomerContactPhone}` : ""}
                     </p>
                   )}
@@ -438,7 +452,7 @@ export function OrderImportPage() {
               )}
               {showNewCustomer && parsedCustomerContactName && (
                 <p className="mt-2 text-xs text-slate-500">
-                  Skapar kontaktperson från LTC: {parsedCustomerContactName}
+                  Skapar kontaktperson från ordern: {parsedCustomerContactName}
                   {parsedCustomerContactPhone ? ` · ${parsedCustomerContactPhone}` : ""}
                 </p>
               )}
@@ -516,7 +530,7 @@ export function OrderImportPage() {
                       <FileText size={16} className="text-orange-500" />
                       Originaldokument
                     </h3>
-                    <p className="mt-1 text-xs text-slate-500">Jämför uppgifterna ovan med den uppladdade LTC-filen.</p>
+                    <p className="mt-1 text-xs text-slate-500">Jämför uppgifterna ovan med det uppladdade orderbladet.</p>
                   </div>
                   <a
                     href={previewUrl}
@@ -530,7 +544,7 @@ export function OrderImportPage() {
                 <div className="mt-3 overflow-hidden rounded-lg border border-border bg-slate-100">
                   <iframe
                     src={`${previewUrl}#view=FitH`}
-                    title={`Förhandsgranskning av ${fileName ?? "LTC-dokument"}`}
+                    title={`Förhandsgranskning av ${fileName ?? "orderdokument"}`}
                     className="h-[70vh] min-h-[520px] w-full bg-white"
                   />
                 </div>
@@ -543,7 +557,7 @@ export function OrderImportPage() {
             <Button variant="secondary" onClick={() => setStep(1)}><ArrowLeft size={14} /> Tillbaka</Button>
             <Button onClick={() => void handleCreate()} disabled={creating || includedCount === 0 || (!customerId && !newCustomerName.trim())}>
               {creating ? <Loader2 size={14} className="animate-spin" /> : null}
-              {creating ? "Skapar projekt och sparar LTC..." : `Skapa ${includedCount} projekt`} {!creating && <ArrowRight size={14} />}
+              {creating ? "Skapar projekt och sparar orderblad..." : `Skapa ${includedCount} projekt`} {!creating && <ArrowRight size={14} />}
             </Button>
           </div>
           {createError && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{createError}</p>}
