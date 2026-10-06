@@ -16,6 +16,7 @@ export const PRIORITY_STYLES: Record<ProjectPriority, string> = {
   Kommande: "bg-slate-100 text-slate-700",
   Planera: "bg-amber-100 text-amber-800",
   Prioriterad: "bg-red-100 text-red-700",
+  Klar: "bg-green-100 text-green-700",
 };
 
 export const TASK_STATUS_STYLES: Record<TaskStatus, string> = {

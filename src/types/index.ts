@@ -23,9 +23,9 @@ export const PROJECT_STATUSES: ProjectStatus[] = [
   "Fakturerad",
 ];
 
-export type ProjectPriority = "Kommande" | "Planera" | "Prioriterad";
+export type ProjectPriority = "Kommande" | "Planera" | "Prioriterad" | "Klar";
 
-export const PROJECT_PRIORITIES: ProjectPriority[] = ["Kommande", "Planera", "Prioriterad"];
+export const PROJECT_PRIORITIES: ProjectPriority[] = ["Kommande", "Planera", "Prioriterad", "Klar"];
 
 export type TransportType =
   | "Specialtransport"
