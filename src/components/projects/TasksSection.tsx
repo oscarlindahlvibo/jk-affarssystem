@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, ChevronDown, ChevronUp, MapPin } from "lucide-react";
+import { Plus, ChevronDown, ChevronUp, MapPin, Trash2 } from "lucide-react";
 import type { ProjectTask, TaskStatus, TaskCategory } from "../../types";
 import { TASK_CATEGORIES } from "../../types";
 import { Panel } from "../ui/Panel";
@@ -42,11 +42,26 @@ function formFromTask(task: ProjectTask, isKnownProfile: boolean): TaskFormState
 }
 
 export function TasksSection({ projectId, tasks }: { projectId: string; tasks: ProjectTask[] }) {
-  const { addTask, updateTask, updateTaskStatus, profiles, getProject } = useStore();
+  const { addTask, updateTask, updateTaskStatus, deleteTask, profiles, getProject } = useStore();
   const canEdit = usePermissions().can("projects", "edit");
   const [open, setOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<ProjectTask | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [deletingTask, setDeletingTask] = useState<ProjectTask | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function confirmDelete() {
+    if (!deletingTask || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteTask(projectId, deletingTask.id);
+      setDeletingTask(null);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Kunde inte ta bort arbetsordern.");
+    } finally { setDeleting(false); }
+  }
 
   const project = getProject(projectId);
   const loading = project?.locations?.find((l) => l.type === "lastning")?.name;
@@ -100,11 +115,11 @@ export function TasksSection({ projectId, tasks }: { projectId: string; tasks: P
           const hasDetails = Boolean(t.description || t.route_section);
           return (
             <li key={t.id} className="py-2.5 first:pt-0 last:pb-0">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 sm:flex-nowrap sm:gap-3">
                 <button
                   type="button"
                   onClick={() => hasDetails && setExpandedId(expanded ? null : t.id)}
-                  className={`min-w-0 flex-1 text-left ${hasDetails ? "cursor-pointer" : "cursor-default"}`}
+                  className={`min-w-0 flex-1 basis-full text-left sm:basis-auto ${hasDetails ? "cursor-pointer" : "cursor-default"}`}
                 >
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className={`status-pill ${TASK_CATEGORY_STYLES[t.category]}`}>{t.category}</span>
@@ -128,6 +143,7 @@ export function TasksSection({ projectId, tasks }: { projectId: string; tasks: P
                 ) : (
                   <span className={`status-pill shrink-0 ${TASK_STATUS_STYLES[t.status]}`}>{t.status}</span>
                 )}
+                {canEdit && <Button type="button" variant="ghost" className="shrink-0 !p-2 text-red-600" title="Ta bort arbetsorder" aria-label="Ta bort arbetsorder" onClick={() => { setDeleteError(null); setDeletingTask(t); }}><Trash2 size={15} /></Button>}
               </div>
               {expanded && (
                 <div className="mt-2 space-y-1.5 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
@@ -155,6 +171,16 @@ export function TasksSection({ projectId, tasks }: { projectId: string; tasks: P
         })}
         {tasks.length === 0 && <p className="py-2 text-sm text-slate-500">Inga uppgifter tillagda.</p>}
       </ul>
+
+      <Modal open={Boolean(deletingTask) && canEdit} onClose={() => { if (!deleting) setDeletingTask(null); }} title="Ta bort arbetsorder">
+        <p className="text-sm text-slate-700">Vill du ta bort arbetsordern? Den försvinner även från den ansvariges uppgiftslista. Det går inte att ångra.</p>
+        <p className="mt-3 break-words text-sm font-medium text-slate-700">{deletingTask?.task}</p>
+        {deleteError && <p role="alert" className="mt-3 text-sm text-red-600">{deleteError}</p>}
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="secondary" disabled={deleting} onClick={() => setDeletingTask(null)}>Avbryt</Button>
+          <Button disabled={deleting} onClick={confirmDelete}><Trash2 size={15} />{deleting ? "Tar bort..." : "Ta bort"}</Button>
+        </div>
+      </Modal>
 
       {open && (
         <TaskFormModal

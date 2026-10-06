@@ -177,13 +177,15 @@ export async function insertRow(table: string, row: object, label: string) {
   assertResult(result.error, `Kunde inte skapa ${label}`);
 }
 
-export async function updateRow(table: string, id: string, patch: object, label: string) {
-  const result = await client().from(table).update(patch).eq("id", id);
+export async function updateRow(table: string, id: string, patch: object, label: string, projectId?: string) {
+  const query = client().from(table).update(patch).eq("id", id);
+  const result = await (projectId ? query.eq("project_id", projectId).select("id").single() : query);
   assertResult(result.error, `Kunde inte uppdatera ${label}`);
 }
 
-export async function deleteRow(table: string, id: string, label: string) {
-  const result = await client().from(table).delete().eq("id", id);
+export async function deleteRow(table: string, id: string, label: string, projectId?: string) {
+  const query = client().from(table).delete().eq("id", id);
+  const result = await (projectId ? query.eq("project_id", projectId).select("id").single() : query);
   assertResult(result.error, `Kunde inte radera ${label}`);
 }
 

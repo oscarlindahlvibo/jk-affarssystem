@@ -126,6 +126,9 @@ interface StoreShape {
   updateProjectFinance: (projectId: string, patch: Partial<Pick<Project, "price" | "cost" | "invoice_status">>) => void;
   sendSupplierBooking: (projectId: string, supplierIds: string[]) => Promise<SupplierBookingSendResult>;
   addNote: (projectId: string, note: Omit<ProjectNote, "id" | "project_id">) => void;
+  updateNote: (projectId: string, noteId: string, patch: Pick<ProjectNote, "text" | "category" | "visibility">) => Promise<void>;
+  deleteNote: (projectId: string, noteId: string) => Promise<void>;
+  deleteTask: (projectId: string, taskId: string) => Promise<void>;
   addDocument: (projectId: string, doc: Omit<ProjectDocument, "id" | "project_id">) => void;
   deleteDocument: (projectId: string, documentId: string) => void;
   addTask: (projectId: string, task: Omit<ProjectTask, "id" | "project_id">) => void;
@@ -973,6 +976,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [authorize, persist]
   );
 
+  const updateNote: StoreShape["updateNote"] = useCallback(async (projectId, noteId, patch) => {
+    authorize("projects", "edit");
+    if (!patch.text.trim()) throw new Error("Anteckningen får inte vara tom.");
+    const changes = { text: patch.text.trim(), category: patch.category, visibility: patch.visibility };
+    await waitForPendingMutations();
+    if (isSupabaseConfigured) await updateRow("notes", noteId, changes, "anteckningen", projectId);
+    setAllProjects((prev) => prev.map((p) => p.id === projectId
+      ? { ...p, notes: (p.notes ?? []).map((note) => note.id === noteId ? { ...note, ...changes } : note) } : p));
+  }, [authorize, waitForPendingMutations]);
+
+  const deleteNote: StoreShape["deleteNote"] = useCallback(async (projectId, noteId) => {
+    authorize("projects", "edit");
+    await waitForPendingMutations();
+    if (isSupabaseConfigured) await deleteRow("notes", noteId, "anteckningen", projectId);
+    setAllProjects((prev) => prev.map((p) => p.id === projectId
+      ? { ...p, notes: (p.notes ?? []).filter((note) => note.id !== noteId) } : p));
+  }, [authorize, waitForPendingMutations]);
+
+  const deleteTask: StoreShape["deleteTask"] = useCallback(async (projectId, taskId) => {
+    authorize("projects", "edit");
+    await waitForPendingMutations();
+    if (isSupabaseConfigured) await deleteRow("tasks", taskId, "arbetsordern", projectId);
+    setAllProjects((prev) => prev.map((p) => p.id === projectId
+      ? { ...p, tasks: (p.tasks ?? []).filter((task) => task.id !== taskId) } : p));
+  }, [authorize, waitForPendingMutations]);
+
   const addDocument: StoreShape["addDocument"] = useCallback(
     (projectId, doc) => {
       authorize("documents", "create");
@@ -1210,6 +1239,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateProjectFinance,
       sendSupplierBooking,
       addNote,
+      updateNote,
+      deleteNote,
+      deleteTask,
       addDocument,
       deleteDocument,
       addTask,
@@ -1268,6 +1300,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateProjectFinance,
       sendSupplierBooking,
       addNote,
+      updateNote,
+      deleteNote,
+      deleteTask,
       addDocument,
       deleteDocument,
       addTask,
