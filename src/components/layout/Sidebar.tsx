@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   ClipboardList,
   ListChecks,
+  Clock,
   Users,
   Contact,
   FileText,
@@ -25,6 +26,7 @@ import { ROLE_LABELS } from "../../types";
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true, show: () => true },
   { to: "/mina-uppgifter", label: "Mina uppgifter", icon: ListChecks, show: () => true },
+  { to: "/tid", label: "Tid", icon: Clock, show: () => true },
   { to: "/projekt", label: "Projekt", icon: ClipboardList, show: () => true },
   { to: "/kunder", label: "Kunder", icon: Users, show: () => true },
   { to: "/kontakter", label: "Kontaktpersoner", icon: Contact, show: () => true },

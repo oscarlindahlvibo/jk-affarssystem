@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "./lib/auth";
 import { PersonnelProvider } from "./data/personnel";
 import { GoogleDriveProvider } from "./lib/googleDriveContext";
 import { StoreProvider } from "./data/store";
+import { TimeTrackingProvider } from "./data/timeTracking";
 import { AppLayout } from "./components/layout/AppLayout";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
@@ -17,6 +18,7 @@ import { DocumentsPage } from "./pages/DocumentsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { PersonnelPage } from "./pages/PersonnelPage";
 import { MyTasksPage } from "./pages/MyTasksPage";
+import { TimePage } from "./pages/TimePage";
 import { ImportPage } from "./pages/ImportPage";
 import { OrderImportPage } from "./pages/OrderImportPage";
 import { ProjectPrint } from "./pages/ProjectPrint";
@@ -69,7 +71,9 @@ function AppRoutes() {
           <RequireAuth>
             <GoogleDriveProvider>
               <StoreProvider>
-                <Outlet />
+                <TimeTrackingProvider>
+                  <Outlet />
+                </TimeTrackingProvider>
               </StoreProvider>
             </GoogleDriveProvider>
           </RequireAuth>
@@ -80,6 +84,7 @@ function AppRoutes() {
         <Route element={<RequireInternal><AppLayout /></RequireInternal>}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/mina-uppgifter" element={<MyTasksPage />} />
+          <Route path="/tid" element={<TimePage />} />
           <Route path="/projekt" element={<ProjectList />} />
           <Route path="/projekt/:id" element={<ProjectDetail />} />
           <Route path="/kunder" element={<CustomerList />} />

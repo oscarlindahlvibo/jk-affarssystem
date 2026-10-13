@@ -51,3 +51,16 @@ export function formatMinutes(minutes: number | null | undefined): string {
   if (!hours) return `${rest} min`;
   return rest ? `${hours} h ${rest} min` : `${hours} h`;
 }
+
+export function formatClock(ms: number): string {
+  const total = Math.max(Math.floor(ms / 1000), 0);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+export function formatTimeOfDay(iso: string | null | undefined): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
+}

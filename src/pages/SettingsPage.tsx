@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Calculator, Users } from "lucide-react";
 import { Panel } from "../components/ui/Panel";
+import { TimeCategoriesPanel } from "../components/time/TimeCategoriesPanel";
 import { useStore } from "../data/store";
 import { PROJECT_STATUSES, ROLE_LABELS, USER_STATUS_LABELS } from "../types";
 
@@ -42,6 +43,8 @@ export function SettingsPage() {
           </Link>
         </div>
       </Panel>
+
+      <TimeCategoriesPanel />
 
       <Panel title="Användare / roller">
         <div className="space-y-3 md:hidden">

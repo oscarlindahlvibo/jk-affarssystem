@@ -1,6 +1,7 @@
 import { Menu } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
 import { TaskNotifications } from "./TaskNotifications";
+import { ClockChip } from "./ClockChip";
 
 export function Topbar({ title, onMenuClick }: { title: string; onMenuClick: () => void }) {
   return (
@@ -12,6 +13,7 @@ export function Topbar({ title, onMenuClick }: { title: string; onMenuClick: () 
         <h1 className="truncate text-lg font-semibold text-slate-800">{title}</h1>
       </div>
       <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-4">
+        <ClockChip />
         <GlobalSearch />
         <TaskNotifications />
       </div>
