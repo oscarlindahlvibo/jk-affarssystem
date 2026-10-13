@@ -5,6 +5,7 @@ export type ProjectStatus =
   | "Förfrågan"
   | "Bokad"
   | "Bekräftad"
+  | "Rekning"
   | "På väg"
   | "Levererad"
   | "Avbokad"
@@ -16,6 +17,7 @@ export const PROJECT_STATUSES: ProjectStatus[] = [
   "Förfrågan",
   "Bokad",
   "Bekräftad",
+  "Rekning",
   "På väg",
   "Levererad",
   "Avbokad",
@@ -215,6 +217,8 @@ export interface ProjectTask {
   deadline: string | null;
   status: TaskStatus;
   comment: string | null;
+  // Faktiskt nedlagd tid i minuter (t.ex. när någon rekat en sträcka).
+  time_spent_minutes?: number | null;
 }
 
 export type MeasurementStatus = "Ej startad" | "Pågående" | "Klar" | "Bevakning";

@@ -10,6 +10,7 @@ import { TASK_STATUS_STYLES, TASK_CATEGORY_STYLES } from "../../lib/status";
 import { formatDate } from "../../lib/format";
 import { useStore } from "../../data/store";
 import { usePermissions } from "../../lib/usePermissions";
+import { TaskTimeEntry } from "./TaskTimeEntry";
 
 const STATUS_OPTIONS: TaskStatus[] = ["Ej påbörjad", "Pågående", "Klar"];
 const UNASSIGNED = "";
@@ -145,6 +146,7 @@ export function TasksSection({ projectId, tasks }: { projectId: string; tasks: P
                 )}
                 {canEdit && <Button type="button" variant="ghost" className="shrink-0 !p-2 text-red-600" title="Ta bort arbetsorder" aria-label="Ta bort arbetsorder" onClick={() => { setDeleteError(null); setDeletingTask(t); }}><Trash2 size={15} /></Button>}
               </div>
+              <TaskTimeEntry projectId={projectId} task={t} canEdit={canEdit} />
               {expanded && (
                 <div className="mt-2 space-y-1.5 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
                   {t.route_section && (

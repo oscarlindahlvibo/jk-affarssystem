@@ -15,18 +15,7 @@ import { formatDate, formatDateAndTime, timeAgo } from "../lib/format";
 import { getMissingFields, isProjectActiveForFollowUp } from "../lib/validation";
 import { TASK_CATEGORY_STYLES } from "../lib/status";
 import { effectiveProjectPriority } from "../lib/projectPriority";
-
-function isThisWeek(dateStr: string | null): boolean {
-  if (!dateStr) return false;
-  const date = new Date(dateStr);
-  const now = new Date();
-  const start = new Date(now);
-  start.setDate(now.getDate() - now.getDay() + 1);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 7);
-  return date >= start && date < end;
-}
+import { isInWeek } from "../lib/week";
 
 export function Dashboard() {
   const { projects } = useStore();
@@ -37,11 +26,14 @@ export function Dashboard() {
     const planera = projects.filter((p) => effectiveProjectPriority(p) === "Planera").length;
     const prioriterade = projects.filter((p) => effectiveProjectPriority(p) === "Prioriterad").length;
     const transporterVecka = projects.filter(
-      (p) => isThisWeek(p.planned_loading_date) || isThisWeek(p.planned_delivery_date)
+      (p) => isInWeek(p.planned_loading_date) || isInWeek(p.planned_delivery_date)
+    ).length;
+    const transporterNastaVecka = projects.filter(
+      (p) => isInWeek(p.planned_loading_date, 1) || isInWeek(p.planned_delivery_date, 1)
     ).length;
     const paVag = projects.filter((p) => p.status === "På väg").length;
     const levererade = projects.filter((p) => p.status === "Levererad").length;
-    return { nya, kundbokningar, planera, prioriterade, transporterVecka, paVag, levererade };
+    return { nya, kundbokningar, planera, prioriterade, transporterVecka, transporterNastaVecka, paVag, levererade };
   }, [projects]);
 
   const pendingCustomerBookings = useMemo(
@@ -82,13 +74,14 @@ export function Dashboard() {
     { label: "Planera", value: stats.planera, icon: ClipboardList, color: "bg-amber-100 text-amber-700", to: "/projekt?filter=planera" },
     { label: "Prioriterade", value: stats.prioriterade, icon: AlertTriangle, color: "bg-red-100 text-red-700", to: "/projekt?filter=prioriterade" },
     { label: "Transporter denna vecka", value: stats.transporterVecka, icon: Truck, color: "bg-orange-100 text-orange-700", to: "/projekt?filter=denna-vecka" },
+    { label: "Transporter nästa vecka", value: stats.transporterNastaVecka, icon: Truck, color: "bg-amber-100 text-amber-700", to: "/projekt?filter=nasta-vecka" },
     { label: "På väg", value: stats.paVag, icon: Truck, color: "bg-cyan-100 text-cyan-700", to: "/projekt?filter=pa-vag" },
     { label: "Levererade", value: stats.levererade, icon: CheckCircle2, color: "bg-green-100 text-green-700", to: "/projekt?filter=levererade" },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-8">
         {cards.map(({ label, value, icon: Icon, color, to }) => (
           <Link
             key={label}

@@ -161,7 +161,7 @@ async function saveProject(project: Project, label: string) {
     locations: (project.locations ?? []).map((row) => pick(row, ["id", "project_id", "type", "name", "company_name", "address", "contact_name", "contact_phone", "order_index"])),
     cargo_items: (project.cargo_items ?? []).map((row) => pick(row, ["id", "project_id", "description", "length_m", "width_m", "height_m", "weight_ton", "quantity", "lift_points", "drawing_reference", "technical_info"])),
     notes: (project.notes ?? []).map((row) => ({ ...pick(row, ["id", "project_id", "date", "user_name", "text", "category", "visibility"]), user_id: null })),
-    tasks: (project.tasks ?? []).map((row) => pick(row, ["id", "project_id", "task", "category", "description", "route_section", "assignee_id", "assignee", "deadline", "status", "comment"])),
+    tasks: (project.tasks ?? []).map((row) => pick(row, ["id", "project_id", "task", "category", "description", "route_section", "assignee_id", "assignee", "deadline", "status", "comment", "time_spent_minutes"])),
     documents: (project.documents ?? []).map((row) => ({
       ...pick(row, ["id", "project_id", "file_name", "file_type", "category", "storage_path", "file_url", "file_size", "drive_file_id", "uploaded_at", "visibility", "comment"]),
       uploaded_by: null,

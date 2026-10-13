@@ -5,6 +5,7 @@ export const STATUS_STYLES: Record<ProjectStatus, string> = {
   Förfrågan: "bg-sky-100 text-sky-700",
   Bokad: "bg-indigo-100 text-indigo-700",
   Bekräftad: "bg-teal-100 text-teal-700",
+  Rekning: "bg-cyan-100 text-cyan-700",
   "På väg": "bg-orange-100 text-orange-700",
   Levererad: "bg-lime-100 text-lime-700",
   Avbokad: "bg-red-100 text-red-600",

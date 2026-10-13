@@ -7,6 +7,7 @@ import { usePermissions } from "../lib/usePermissions";
 import { Panel } from "../components/ui/Panel";
 import { TASK_CATEGORY_STYLES, TASK_STATUS_STYLES } from "../lib/status";
 import { formatDate } from "../lib/format";
+import { TaskTimeEntry } from "../components/projects/TaskTimeEntry";
 import { isProjectActiveForFollowUp } from "../lib/validation";
 import { TASK_CATEGORIES, type ProjectTask, type TaskStatus, type Project } from "../types";
 
@@ -93,6 +94,7 @@ export function MyTasksPage() {
                     )}
                     {t.description && <p className="mt-1.5 text-xs text-slate-600">{t.description}</p>}
                     {t.deadline && <div className="mt-1.5 text-xs text-slate-400">Deadline: {formatDate(t.deadline)}</div>}
+                    <TaskTimeEntry projectId={t.project.id} task={t} canEdit={canEdit} />
                   </div>
                   {canEdit ? (
                     <select

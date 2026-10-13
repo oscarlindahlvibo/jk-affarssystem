@@ -13,6 +13,7 @@ import { usePermissions } from "../lib/usePermissions";
 import { PROJECT_PRIORITIES, PROJECT_STATUSES, type Project, type ProjectPriority, type ProjectStatus } from "../types";
 import { effectiveProjectPriority } from "../lib/projectPriority";
 import { PRIORITY_STYLES, STATUS_STYLES } from "../lib/status";
+import { isInWeek } from "../lib/week";
 
 type QuickFilter =
   | "alla"
@@ -22,6 +23,7 @@ type QuickFilter =
   | "planera"
   | "prioriterade"
   | "denna-vecka"
+  | "nasta-vecka"
   | "pa-vag"
   | "levererade"
   | "saknar-uppgifter"
@@ -116,6 +118,7 @@ const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
   { key: "planera", label: "Planera" },
   { key: "prioriterade", label: "Prioriterade" },
   { key: "denna-vecka", label: "Denna vecka" },
+  { key: "nasta-vecka", label: "Nästa vecka" },
   { key: "pa-vag", label: "På väg" },
   { key: "levererade", label: "Levererade" },
   { key: "saknar-uppgifter", label: "Saknar uppgifter" },
@@ -142,18 +145,6 @@ function projectHasOutstandingFollowVehicle(p: Project): boolean {
   return projectNeedsFollowVehicle(p) && !hasCompletedFollowVehicleOrder(p);
 }
 
-function isThisWeek(dateStr: string | null | undefined): boolean {
-  if (!dateStr) return false;
-  const date = new Date(dateStr);
-  const now = new Date();
-  const start = new Date(now);
-  start.setDate(now.getDate() - now.getDay() + 1);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 7);
-  return date >= start && date < end;
-}
-
 function matchesQuickFilter(p: Project, filter: QuickFilter): boolean {
   switch (filter) {
     case "alla":
@@ -169,7 +160,9 @@ function matchesQuickFilter(p: Project, filter: QuickFilter): boolean {
     case "prioriterade":
       return effectiveProjectPriority(p) === "Prioriterad";
     case "denna-vecka":
-      return isThisWeek(p.planned_loading_date) || isThisWeek(p.planned_delivery_date);
+      return isInWeek(p.planned_loading_date) || isInWeek(p.planned_delivery_date);
+    case "nasta-vecka":
+      return isInWeek(p.planned_loading_date, 1) || isInWeek(p.planned_delivery_date, 1);
     case "pa-vag":
       return p.status === "På väg";
     case "levererade":
@@ -280,6 +273,7 @@ export function ProjectList() {
       planera: 0,
       prioriterade: 0,
       "denna-vecka": 0,
+      "nasta-vecka": 0,
       "pa-vag": 0,
       levererade: 0,
       "saknar-uppgifter": 0,
@@ -298,9 +292,19 @@ export function ProjectList() {
       if (!showClosed && !status && isClosedProject(p)) return false;
       if (!matchesQuickFilter(p, quickFilter)) return false;
       if (search) {
-        const q = search.toLowerCase();
-        const hay = `${p.project_number} ${p.name} ${p.customer?.company_name ?? ""}`.toLowerCase();
-        if (!hay.includes(q)) return false;
+        const hay = [
+          p.project_number,
+          p.name,
+          p.customer?.company_name,
+          p.customer_reference,
+          ...(p.locations ?? []).flatMap((l) => [l.name, l.address, l.company_name]),
+          ...(p.cargo_items ?? []).map((item) => item.description),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLocaleLowerCase("sv");
+        const terms = search.toLocaleLowerCase("sv").split(/\s+/).filter(Boolean);
+        if (!terms.every((term) => hay.includes(term))) return false;
       }
       if (status && p.status !== status) return false;
       if (customerId && p.customer_id !== customerId) return false;
@@ -378,7 +382,7 @@ export function ProjectList() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Sök projektnummer, namn, kund..."
+            placeholder="Sök projekt, kund, lastnings-/lossningsort..."
             className="w-full rounded-lg border border-border bg-white py-2 pl-8 pr-3 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 lg:w-72"
           />
         </div>

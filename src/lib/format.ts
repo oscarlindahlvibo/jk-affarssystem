@@ -43,3 +43,11 @@ export function timeAgo(value: string): string {
   const days = Math.round(hours / 24);
   return `${days} dagar sedan`;
 }
+
+export function formatMinutes(minutes: number | null | undefined): string {
+  if (!minutes || minutes <= 0) return "";
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (!hours) return `${rest} min`;
+  return rest ? `${hours} h ${rest} min` : `${hours} h`;
+}
