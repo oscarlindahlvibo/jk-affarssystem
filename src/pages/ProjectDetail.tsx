@@ -16,6 +16,7 @@ import { ProjectFormModal } from "../components/projects/NewProjectModal";
 import { TransportRuleList } from "../components/projects/TransportRuleList";
 import { FreightCalculatorPanel } from "../components/projects/FreightCalculatorPanel";
 import { ProjectTimePanel } from "../components/projects/ProjectTimePanel";
+import { ProjectClockButton } from "../components/projects/ProjectClockButton";
 import { getMissingFields } from "../lib/validation";
 import { evaluateTransportRules, RULE_SOURCE_NOTE } from "../lib/transportRules";
 import { usePermissions } from "../lib/usePermissions";
@@ -194,6 +195,7 @@ export function ProjectDetail() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <ProjectClockButton project={project} />
             <Link to={`/projekt/${project.id}/skriv-ut`}>
               <Button variant="secondary">
                 <Printer size={14} /> Skriv ut / PDF
@@ -461,7 +463,7 @@ export function ProjectDetail() {
           />
           <FreightCalculatorPanel project={project} canApplyToFinance={permissions.canEditProjectFinance} />
           <TasksSection projectId={project.id} tasks={project.tasks ?? []} />
-          <ProjectTimePanel projectId={project.id} />
+          <ProjectTimePanel project={project} />
           <MeasurementPanel link={project.measurement_link} />
         </div>
       </div>

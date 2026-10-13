@@ -1,10 +1,13 @@
 import { Clock } from "lucide-react";
 import { Link } from "react-router-dom";
+import type { Project } from "../../types";
 import { useTimeTracking } from "../../data/timeTracking";
 import { formatMinutes } from "../../lib/format";
 import { Panel } from "../ui/Panel";
+import { ProjectClockButton } from "./ProjectClockButton";
 
-export function ProjectTimePanel({ projectId }: { projectId: string }) {
+export function ProjectTimePanel({ project }: { project: Project }) {
+  const projectId = project.id;
   const { totals, categories, projectMinutes } = useTimeTracking();
   const total = projectMinutes(projectId);
   const perCategory = new Map<string, number>();
@@ -31,6 +34,7 @@ export function ProjectTimePanel({ projectId }: { projectId: string }) {
           </ul>
         </>
       )}
+      <div className="mt-4"><ProjectClockButton project={project} className="w-full justify-center" /></div>
     </Panel>
   );
 }
