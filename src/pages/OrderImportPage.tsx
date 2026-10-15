@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Upload, FileText, CheckCircle2, AlertTriangle, ArrowLeft, ArrowRight, ExternalLink, Loader2, Plus, X } from "lucide-react";
+import { Upload, FileText, CheckCircle2, AlertTriangle, ArrowLeft, ArrowRight, Loader2, Plus } from "lucide-react";
 import { useStore } from "../data/store";
 import { Panel } from "../components/ui/Panel";
 import { Button } from "../components/ui/Button";
-import { Field, inputClass } from "../components/ui/Field";
-import { extractPdfText, parseLtcOrder, type ParsedLtcOrder, type ParsedLtcItem } from "../lib/ltcParse";
+import { LtcGroupCard } from "../components/import/LtcGroupCard";
+import { extractPdfText, parseLtcOrder } from "../lib/ltcParse";
 import { MOCK_LTC_ORDER } from "../data/ltcMockOrder";
 import { nextProjectNumber } from "../components/projects/NewProjectModal";
 import { usePermissions } from "../lib/usePermissions";
@@ -13,163 +13,98 @@ import { canonicalCustomerName, normalizeCustomerName } from "../lib/importLogic
 import { useAuth } from "../lib/auth";
 import { isCentralDriveEnabled, uploadCentralDriveFile } from "../lib/centralDrive";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
-import type { ContactPerson, TransportType } from "../types";
-
-const TRANSPORT_TYPES: TransportType[] = ["Specialtransport", "Maskintransport", "Krantransport", "Styckegods", "Container", "Annat"];
+import {
+  addSheetsToGroups,
+  combinedDocumentRef,
+  describeItem,
+  findMatchingContact,
+  moveSheet,
+  projectCountForGroup,
+  uniqueJoin,
+  type EditableItem,
+  type LtcGroup,
+  type LtcSheet,
+} from "../lib/ltcBatch";
 
 type Step = 1 | 2 | 3;
-
-interface EditableItem extends ParsedLtcItem {
-  include: boolean;
-}
-
-function normalizeText(value: string | null | undefined) {
-  return (value ?? "").trim().toLowerCase();
-}
-
-function digitsOnly(value: string | null | undefined) {
-  return (value ?? "").replace(/\D/g, "");
-}
-
-function findMatchingContact(contacts: ContactPerson[], customerId: string, order: ParsedLtcOrder | null) {
-  const contactName = normalizeText(order?.customerContact ?? order?.recipientContact);
-  const contactEmail = normalizeText(order?.recipientEmail);
-  const contactPhone = digitsOnly(order?.customerPhone ?? order?.recipientMobile ?? order?.recipientPhone);
-  if (!customerId || (!contactName && !contactEmail && !contactPhone)) return undefined;
-
-  return contacts.find((contact) => {
-    if (contact.customer_id !== customerId) return false;
-    if (contactName && normalizeText(contact.name) === contactName) return true;
-    if (contactEmail && normalizeText(contact.email) === contactEmail) return true;
-    if (contactPhone && [contact.mobile, contact.phone].some((value) => digitsOnly(value) === contactPhone)) return true;
-    return false;
-  });
-}
-
-function suggestedTransportType(order: ParsedLtcOrder): TransportType {
-  const goods = order.items.map((item) => item.typeName ?? "").join(" ").toLowerCase();
-  if (/kranbil|mobilkran|\bkran\b/.test(goods)) return "Krantransport";
-  if (/container/.test(goods)) return "Container";
-  if (/maskin|grävmaskin|hjullastare/.test(goods)) return "Maskintransport";
-  if (/styckegods|pallgods|pall/.test(goods)) return "Styckegods";
-  return "Specialtransport";
-}
 
 export function OrderImportPage() {
   const store = useStore();
   const { currentProfile } = useAuth();
   const canImport = usePermissions().can("projects", "create");
   const [step, setStep] = useState<Step>(1);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [sourceFile, setSourceFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const previewUrlRef = useRef<string | null>(null);
-  const [parsing, setParsing] = useState(false);
-  const [parseError, setParseError] = useState<string | null>(null);
-  const [order, setOrder] = useState<ParsedLtcOrder | null>(null);
-
-  // Granskningsbara fält
-  const [customerId, setCustomerId] = useState("");
-  const [showNewCustomer, setShowNewCustomer] = useState(false);
-  const [newCustomerName, setNewCustomerName] = useState("");
-  const [contactId, setContactId] = useState("");
-  const [loadingPlace, setLoadingPlace] = useState("");
-  const [unloadingPlace, setUnloadingPlace] = useState("");
-  const [unloadingContactName, setUnloadingContactName] = useState("");
-  const [unloadingContactPhone, setUnloadingContactPhone] = useState("");
-  const [loadingDate, setLoadingDate] = useState("");
-  const [loadingTime, setLoadingTime] = useState("");
-  const [deliveryDate, setDeliveryDate] = useState("");
-  const [deliveryTime, setDeliveryTime] = useState("");
-  const [deliveryTerms, setDeliveryTerms] = useState("");
-  const [transportType, setTransportType] = useState<TransportType>("Specialtransport");
-  const [supplierId, setSupplierId] = useState("");
-  const [responsibleId, setResponsibleId] = useState("");
-  const [items, setItems] = useState<EditableItem[]>([]);
+  const [sheets, setSheets] = useState<LtcSheet[]>([]);
+  const [groups, setGroups] = useState<LtcGroup[]>([]);
+  const previewUrlsRef = useRef<string[]>([]);
+  const [parsing, setParsing] = useState<{ done: number; total: number } | null>(null);
+  const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ created: number; documentsSaved: number; documentsFailed: number } | null>(null);
+  const [result, setResult] = useState<{ created: number; documentsSaved: number; documentsFailed: number; expectedDocuments: number; numbers: string[] } | null>(null);
 
-  const activeProfiles = store.profiles.filter((p) => p.status === "aktiv");
-  const contactsForCustomer = store.contactPersons.filter((c) => c.customer_id === customerId);
-  const parsedCustomerContactName = (order?.customerContact ?? order?.recipientContact)?.trim() ?? "";
-  const parsedCustomerContactPhone = order?.customerPhone ?? order?.recipientMobile ?? order?.recipientPhone ?? "";
+  const ctx = { customers: store.customers, contacts: store.contactPersons };
 
   useEffect(() => () => {
-    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
 
-  function replacePreviewUrl(file: File | null) {
-    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-    const nextUrl = file ? URL.createObjectURL(file) : null;
-    previewUrlRef.current = nextUrl;
-    setPreviewUrl(nextUrl);
+  function trackPreview(file: File) {
+    const url = URL.createObjectURL(file);
+    previewUrlsRef.current.push(url);
+    return url;
   }
 
-  function loadOrderIntoForm(parsed: ParsedLtcOrder) {
-    setOrder(parsed);
-    const matchedCustomer = store.customers.find(
-      (c) => normalizeCustomerName(c.company_name) === normalizeCustomerName(parsed.senderCompany ?? "")
-    );
-    const matchedContact = matchedCustomer ? findMatchingContact(store.contactPersons, matchedCustomer.id, parsed) : undefined;
-    setCustomerId(matchedCustomer?.id ?? "");
-    setContactId(matchedContact?.id ?? "");
-    setShowNewCustomer(!matchedCustomer && Boolean(parsed.senderCompany));
-    setNewCustomerName(canonicalCustomerName(parsed.senderCompany ?? ""));
-    const loadingPostalCity = [parsed.senderPostnr, parsed.senderCity].filter(Boolean).join(" ");
-    setLoadingPlace([parsed.senderAddress, loadingPostalCity].filter(Boolean).join(", ") || parsed.senderCity || "");
-    const coords = parsed.deliveryCoordinateN && parsed.deliveryCoordinateE ? ` (N: ${parsed.deliveryCoordinateN}, E: ${parsed.deliveryCoordinateE})` : "";
-    const deliveryPostalCity = [parsed.deliveryPostnr, parsed.deliveryCity].filter(Boolean).join(" ");
-    setUnloadingPlace([parsed.deliveryAddress, deliveryPostalCity].filter(Boolean).join(", ") + coords);
-    setUnloadingContactName(parsed.recipientCompany ? `${parsed.recipientContact ?? ""} (${parsed.recipientCompany})`.trim() : "");
-    setUnloadingContactPhone(parsed.recipientCompany ? parsed.recipientMobile ?? parsed.recipientPhone ?? "" : "");
-    setLoadingDate(parsed.loadingDate ?? "");
-    setDeliveryDate(parsed.deliveryDate ?? "");
-    setDeliveryTerms(parsed.deliveryTerms ?? "");
-    setTransportType(suggestedTransportType(parsed));
-    setItems(parsed.items.map((i) => ({ ...i, include: true })));
+  async function handleFiles(fileList: FileList | File[]) {
+    const files = Array.from(fileList);
+    if (files.length === 0) return;
+    setParseErrors([]);
+    const added: LtcSheet[] = [];
+    const errors: string[] = [];
+    setParsing({ done: 0, total: files.length });
+    for (const [index, file] of files.entries()) {
+      try {
+        const parsed = parseLtcOrder(await extractPdfText(file));
+        if (parsed.items.length === 0 && !parsed.documentNumber) {
+          errors.push(`${file.name}: kunde inte tolkas automatiskt. Kontrollera att PDF-filen har ett läsbart textlager. Bladet är med, fyll i uppgifterna manuellt.`);
+        }
+        added.push({ id: crypto.randomUUID(), file, fileName: file.name, parsed, previewUrl: trackPreview(file) });
+      } catch {
+        errors.push(`${file.name}: kunde inte läsas som PDF och hoppades över.`);
+      }
+      setParsing({ done: index + 1, total: files.length });
+    }
+    setParsing(null);
+    setParseErrors(errors);
+    if (added.length === 0) return;
+    setSheets((prev) => [...prev, ...added]);
+    setGroups((prev) => addSheetsToGroups(prev, added, ctx));
     setStep(2);
   }
 
-  async function handleFile(file: File) {
-    setParseError(null);
-    setSourceFile(null);
-    replacePreviewUrl(null);
-    setParsing(true);
-    try {
-      const text = await extractPdfText(file);
-      const parsed = parseLtcOrder(text);
-      setFileName(file.name);
-      setSourceFile(file);
-      replacePreviewUrl(file);
-      if (parsed.items.length === 0 && !parsed.documentNumber) {
-        setParseError("Kunde inte tolka dokumentet automatiskt. Kontrollera att PDF-filen har ett läsbart textlager, eller fortsätt och fyll i manuellt.");
-      }
-      loadOrderIntoForm(parsed);
-    } catch {
-      setParseError("Kunde inte läsa PDF-filen.");
-    } finally {
-      setParsing(false);
-    }
-  }
-
   function useExample() {
-    setParseError(null);
-    setFileName("Exempeldata (LTC-blad Holtab)");
-    setSourceFile(null);
-    replacePreviewUrl(null);
-    loadOrderIntoForm(MOCK_LTC_ORDER);
+    setParseErrors([]);
+    const sheet: LtcSheet = { id: crypto.randomUUID(), file: null, fileName: "Exempeldata (LTC-blad Holtab)", parsed: MOCK_LTC_ORDER, previewUrl: null };
+    setSheets([sheet]);
+    setGroups(addSheetsToGroups([], [sheet], ctx));
+    setStep(2);
   }
 
-  function updateItem(index: number, patch: Partial<EditableItem>) {
-    setItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+  function updateGroup(id: string, patch: Partial<LtcGroup>) {
+    setGroups((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)));
   }
 
-  const includedCount = items.filter((i) => i.include).length;
-
-  function handleCustomerChange(nextCustomerId: string) {
-    setCustomerId(nextCustomerId);
-    setContactId(findMatchingContact(store.contactPersons, nextCustomerId, order)?.id ?? "");
+  function warningsFor(group: LtcGroup): string[] {
+    const groupSheets = sheets.filter((s) => group.sheetIds.includes(s.id));
+    const warnings: string[] = [];
+    for (const sheet of groupSheets) {
+      const number = sheet.parsed.documentNumber;
+      if (!number) continue;
+      const duplicatesInBatch = sheets.filter((s) => s.parsed.documentNumber === number).length > 1;
+      if (duplicatesInBatch) warnings.push(`${number} förekommer flera gånger i den här importen.`);
+      const existing = store.projects.find((p) => (p.source_document_ref ?? "").split(/\s*,\s*/).includes(number));
+      if (existing) warnings.push(`${number} finns redan på projekt ${existing.project_number}.`);
+    }
+    return [...new Set(warnings)];
   }
 
   async function saveSourceDocument(file: File, projectId: string) {
@@ -216,161 +151,239 @@ export function OrderImportPage() {
   async function handleCreate() {
     setCreating(true);
     setCreateError(null);
-    let finalCustomerId = customerId;
+    let created = 0;
+    let documentsSaved = 0;
+    let documentsFailed = 0;
+    let expectedDocuments = 0;
+    const numbers: string[] = [];
+    const completed = new Map<string, string[]>();
+    let workingProjects = store.projects;
+    const customerCache = new Map<string, string>();
+    const contactCache = new Map<string, string>();
+    let activeGroup: LtcGroup | null = null;
+    let failedGroupId: string | null = null;
+    const createdItems = new Set<EditableItem>();
+
     try {
-      if (!finalCustomerId && newCustomerName.trim()) {
-        const created = store.addCustomer({
-          company_name: canonicalCustomerName(newCustomerName),
-          org_number: null,
-          invoice_address: null,
-          visiting_address: null,
-          phone: null,
-          email: null,
-          website: null,
-          notes: "Skapad via orderimport.",
-          status: "aktiv",
-        });
-        finalCustomerId = created.id;
-      }
-      if (!finalCustomerId) return;
+      for (const group of groups) {
+        if (group.done || projectCountForGroup(group) === 0) continue;
+        activeGroup = group;
+        createdItems.clear();
+        const groupSheets = sheets.filter((s) => group.sheetIds.includes(s.id));
+        const sheetById = new Map(groupSheets.map((s) => [s.id, s]));
+        const order = group.order;
 
-    let finalContactId = contactId;
-    const customerContactName = order?.customerContact ?? order?.recipientContact;
-    const customerContactPhone = order?.customerPhone ?? order?.recipientPhone;
-    if (!finalContactId && customerContactName?.trim()) {
-      const matchedContact = findMatchingContact(store.contactPersons, finalCustomerId, order);
-      if (matchedContact) {
-        finalContactId = matchedContact.id;
-      } else {
-        const existingContactsForCustomer = store.contactPersons.filter((c) => c.customer_id === finalCustomerId);
-        const createdContact = store.addContactPerson({
-          customer_id: finalCustomerId,
-          name: customerContactName.trim(),
-          role: "Kontakt från order",
-          phone: customerContactPhone ?? null,
-          mobile: order?.customerPhone ? null : order?.recipientMobile ?? null,
-          email: order?.recipientEmail ?? null,
-          note: "Skapad via orderimport.",
-          is_primary: existingContactsForCustomer.length === 0,
-        });
-        finalContactId = createdContact.id;
-      }
-    }
-
-      let created = 0;
-      let documentsSaved = 0;
-      let documentsFailed = 0;
-      let workingProjects = store.projects;
-      const customerName = store.customers.find((c) => c.id === finalCustomerId)?.company_name ?? (newCustomerName.trim() || "Kund");
-
-    for (const item of items) {
-      if (!item.include) continue;
-      const description = [item.typeName, item.goodsMark ? `– Godsmärke ${item.goodsMark}` : null].filter(Boolean).join(" ");
-      const combinedTerms = [deliveryTerms || null, item.deliveryTermsAddition].filter(Boolean).join(" + ") || null;
-
-      const newProject = store.addProject({
-        project_number: nextProjectNumber(workingProjects),
-        name: `${customerName} – ${description || "Transport"}`,
-        customer_id: finalCustomerId,
-        contact_person_id: finalContactId || null,
-        responsible_id: responsibleId || null,
-        status: "Ny bokning",
-        transport_type: transportType,
-        special_requirements: null,
-        delivery_terms: combinedTerms,
-        planned_loading_date: loadingDate || null,
-        planned_loading_time: loadingTime || null,
-        planned_delivery_date: deliveryDate || null,
-        planned_delivery_time: deliveryTime || null,
-        supplier_id: supplierId || null,
-        price: null,
-        cost: null,
-        invoice_status: "Ej fakturerad",
-        customer_reference: item.orderRef,
-        source_document_ref: order?.documentNumber ?? null,
-        vehicle: null,
-        driver_name: null,
-        carrier_order_number: null,
-        locations: [
-          ...(loadingPlace ? [{ id: "loc-lastning", project_id: "", type: "lastning" as const, name: loadingPlace, address: null, order_index: 0 }] : []),
-          ...(unloadingPlace
-            ? [{
-                id: "loc-lossning",
-                project_id: "",
-                type: "lossning" as const,
-                name: unloadingPlace,
-                address: null,
-                contact_name: unloadingContactName || null,
-                contact_phone: unloadingContactPhone || null,
-                order_index: 1,
-              }]
-            : []),
-        ],
-        cargo_items: [
-          {
-            id: "cargo-1",
-            project_id: "",
-            description: description || "Gods",
-            length_m: item.length_m,
-            width_m: item.width_m,
-            height_m: item.height_m,
-            weight_ton: item.weight_ton,
-            quantity: item.quantity,
-            lift_points: null,
-            drawing_reference: item.orderRef,
-            technical_info: null,
-          },
-        ],
-      });
-        workingProjects = [...workingProjects, newProject];
-        created++;
-        await store.waitForPendingMutations();
-        if (sourceFile) {
-          try {
-            await saveSourceDocument(sourceFile, newProject.id);
-            documentsSaved++;
-          } catch (error) {
-            console.error("Kunde inte spara orderoriginalet", error);
-            documentsFailed++;
+        let customerId = group.customerId;
+        if (!customerId && group.newCustomerName.trim()) {
+          const cacheKey = normalizeCustomerName(group.newCustomerName);
+          const cached = customerCache.get(cacheKey);
+          if (cached) {
+            customerId = cached;
+          } else {
+            const createdCustomer = store.addCustomer({
+              company_name: canonicalCustomerName(group.newCustomerName),
+              org_number: null,
+              invoice_address: null,
+              visiting_address: null,
+              phone: null,
+              email: null,
+              website: null,
+              notes: "Skapad via orderimport.",
+              status: "aktiv",
+            });
+            customerCache.set(cacheKey, createdCustomer.id);
+            customerId = createdCustomer.id;
           }
         }
-      }
+        if (!customerId) throw new Error(`Leverans ${groups.indexOf(group) + 1}: välj eller skapa en kund.`);
 
-      setResult({ created, documentsSaved, documentsFailed });
+        let contactId = group.contactId;
+        const contactName = (order.customerContact ?? order.recipientContact)?.trim();
+        if (!contactId && contactName) {
+          const contactKey = `${customerId}|${contactName.toLowerCase()}`;
+          const cachedContact = contactCache.get(contactKey);
+          const matched = cachedContact ? undefined : findMatchingContact(store.contactPersons, customerId, order);
+          if (cachedContact) {
+            contactId = cachedContact;
+          } else if (matched) {
+            contactId = matched.id;
+          } else {
+            const existing = store.contactPersons.filter((c) => c.customer_id === customerId);
+            const createdContact = store.addContactPerson({
+              customer_id: customerId,
+              name: contactName,
+              role: "Kontakt från order",
+              phone: order.customerPhone ?? order.recipientPhone ?? null,
+              mobile: order.customerPhone ? null : order.recipientMobile ?? null,
+              email: order.recipientEmail ?? null,
+              note: "Skapad via orderimport.",
+              is_primary: existing.length === 0 && ![...contactCache.keys()].some((key) => key.startsWith(`${customerId}|`)),
+            });
+            contactId = createdContact.id;
+          }
+          contactCache.set(contactKey, contactId);
+        }
+
+        const customerName = store.customers.find((c) => c.id === customerId)?.company_name ?? (group.newCustomerName.trim() || "Kund");
+        const included = group.items.filter((i) => i.include);
+        const units: EditableItem[][] = group.mode === "single" ? [included] : included.map((i) => [i]);
+
+        for (const unit of units) {
+          const descriptions = unit.map((item) => describeItem(item));
+          const firstDescription = descriptions[0] || "Transport";
+          const name =
+            unit.length > 1
+              ? `${customerName} – ${firstDescription} m.fl. (${unit.length} godsrader)`
+              : `${customerName} – ${firstDescription}`;
+          const unitSheetIds = [...new Set(unit.map((i) => i.sheetId))];
+          const unitSheets = unitSheetIds.map((id) => sheetById.get(id)).filter((s): s is LtcSheet => Boolean(s));
+          const terms = uniqueJoin([group.deliveryTerms, ...unit.map((i) => i.deliveryTermsAddition)], " + ") || null;
+
+          const newProject = store.addProject({
+            project_number: nextProjectNumber(workingProjects),
+            name,
+            customer_id: customerId,
+            contact_person_id: contactId || null,
+            responsible_id: group.responsibleId || null,
+            status: "Ny bokning",
+            transport_type: group.transportType,
+            special_requirements: null,
+            delivery_terms: terms,
+            planned_loading_date: group.loadingDate || null,
+            planned_loading_time: group.loadingTime || null,
+            planned_delivery_date: group.deliveryDate || null,
+            planned_delivery_time: group.deliveryTime || null,
+            supplier_id: group.supplierId || null,
+            price: null,
+            cost: null,
+            invoice_status: "Ej fakturerad",
+            customer_reference: uniqueJoin(unit.map((i) => i.orderRef), ", ") || null,
+            source_document_ref: combinedDocumentRef(unitSheets.map((s) => s.parsed.documentNumber)),
+            vehicle: null,
+            driver_name: null,
+            carrier_order_number: null,
+            locations: [
+              ...(group.loadingPlace ? [{ id: "loc-lastning", project_id: "", type: "lastning" as const, name: group.loadingPlace, address: null, order_index: 0 }] : []),
+              ...(group.unloadingPlace
+                ? [{
+                    id: "loc-lossning",
+                    project_id: "",
+                    type: "lossning" as const,
+                    name: group.unloadingPlace,
+                    address: null,
+                    contact_name: group.unloadingContactName || null,
+                    contact_phone: group.unloadingContactPhone || null,
+                    order_index: 1,
+                  }]
+                : []),
+            ],
+            cargo_items: unit.map((item, i) => ({
+              id: `cargo-${i + 1}`,
+              project_id: "",
+              description: describeItem(item) || "Gods",
+              length_m: item.length_m,
+              width_m: item.width_m,
+              height_m: item.height_m,
+              weight_ton: item.weight_ton,
+              quantity: item.quantity,
+              lift_points: null,
+              drawing_reference: item.orderRef,
+              technical_info: null,
+            })),
+          });
+          workingProjects = [...workingProjects, newProject];
+          created++;
+          numbers.push(newProject.project_number);
+          unit.forEach((item) => createdItems.add(item));
+          completed.set(group.id, [...(completed.get(group.id) ?? []), newProject.project_number]);
+          await store.waitForPendingMutations();
+          for (const sheet of unitSheets) {
+            if (!sheet.file) continue;
+            expectedDocuments++;
+            try {
+              await saveSourceDocument(sheet.file, newProject.id);
+              documentsSaved++;
+            } catch (error) {
+              console.error("Kunde inte spara orderoriginalet", error);
+              documentsFailed++;
+            }
+          }
+        }
+        activeGroup = null;
+      }
+      setResult({ created, documentsSaved, documentsFailed, expectedDocuments, numbers });
       setStep(3);
     } catch (error) {
-      setCreateError(error instanceof Error ? error.message : "Importen kunde inte slutföras.");
+      failedGroupId = activeGroup?.id ?? null;
+      const prefix = activeGroup ? `Leverans ${groups.findIndex((g) => g.id === activeGroup?.id) + 1}: ` : "";
+      const alreadyDone = created > 0 ? ` ${created} projekt hann skapas (${numbers.join(", ")}) och skapas inte igen om du försöker på nytt.` : "";
+      setCreateError(`${prefix}${error instanceof Error ? error.message : "Importen kunde inte slutföras."}${alreadyDone}`);
     } finally {
+      setGroups((prev) =>
+        prev.map((g) => {
+          const projectNumbers = completed.get(g.id);
+          if (!projectNumbers) return g;
+          if (g.id === failedGroupId) {
+            return { ...g, createdNumbers: [...g.createdNumbers, ...projectNumbers], items: g.items.map((i) => (createdItems.has(i) ? { ...i, include: false } : i)) };
+          }
+          return { ...g, createdNumbers: [...g.createdNumbers, ...projectNumbers], done: true };
+        })
+      );
       setCreating(false);
     }
   }
 
   function startOver() {
+    previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    previewUrlsRef.current = [];
     setStep(1);
-    setFileName(null);
-    setSourceFile(null);
-    replacePreviewUrl(null);
-    setOrder(null);
+    setSheets([]);
+    setGroups([]);
     setResult(null);
-    setParseError(null);
+    setParseErrors([]);
+    setCreateError(null);
   }
 
   if (!canImport) {
     return <div className="py-20 text-center text-slate-500">Du har inte behörighet att importera order.</div>;
   }
 
+  const pendingGroups = groups.filter((g) => !g.done);
+  const totalProjects = pendingGroups.reduce((sum, g) => sum + projectCountForGroup(g), 0);
+  const missingCustomer = pendingGroups.some((g) => projectCountForGroup(g) > 0 && !g.customerId && !g.newCustomerName.trim());
+  const dropzone = (
+    <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-slate-50 py-12 text-center hover:border-orange-300 hover:bg-orange-50/40">
+      {parsing ? <Loader2 size={28} className="animate-spin text-slate-400" /> : <Upload size={28} className="text-slate-400" />}
+      <div className="text-sm font-medium text-slate-700">
+        {parsing ? `Läser dokument ${parsing.done} av ${parsing.total}...` : "Klicka för att välja en eller flera PDF:er"}
+      </div>
+      <div className="text-xs text-slate-500">Digital fraktorder, LTC eller annat orderblad med läsbart textlager. Blad till samma ställe och datum slås ihop till en leverans.</div>
+      <input
+        type="file"
+        accept=".pdf"
+        multiple
+        className="hidden"
+        disabled={Boolean(parsing)}
+        onChange={(e) => {
+          if (e.target.files?.length) void handleFiles(e.target.files);
+          e.target.value = "";
+        }}
+      />
+    </label>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        {[1, 2, 3].map((s) => (
-          <div key={s} className="flex items-center gap-2">
-            <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${step === s ? "bg-orange-500 text-white" : step > s ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-400"}`}>
-              {step > s ? <CheckCircle2 size={14} /> : s}
+        {[1, 2, 3].map((n) => (
+          <div key={n} className="flex items-center gap-2">
+            <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${step === n ? "bg-orange-500 text-white" : step > n ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-400"}`}>
+              {step > n ? <CheckCircle2 size={14} /> : n}
             </div>
-            <span className={`text-sm ${step === s ? "font-medium text-slate-800" : "text-slate-500"}`}>
-              {s === 1 ? "Ladda upp order" : s === 2 ? "Granska och komplettera" : "Klart"}
+            <span className={`text-sm ${step === n ? "font-medium text-slate-800" : "text-slate-500"}`}>
+              {n === 1 ? "Ladda upp order" : n === 2 ? "Granska och komplettera" : "Klart"}
             </span>
-            {s < 3 && <div className="mx-2 h-px w-8 bg-border" />}
+            {n < 3 && <div className="mx-2 h-px w-8 bg-border" />}
           </div>
         ))}
       </div>
@@ -378,13 +391,8 @@ export function OrderImportPage() {
       {step === 1 && (
         <Panel title="Steg 1: Ladda upp orderblad (PDF)">
           <div className="space-y-4">
-            <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-slate-50 py-12 text-center hover:border-orange-300 hover:bg-orange-50/40">
-              {parsing ? <Loader2 size={28} className="animate-spin text-slate-400" /> : <Upload size={28} className="text-slate-400" />}
-              <div className="text-sm font-medium text-slate-700">{parsing ? "Läser dokumentet..." : "Klicka för att välja PDF"}</div>
-              <div className="text-xs text-slate-500">Digital fraktorder, LTC eller annat orderblad med läsbart textlager, en fil per order</div>
-              <input type="file" accept=".pdf" className="hidden" disabled={parsing} onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
-            </label>
-            {parseError && <p className="text-sm text-red-600">{parseError}</p>}
+            {dropzone}
+            {parseErrors.map((message) => <p key={message} className="text-sm text-red-600">{message}</p>)}
             <div className="flex items-center gap-3 text-xs text-slate-400">
               <div className="h-px flex-1 bg-border" /> eller <div className="h-px flex-1 bg-border" />
             </div>
@@ -402,188 +410,74 @@ export function OrderImportPage() {
         </Panel>
       )}
 
-      {step === 2 && order && (
-        <Panel title="Steg 2: Granska och komplettera" action={<span className="text-xs text-slate-500">{fileName}</span>}>
-          <div className="space-y-6">
-            <div>
-              <h3 className="mb-3 text-sm font-semibold text-slate-700">Kund (avsändare)</h3>
-              {!showNewCustomer ? (
-                <div className="flex gap-2">
-                  <select className={inputClass} value={customerId} onChange={(e) => handleCustomerChange(e.target.value)}>
-                    <option value="">Välj kund</option>
-                    {store.customers.map((c) => (
-                      <option key={c.id} value={c.id}>{c.company_name}</option>
-                    ))}
-                  </select>
-                  <button type="button" onClick={() => setShowNewCustomer(true)} className="flex shrink-0 items-center gap-1 rounded-lg border border-border bg-white px-2.5 text-sm text-slate-600 hover:bg-slate-50">
-                    <Plus size={14} /> Ny
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2 rounded-lg border border-orange-200 bg-orange-50/50 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-slate-600">Ny kund (från dokumentet)</span>
-                    {store.customers.length > 0 && (
-                      <button type="button" onClick={() => setShowNewCustomer(false)} className="text-slate-400 hover:text-slate-600">
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-                  <input className={inputClass} value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} placeholder="Företagsnamn" />
-                </div>
-              )}
-              {!showNewCustomer && (
-                <div className="mt-3">
-                  <Field label="Kontaktperson hos kunden">
-                    <select className={inputClass} value={contactId} onChange={(e) => setContactId(e.target.value)} disabled={!customerId}>
-                      <option value="">Välj kontaktperson</option>
-                      {contactsForCustomer.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  </Field>
-                  {parsedCustomerContactName && !contactId && (
-                    <p className="mt-2 text-xs text-slate-500">
-                      Skapar kontaktperson från ordern: {parsedCustomerContactName}
-                      {parsedCustomerContactPhone ? ` · ${parsedCustomerContactPhone}` : ""}
-                    </p>
-                  )}
-                </div>
-              )}
-              {showNewCustomer && parsedCustomerContactName && (
-                <p className="mt-2 text-xs text-slate-500">
-                  Skapar kontaktperson från ordern: {parsedCustomerContactName}
-                  {parsedCustomerContactPhone ? ` · ${parsedCustomerContactPhone}` : ""}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <h3 className="mb-3 text-sm font-semibold text-slate-700">Transport</h3>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="Lastningsplats"><input className={inputClass} value={loadingPlace} onChange={(e) => setLoadingPlace(e.target.value)} /></Field>
-                <Field label="Lossningsplats"><input className={inputClass} value={unloadingPlace} onChange={(e) => setUnloadingPlace(e.target.value)} /></Field>
-                <Field label="Kontakt vid lossning"><input className={inputClass} value={unloadingContactName} onChange={(e) => setUnloadingContactName(e.target.value)} /></Field>
-                <Field label="Telefon"><input className={inputClass} value={unloadingContactPhone} onChange={(e) => setUnloadingContactPhone(e.target.value)} /></Field>
-                <Field label="Planerat lastningsdatum"><input type="date" className={inputClass} value={loadingDate} onChange={(e) => setLoadingDate(e.target.value)} /></Field>
-                <Field label="Planerad lastningstid"><input type="time" className={inputClass} value={loadingTime} onChange={(e) => setLoadingTime(e.target.value)} /></Field>
-                <Field label="Planerat lossningsdatum"><input type="date" className={inputClass} value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} /></Field>
-                <Field label="Planerad lossningstid"><input type="time" className={inputClass} value={deliveryTime} onChange={(e) => setDeliveryTime(e.target.value)} /></Field>
-                <Field label="Leveransvillkor"><input className={inputClass} value={deliveryTerms} onChange={(e) => setDeliveryTerms(e.target.value)} /></Field>
-                <Field label="Transporttyp">
-                  <select className={inputClass} value={transportType} onChange={(e) => setTransportType(e.target.value as TransportType)}>
-                    {TRANSPORT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </Field>
-                <Field label="Transportör (saknas i dokumentet)">
-                  <select className={inputClass} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-                    <option value="">Välj transportör</option>
-                    {store.suppliers.map((s) => <option key={s.id} value={s.id}>{s.company_name}</option>)}
-                  </select>
-                </Field>
-                <Field label="Ansvarig hos JK (saknas i dokumentet)">
-                  <select className={inputClass} value={responsibleId} onChange={(e) => setResponsibleId(e.target.value)}>
-                    <option value="">Välj ansvarig</option>
-                    {activeProfiles.map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-                  </select>
-                </Field>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="mb-3 text-sm font-semibold text-slate-700">
-                Gods / bilar ({includedCount} av {items.length} inkluderade – skapar {includedCount} projekt)
-              </h3>
-              <div className="space-y-3">
-                {items.map((item, i) => (
-                  <div key={i} className={`rounded-lg border p-3 ${item.include ? "border-border" : "border-border bg-slate-50 opacity-60"}`}>
-                    <div className="mb-2 flex items-center justify-between">
-                      <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                        <input type="checkbox" checked={item.include} onChange={(e) => updateItem(i, { include: e.target.checked })} />
-                        Order {item.orderRef ?? `#${i + 1}`}
-                      </label>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                      <Field label="Typ"><input className={inputClass} value={item.typeName ?? ""} onChange={(e) => updateItem(i, { typeName: e.target.value })} /></Field>
-                      <Field label="Godsmärke"><input className={inputClass} value={item.goodsMark ?? ""} onChange={(e) => updateItem(i, { goodsMark: e.target.value })} /></Field>
-                      <Field label="Längd (m)"><input className={inputClass} value={item.length_m ?? ""} onChange={(e) => updateItem(i, { length_m: e.target.value ? parseFloat(e.target.value) : null })} /></Field>
-                      <Field label="Bredd (m)"><input className={inputClass} value={item.width_m ?? ""} onChange={(e) => updateItem(i, { width_m: e.target.value ? parseFloat(e.target.value) : null })} /></Field>
-                      <Field label="Höjd (m)"><input className={inputClass} value={item.height_m ?? ""} onChange={(e) => updateItem(i, { height_m: e.target.value ? parseFloat(e.target.value) : null })} /></Field>
-                      <Field label="Vikt (ton)"><input className={inputClass} value={item.weight_ton ?? ""} onChange={(e) => updateItem(i, { weight_ton: e.target.value ? parseFloat(e.target.value) : null })} /></Field>
-                    </div>
-                    {item.deliveryTermsAddition && (
-                      <p className="mt-2 text-xs text-slate-500">Tillägg leveransvillkor: {item.deliveryTermsAddition}</p>
-                    )}
-                  </div>
-                ))}
-                {items.length === 0 && (
-                  <p className="text-sm text-slate-500">Inga godsrader hittades automatiskt. Lägg till projekt manuellt via "Nytt projekt" istället, eller kontrollera dokumentet.</p>
-                )}
-              </div>
-            </div>
-
-            {previewUrl && (
-              <section className="border-t border-border pt-6" aria-labelledby="ltc-preview-heading">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 id="ltc-preview-heading" className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                      <FileText size={16} className="text-orange-500" />
-                      Originaldokument
-                    </h3>
-                    <p className="mt-1 text-xs text-slate-500">Jämför uppgifterna ovan med det uppladdade orderbladet.</p>
-                  </div>
-                  <a
-                    href={previewUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    <ExternalLink size={14} /> Öppna större
-                  </a>
-                </div>
-                <div className="mt-3 overflow-hidden rounded-lg border border-border bg-slate-100">
-                  <iframe
-                    src={`${previewUrl}#view=FitH`}
-                    title={`Förhandsgranskning av ${fileName ?? "orderdokument"}`}
-                    className="h-[70vh] min-h-[520px] w-full bg-white"
-                  />
-                </div>
-                <p className="mt-2 text-xs text-slate-400">Förhandsgranskningen visas lokalt i webbläsaren.</p>
-              </section>
+      {step === 2 && groups.length > 0 && (
+        <Panel
+          title={`Steg 2: Granska och komplettera (${sheets.length} blad, ${groups.length} ${groups.length === 1 ? "leverans" : "leveranser"})`}
+          action={
+            <label className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-orange-600 hover:text-orange-700">
+              {parsing ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Lägg till fler blad
+              <input type="file" accept=".pdf" multiple className="hidden" disabled={Boolean(parsing)} onChange={(e) => { if (e.target.files?.length) void handleFiles(e.target.files); e.target.value = ""; }} />
+            </label>
+          }
+        >
+          <div className="space-y-4">
+            {parseErrors.map((message) => <p key={message} className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{message}</p>)}
+            {groups.length > 1 && (
+              <p className="text-xs text-slate-500">
+                Blad till samma kund, lossningsplats och lossningsdatum har föreslagits som en leverans. Flytta ett blad mellan leveranser med "Flytta till..." om förslaget inte stämmer.
+              </p>
             )}
+            {groups.map((group, index) => (
+              <LtcGroupCard
+                key={group.id}
+                index={index}
+                groupCount={groups.length}
+                group={group}
+                sheets={sheets.filter((s) => group.sheetIds.includes(s.id))}
+                allGroups={groups}
+                warnings={warningsFor(group)}
+                customers={store.customers}
+                contactPersons={store.contactPersons}
+                suppliers={store.suppliers}
+                profiles={store.profiles}
+                onChange={(patch) => updateGroup(group.id, patch)}
+                onMoveSheet={(sheetId, target) => setGroups((prev) => moveSheet(prev, sheets, sheetId, target, ctx))}
+              />
+            ))}
           </div>
 
           <div className="mt-5 flex justify-between border-t border-border pt-4">
-            <Button variant="secondary" onClick={() => setStep(1)}><ArrowLeft size={14} /> Tillbaka</Button>
-            <Button onClick={() => void handleCreate()} disabled={creating || includedCount === 0 || (!customerId && !newCustomerName.trim())}>
+            <Button variant="secondary" onClick={startOver}><ArrowLeft size={14} /> Börja om</Button>
+            <Button onClick={() => void handleCreate()} disabled={creating || totalProjects === 0 || missingCustomer}>
               {creating ? <Loader2 size={14} className="animate-spin" /> : null}
-              {creating ? "Skapar projekt och sparar orderblad..." : `Skapa ${includedCount} projekt`} {!creating && <ArrowRight size={14} />}
+              {creating ? "Skapar projekt och sparar orderblad..." : `Skapa ${totalProjects} ${totalProjects === 1 ? "projekt" : "projekt"}`} {!creating && <ArrowRight size={14} />}
             </Button>
           </div>
+          {missingCustomer && <p className="mt-3 text-xs text-amber-700">Välj eller ange en kund för alla leveranser innan du skapar projekten.</p>}
           {createError && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{createError}</p>}
         </Panel>
       )}
 
-      {result && (
+      {result && step === 3 && (
         <Panel title="Import klar">
           <div className="flex items-start gap-3 rounded-lg bg-green-50 p-4 text-sm text-green-700">
             <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
             <div>
               <div className="font-medium">Importen är klar.</div>
-              <div className="mt-1 text-green-700/90">{result.created} projekt skapade utifrån ordern.</div>
-              {sourceFile && (
-                <div className="mt-1 text-green-700/90">Originalfilen sparades i {result.documentsSaved} projektmappar.</div>
+              <div className="mt-1 text-green-700/90">{result.created} projekt skapade: {result.numbers.join(", ")}.</div>
+              {result.expectedDocuments > 0 && (
+                <div className="mt-1 text-green-700/90">{result.documentsSaved} orderoriginal sparades på projekten.</div>
               )}
               {result.documentsFailed > 0 && (
                 <div className="mt-2 rounded-md bg-amber-100 px-3 py-2 text-amber-800">
-                  Originalfilen kunde inte sparas i {result.documentsFailed} projektmappar. Projekten är skapade och filen kan laddas upp manuellt under Dokument.
+                  {result.documentsFailed} orderoriginal kunde inte sparas. Projekten är skapade och filerna kan laddas upp manuellt under Dokument.
                 </div>
               )}
             </div>
           </div>
           <div className="mt-4 flex gap-2">
             <Link to="/projekt"><Button>Till projektlistan</Button></Link>
-            <Button variant="secondary" onClick={startOver}>Importera ny order</Button>
+            <Button variant="secondary" onClick={startOver}>Importera nya order</Button>
           </div>
         </Panel>
       )}
