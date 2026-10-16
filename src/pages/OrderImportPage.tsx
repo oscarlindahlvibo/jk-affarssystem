@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router-dom";
 import { Upload, FileText, CheckCircle2, AlertTriangle, ArrowLeft, ArrowRight, Loader2, Plus } from "lucide-react";
 import { useStore } from "../data/store";
 import { Panel } from "../components/ui/Panel";
 import { Button } from "../components/ui/Button";
 import { LtcGroupCard } from "../components/import/LtcGroupCard";
-import { extractPdfText, parseLtcOrder } from "../lib/ltcParse";
+import { extractPdfRows, parseLtcOrder, rowsToText } from "../lib/ltcParse";
+import { isUppdragslista, parseUppdragslista } from "../lib/uppdragslista";
 import { MOCK_LTC_ORDER } from "../data/ltcMockOrder";
 import { nextProjectNumber } from "../components/projects/NewProjectModal";
 import { usePermissions } from "../lib/usePermissions";
@@ -36,6 +37,8 @@ export function OrderImportPage() {
   const [sheets, setSheets] = useState<LtcSheet[]>([]);
   const [groups, setGroups] = useState<LtcGroup[]>([]);
   const previewUrlsRef = useRef<string[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const dragDepth = useRef(0);
   const [parsing, setParsing] = useState<{ done: number; total: number } | null>(null);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
@@ -55,31 +58,65 @@ export function OrderImportPage() {
   }
 
   async function handleFiles(fileList: FileList | File[]) {
-    const files = Array.from(fileList);
+    const all = Array.from(fileList);
+    const files = all.filter((file) => file.type === "application/pdf" || /\.pdf$/i.test(file.name));
+    const errors: string[] = all.filter((file) => !files.includes(file)).map((file) => `${file.name}: är inte en PDF och hoppades över.`);
+    setParseErrors(errors);
     if (files.length === 0) return;
-    setParseErrors([]);
     const added: LtcSheet[] = [];
-    const errors: string[] = [];
     setParsing({ done: 0, total: files.length });
     for (const [index, file] of files.entries()) {
       try {
-        const parsed = parseLtcOrder(await extractPdfText(file));
-        if (parsed.items.length === 0 && !parsed.documentNumber) {
-          errors.push(`${file.name}: kunde inte tolkas automatiskt. Kontrollera att PDF-filen har ett läsbart textlager. Bladet är med, fyll i uppgifterna manuellt.`);
+        const rows = await extractPdfRows(file);
+        let orders = isUppdragslista(rows) ? parseUppdragslista(rows) : [];
+        if (orders.length === 0) {
+          const parsed = parseLtcOrder(rowsToText(rows));
+          if (parsed.items.length === 0 && !parsed.documentNumber) {
+            errors.push(`${file.name}: kunde inte tolkas automatiskt. Kontrollera att PDF-filen har ett läsbart textlager. Bladet är med, fyll i uppgifterna manuellt.`);
+          }
+          orders = [parsed];
         }
-        added.push({ id: crypto.randomUUID(), file, fileName: file.name, parsed, previewUrl: trackPreview(file) });
+        const previewUrl = trackPreview(file);
+        for (const parsed of orders) added.push({ id: crypto.randomUUID(), file, fileName: file.name, parsed, previewUrl });
       } catch {
         errors.push(`${file.name}: kunde inte läsas som PDF och hoppades över.`);
       }
       setParsing({ done: index + 1, total: files.length });
     }
     setParsing(null);
-    setParseErrors(errors);
+    setParseErrors([...errors]);
     if (added.length === 0) return;
     setSheets((prev) => [...prev, ...added]);
     setGroups((prev) => addSheetsToGroups(prev, added, ctx));
     setStep(2);
   }
+
+  const hasFiles = (event: DragEvent) => Array.from(event.dataTransfer.types).includes("Files");
+  const dropHandlers = {
+    onDragEnter: (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      dragDepth.current += 1;
+      setDragging(true);
+    },
+    onDragOver: (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = parsing ? "none" : "copy";
+    },
+    onDragLeave: (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      dragDepth.current = Math.max(0, dragDepth.current - 1);
+      if (dragDepth.current === 0) setDragging(false);
+    },
+    onDrop: (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      dragDepth.current = 0;
+      setDragging(false);
+      if (!parsing && event.dataTransfer.files.length > 0) void handleFiles(event.dataTransfer.files);
+    },
+  };
 
   function useExample() {
     setParseErrors([]);
@@ -99,7 +136,7 @@ export function OrderImportPage() {
     for (const sheet of groupSheets) {
       const number = sheet.parsed.documentNumber;
       if (!number) continue;
-      const duplicatesInBatch = sheets.filter((s) => s.parsed.documentNumber === number).length > 1;
+      const duplicatesInBatch = sheets.some((s) => s.id !== sheet.id && s.file !== sheet.file && s.parsed.documentNumber === number);
       if (duplicatesInBatch) warnings.push(`${number} förekommer flera gånger i den här importen.`);
       const existing = store.projects.find((p) => (p.source_document_ref ?? "").split(/\s*,\s*/).includes(number));
       if (existing) warnings.push(`${number} finns redan på projekt ${existing.project_number}.`);
@@ -263,7 +300,7 @@ export function OrderImportPage() {
             driver_name: null,
             carrier_order_number: null,
             locations: [
-              ...(group.loadingPlace ? [{ id: "loc-lastning", project_id: "", type: "lastning" as const, name: group.loadingPlace, address: null, order_index: 0 }] : []),
+              ...(group.loadingPlace ? [{ id: "loc-lastning", project_id: "", type: "lastning" as const, name: group.loadingPlace, address: null, company_name: group.loadingCompany || null, order_index: 0 }] : []),
               ...(group.unloadingPlace
                 ? [{
                     id: "loc-lossning",
@@ -271,6 +308,7 @@ export function OrderImportPage() {
                     type: "lossning" as const,
                     name: group.unloadingPlace,
                     address: null,
+                    company_name: group.unloadingCompany || null,
                     contact_name: group.unloadingContactName || null,
                     contact_phone: group.unloadingContactPhone || null,
                     order_index: 1,
@@ -297,11 +335,11 @@ export function OrderImportPage() {
           unit.forEach((item) => createdItems.add(item));
           completed.set(group.id, [...(completed.get(group.id) ?? []), newProject.project_number]);
           await store.waitForPendingMutations();
-          for (const sheet of unitSheets) {
-            if (!sheet.file) continue;
+          const filesToSave = [...new Set(unitSheets.map((sheet) => sheet.file))].filter((file): file is File => Boolean(file));
+          for (const file of filesToSave) {
             expectedDocuments++;
             try {
-              await saveSourceDocument(sheet.file, newProject.id);
+              await saveSourceDocument(file, newProject.id);
               documentsSaved++;
             } catch (error) {
               console.error("Kunde inte spara orderoriginalet", error);
@@ -352,10 +390,15 @@ export function OrderImportPage() {
   const totalProjects = pendingGroups.reduce((sum, g) => sum + projectCountForGroup(g), 0);
   const missingCustomer = pendingGroups.some((g) => projectCountForGroup(g) > 0 && !g.customerId && !g.newCustomerName.trim());
   const dropzone = (
-    <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-slate-50 py-12 text-center hover:border-orange-300 hover:bg-orange-50/40">
+    <label
+      {...dropHandlers}
+      className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed py-12 text-center transition-colors ${
+        dragging ? "border-orange-400 bg-orange-50" : "border-border bg-slate-50 hover:border-orange-300 hover:bg-orange-50/40"
+      }`}
+    >
       {parsing ? <Loader2 size={28} className="animate-spin text-slate-400" /> : <Upload size={28} className="text-slate-400" />}
       <div className="text-sm font-medium text-slate-700">
-        {parsing ? `Läser dokument ${parsing.done} av ${parsing.total}...` : "Klicka för att välja en eller flera PDF:er"}
+        {parsing ? `Läser dokument ${parsing.done} av ${parsing.total}...` : dragging ? "Släpp filerna här" : "Dra och släpp PDF:er här, eller klicka för att välja"}
       </div>
       <div className="text-xs text-slate-500">Digital fraktorder, LTC eller annat orderblad med läsbart textlager. Blad till samma ställe och datum slås ihop till en leverans.</div>
       <input
@@ -411,11 +454,12 @@ export function OrderImportPage() {
       )}
 
       {step === 2 && groups.length > 0 && (
+        <div {...dropHandlers} className={`rounded-xl ${dragging ? "outline outline-2 outline-offset-4 outline-orange-400" : ""}`}>
         <Panel
           title={`Steg 2: Granska och komplettera (${sheets.length} blad, ${groups.length} ${groups.length === 1 ? "leverans" : "leveranser"})`}
           action={
             <label className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-orange-600 hover:text-orange-700">
-              {parsing ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Lägg till fler blad
+              {parsing ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Lägg till fler blad (eller släpp filer här)
               <input type="file" accept=".pdf" multiple className="hidden" disabled={Boolean(parsing)} onChange={(e) => { if (e.target.files?.length) void handleFiles(e.target.files); e.target.value = ""; }} />
             </label>
           }
@@ -456,6 +500,7 @@ export function OrderImportPage() {
           {missingCustomer && <p className="mt-3 text-xs text-amber-700">Välj eller ange en kund för alla leveranser innan du skapar projekten.</p>}
           {createError && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{createError}</p>}
         </Panel>
+        </div>
       )}
 
       {result && step === 3 && (

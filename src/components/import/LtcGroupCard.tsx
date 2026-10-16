@@ -155,6 +155,8 @@ export function LtcGroupCard({
           <div>
             <h3 className="mb-3 text-sm font-semibold text-slate-700">Transport</h3>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Företag vid lastning"><input className={inputClass} value={group.loadingCompany} onChange={(e) => onChange({ loadingCompany: e.target.value })} /></Field>
+              <Field label="Företag vid lossning"><input className={inputClass} value={group.unloadingCompany} onChange={(e) => onChange({ unloadingCompany: e.target.value })} /></Field>
               <Field label="Lastningsplats"><input className={inputClass} value={group.loadingPlace} onChange={(e) => onChange({ loadingPlace: e.target.value })} /></Field>
               <Field label="Lossningsplats"><input className={inputClass} value={group.unloadingPlace} onChange={(e) => onChange({ unloadingPlace: e.target.value })} /></Field>
               <Field label="Kontakt vid lossning"><input className={inputClass} value={group.unloadingContactName} onChange={(e) => onChange({ unloadingContactName: e.target.value })} /></Field>

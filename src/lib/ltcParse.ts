@@ -38,11 +38,21 @@ export interface ParsedLtcOrder {
   deliveryPostnr: string | null;
   deliveryCity: string | null;
   deliveryTerms: string | null;
+  // Fält som bara vissa dokumenttyper fyller i (t.ex. Uppdragslista).
+  loadingCompany?: string | null;
+  deliveryCompany?: string | null;
+  senderCountry?: string | null;
+  deliveryCountry?: string | null;
   items: ParsedLtcItem[];
   rawText: string;
 }
 
-export async function extractPdfText(file: File): Promise<string> {
+export type PdfRow = { x: number; str: string }[];
+
+const PAGE_BREAK = "---SIDBRYTNING---";
+
+// Läser PDF:ens textlager som rader av textfragment med x-position, sida för sida.
+export async function extractPdfRows(file: File): Promise<PdfRow[]> {
   const pdfjs = await import("pdfjs-dist");
   // Versionsparametern gör att webbläsare inte återanvänder worker-svaret som
   // tidigare serverades med fel MIME-typ och lång immutable-cache.
@@ -51,7 +61,7 @@ export async function extractPdfText(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   const doc = await pdfjs.getDocument({ data: buffer }).promise;
 
-  const lines: string[] = [];
+  const result: PdfRow[] = [];
   for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
     const page = await doc.getPage(pageNum);
     const content = await page.getTextContent();
@@ -67,13 +77,21 @@ export async function extractPdfText(file: File): Promise<string> {
       rows.get(y)!.push({ x, str: item.str });
     }
     const sortedYs = [...rows.keys()].sort((a, b) => b - a);
-    for (const y of sortedYs) {
-      const row = rows.get(y)!.sort((a, b) => a.x - b.x);
-      lines.push(row.map((r) => r.str).join(" ").replace(/\s+/g, " ").trim());
-    }
-    lines.push("---SIDBRYTNING---");
+    for (const y of sortedYs) result.push(rows.get(y)!.sort((a, b) => a.x - b.x));
+    result.push([{ x: 0, str: PAGE_BREAK }]);
   }
-  return lines.filter(Boolean).join("\n");
+  return result;
+}
+
+export function rowsToText(rows: PdfRow[]): string {
+  return rows
+    .map((row) => row.map((r) => r.str).join(" ").replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+export async function extractPdfText(file: File): Promise<string> {
+  return rowsToText(await extractPdfRows(file));
 }
 
 function match1(text: string, pattern: RegExp): string | null {

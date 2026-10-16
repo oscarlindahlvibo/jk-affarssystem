@@ -32,6 +32,8 @@ export interface LtcGroup {
   contactId: string;
   loadingPlace: string;
   unloadingPlace: string;
+  loadingCompany: string;
+  unloadingCompany: string;
   unloadingContactName: string;
   unloadingContactPhone: string;
   loadingDate: string;
@@ -97,7 +99,7 @@ export function ltcGroupKey(order: ParsedLtcOrder): string {
     [order.deliveryCoordinateN, order.deliveryCoordinateE].filter(Boolean).join("|") ||
     compact(order.deliveryCity) ||
     compact(order.recipientCompany);
-  return [customer, place, order.deliveryDate ?? ""].join("¤");
+  return [customer, place, order.deliveryDate ?? order.loadingDate ?? ""].join("¤");
 }
 
 export function uniqueJoin(values: (string | null | undefined)[], separator: string) {
@@ -113,15 +115,24 @@ export function uniqueJoin(values: (string | null | undefined)[], separator: str
   return result.join(separator);
 }
 
+function withCountry(place: string, country: string | null | undefined) {
+  const trimmed = (country ?? "").trim();
+  if (!trimmed || /^sverige$|^sweden$/i.test(trimmed)) return place;
+  return place ? `${place}, ${trimmed}` : trimmed;
+}
+
 function placeFromOrder(order: ParsedLtcOrder) {
   const loadingPostalCity = [order.senderPostnr, order.senderCity].filter(Boolean).join(" ");
-  const loadingPlace = [order.senderAddress, loadingPostalCity].filter(Boolean).join(", ") || order.senderCity || "";
+  const loadingPlace = withCountry(
+    [order.senderAddress, loadingPostalCity].filter(Boolean).join(", ") || order.senderCity || "",
+    order.senderCountry
+  );
   const coords =
     order.deliveryCoordinateN && order.deliveryCoordinateE
       ? ` (N: ${order.deliveryCoordinateN}, E: ${order.deliveryCoordinateE})`
       : "";
   const deliveryPostalCity = [order.deliveryPostnr, order.deliveryCity].filter(Boolean).join(" ");
-  const unloadingPlace = [order.deliveryAddress, deliveryPostalCity].filter(Boolean).join(", ") + coords;
+  const unloadingPlace = withCountry([order.deliveryAddress, deliveryPostalCity].filter(Boolean).join(", "), order.deliveryCountry) + coords;
   return { loadingPlace, unloadingPlace };
 }
 
@@ -152,6 +163,8 @@ export function buildGroup(sheets: LtcSheet[], ctx: LtcContext): LtcGroup {
     contactId: matchedContact?.id ?? "",
     loadingPlace,
     unloadingPlace,
+    loadingCompany: order.loadingCompany ?? order.senderCompany ?? "",
+    unloadingCompany: order.deliveryCompany ?? order.recipientCompany ?? "",
     unloadingContactName: order.recipientCompany ? `${order.recipientContact ?? ""} (${order.recipientCompany})`.trim() : "",
     unloadingContactPhone: order.recipientCompany ? order.recipientMobile ?? order.recipientPhone ?? "" : "",
     loadingDate: order.loadingDate ?? "",
