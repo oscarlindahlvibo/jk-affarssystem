@@ -146,12 +146,38 @@ function pick<T extends object>(value: T, keys: readonly string[]) {
   return Object.fromEntries(keys.filter((key) => key in value).map((key) => [key, value[key as keyof T]]));
 }
 
+type RenumberHandler = (projectId: string, projectNumber: string) => void;
+let renumberHandler: RenumberHandler | null = null;
+
+export function setProjectRenumberHandler(handler: RenumberHandler | null) {
+  renumberHandler = handler;
+}
+
 export async function insertProject(project: Project) {
-  await saveProject(project, "Kunde inte skapa projektet");
+  await saveProjectWithFreshNumber(project, "Kunde inte skapa projektet");
 }
 
 export async function updateProjectRecord(project: Project) {
-  await saveProject(project, "Kunde inte uppdatera projektet");
+  await saveProjectWithFreshNumber(project, "Kunde inte uppdatera projektet");
+}
+
+// Två personer kan samtidigt få samma projektnummer från sin lokala lista. Databasen
+// avvisar då det andra sparandet; vi hämtar ett ledigt nummer från servern och försöker igen.
+async function saveProjectWithFreshNumber(project: Project, label: string) {
+  let candidate = project;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await saveProject(candidate, label);
+      return;
+    } catch (error) {
+      const conflict = error instanceof Error && error.message.includes("projects_project_number_key");
+      if (!conflict || attempt >= 5) throw error;
+      const next = await client().rpc("next_project_number");
+      if (next.error || typeof next.data !== "string") throw error;
+      candidate = { ...candidate, project_number: next.data };
+      renumberHandler?.(candidate.id, candidate.project_number);
+    }
+  }
 }
 
 async function saveProject(project: Project, label: string) {

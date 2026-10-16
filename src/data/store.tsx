@@ -36,6 +36,7 @@ import {
   insertRow,
   loadLiveStoreData,
   saveFreightCalculator,
+  setProjectRenumberHandler,
   updateProjectRecord,
   updateRow,
 } from "./supabaseRepository";
@@ -282,6 +283,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       active = false;
     };
   }, [currentCustomerUserId, currentProfileId, loadVersion]);
+
+  useEffect(() => {
+    setProjectRenumberHandler((projectId, projectNumber) => {
+      setAllProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, project_number: projectNumber } : p)));
+    });
+    return () => setProjectRenumberHandler(null);
+  }, []);
 
   useEffect(() => {
     if (isSupabaseConfigured) return;
