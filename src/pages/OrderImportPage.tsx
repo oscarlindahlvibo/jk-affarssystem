@@ -78,8 +78,10 @@ export function OrderImportPage() {
         }
         const previewUrl = trackPreview(file);
         for (const parsed of orders) added.push({ id: crypto.randomUUID(), file, fileName: file.name, parsed, previewUrl });
-      } catch {
-        errors.push(`${file.name}: kunde inte läsas som PDF och hoppades över.`);
+      } catch (error) {
+        console.error(`Kunde inte läsa ${file.name}`, error);
+        const reason = error instanceof Error && error.message ? ` (${error.message.slice(0, 140)})` : "";
+        errors.push(`${file.name}: kunde inte läsas som PDF och hoppades över${reason}.`);
       }
       setParsing({ done: index + 1, total: files.length });
     }

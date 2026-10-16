@@ -3,7 +3,8 @@
 // blankettens etiketter. Detta är en bästa-möjliga-tolkning – layouten kan skilja
 // sig mellan kunder/versioner, så allt presenteras i en granskningsvy där
 // användaren kompletterar och rättar innan projekt skapas.
-import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+// pdf.js legacy-bygge + egna reservlösningar gör att även äldre Safari klarar att läsa PDF:er.
+import "./pdfPolyfills";
 
 export interface ParsedLtcItem {
   quantity: number | null;
@@ -53,10 +54,10 @@ const PAGE_BREAK = "---SIDBRYTNING---";
 
 // Läser PDF:ens textlager som rader av textfragment med x-position, sida för sida.
 export async function extractPdfRows(file: File): Promise<PdfRow[]> {
-  const pdfjs = await import("pdfjs-dist");
-  // Versionsparametern gör att webbläsare inte återanvänder worker-svaret som
-  // tidigare serverades med fel MIME-typ och lång immutable-cache.
-  pdfjs.GlobalWorkerOptions.workerSrc = `${pdfWorkerUrl}?v=20260930`;
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  if (!pdfjs.GlobalWorkerOptions.workerPort) {
+    pdfjs.GlobalWorkerOptions.workerPort = new Worker(new URL("./pdfWorker.ts", import.meta.url), { type: "module" });
+  }
 
   const buffer = await file.arrayBuffer();
   const doc = await pdfjs.getDocument({ data: buffer }).promise;
