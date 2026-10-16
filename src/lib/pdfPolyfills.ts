@@ -25,4 +25,30 @@ if (typeof promiseCtor.try !== "function") {
   };
 }
 
+// Safari kan inte loopa över en ReadableStream med `for await` (pdf.js gör det när den läser sidtext).
+if (typeof ReadableStream !== "undefined") {
+  const proto = ReadableStream.prototype as unknown as Record<PropertyKey, unknown>;
+  if (typeof proto[Symbol.asyncIterator] !== "function") {
+    const iterate = async function* (this: ReadableStream<unknown>, options?: { preventCancel?: boolean }) {
+      const reader = this.getReader();
+      let finished = false;
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) {
+            finished = true;
+            return;
+          }
+          yield value;
+        }
+      } finally {
+        if (!finished && !options?.preventCancel) await reader.cancel().catch(() => undefined);
+        reader.releaseLock();
+      }
+    };
+    proto.values = iterate;
+    proto[Symbol.asyncIterator] = iterate;
+  }
+}
+
 export {};
