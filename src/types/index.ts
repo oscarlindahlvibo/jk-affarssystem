@@ -447,3 +447,112 @@ export interface TimeTotalRow {
   category_key: string | null;
   minutes: number;
 }
+
+// ---- Rapporterat arbete, fakturaunderlag och transportörer ----
+
+export type WorkReportPerformerType = "employee" | "carrier";
+
+export const WORK_TYPES: { key: string; label: string }[] = [
+  { key: "transport", label: "Transport" },
+  { key: "rekning", label: "Rekning" },
+  { key: "kran", label: "Kran / lyft" },
+  { key: "foljebil", label: "Följebil / VTL" },
+  { key: "vantetid", label: "Väntetid" },
+  { key: "ovrigt", label: "Övrigt" },
+];
+
+export interface WorkReport {
+  id: string;
+  org_id: string;
+  project_id: string;
+  task_id: string | null;
+  report_date: string;
+  performer_type: WorkReportPerformerType;
+  performer_profile_id: string | null;
+  performer_carrier_user_id: string | null;
+  performer_supplier_id: string | null;
+  performer_name: string;
+  hours: number | null;
+  // Körsträcka lagras alltid i kilometer. 1 mil = 10 km.
+  distance_km: number | null;
+  waiting_hours: number | null;
+  work_type: string;
+  billable: boolean;
+  comment: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  edited_by: string | null;
+  edited_at: string | null;
+  // Intern kostnad finns i en separat tabell och visas bara för behöriga.
+  internal_cost?: number | null;
+}
+
+export interface WorkReportBilling {
+  report_id: string;
+  org_id: string;
+  billable_hours: number | null;
+  billable_distance_km: number | null;
+  billable_waiting_hours: number | null;
+  hours_rate: number | null;
+  distance_rate: number | null;
+  waiting_rate: number | null;
+  adjust_reason: string | null;
+  adjusted_by: string | null;
+  adjusted_at: string | null;
+  invoiced_at: string | null;
+  invoiced_by: string | null;
+  invoice_reference: string | null;
+}
+
+export type BillingRateType = "hours" | "distance" | "waiting";
+
+export interface BillingRate {
+  id: string;
+  org_id: string;
+  customer_id: string | null;
+  project_id: string | null;
+  rate_type: BillingRateType;
+  // Pris per timme, per mil (10 km) respektive per timme väntetid.
+  unit_price: number;
+}
+
+export interface BillingExtraLine {
+  id: string;
+  org_id: string;
+  project_id: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  unit_price: number;
+  invoiced_at: string | null;
+  invoice_reference: string | null;
+  created_at: string;
+}
+
+export interface CarrierUser {
+  id: string;
+  org_id: string;
+  supplier_id: string;
+  full_name: string;
+  email: string;
+  status: "aktiv" | "inbjuden" | "inaktiverad";
+  initials: string;
+  invited_at?: string;
+}
+
+// Det en transportör får se om en tilldelad transportorder (ingen ekonomi eller intern information).
+export interface CarrierAssignment {
+  id: string;
+  project_number: string;
+  name: string;
+  status: string;
+  planned_loading_date: string | null;
+  planned_loading_time: string | null;
+  planned_delivery_date: string | null;
+  planned_delivery_time: string | null;
+  special_requirements: string | null;
+  carrier_order_number: string | null;
+  locations: { type: LocationType; name: string; address: string | null; company_name: string | null; contact_name: string | null; contact_phone: string | null }[];
+  cargo: { description: string; length_m: number | null; width_m: number | null; height_m: number | null; weight_ton: number | null; quantity: number | null }[];
+}
