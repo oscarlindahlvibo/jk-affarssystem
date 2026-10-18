@@ -1,4 +1,4 @@
-import type { CustomerUser, Profile, UserRole } from "../types";
+import type { CarrierUser, CustomerUser, Profile, UserRole } from "../types";
 import { supabase } from "./supabase";
 
 type InviteResult<T> = { ok: true; user: T } | { ok: false; reason: string };
@@ -43,4 +43,17 @@ export async function inviteCustomerAccount(data: {
   });
   if (error) return { ok: false, reason: await invitationError(error, "Inbjudan kunde inte skickas.") };
   return { ok: true, user: response.user as CustomerUser };
+}
+
+export async function inviteCarrierAccount(data: {
+  supplier_id: string;
+  full_name: string;
+  email: string;
+}): Promise<InviteResult<CarrierUser>> {
+  if (!supabase) return { ok: false, reason: "Supabase är inte konfigurerat." };
+  const { data: response, error } = await supabase.functions.invoke("invite-user", {
+    body: { account_type: "carrier", ...data },
+  });
+  if (error) return { ok: false, reason: await invitationError(error, "Inbjudan kunde inte skickas.") };
+  return { ok: true, user: response.user as CarrierUser };
 }

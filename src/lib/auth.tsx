@@ -2,11 +2,11 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { supabase, isSupabaseConfigured } from "./supabase";
 import { allowMockAuth, requireSupabase } from "./runtimeMode";
 import { usePersonnel } from "../data/personnel";
-import { customerUsers } from "../data/mockData";
-import type { CustomerUser, Profile, UserRole, UserStatus } from "../types";
+import { carrierUsers as mockCarrierUsers, customerUsers } from "../data/mockData";
+import type { CarrierUser, CustomerUser, Profile, UserRole, UserStatus } from "../types";
 import { disableWebPush } from "./webPush";
 
-type AccountType = "internal" | "customer";
+type AccountType = "internal" | "customer" | "carrier";
 
 type MockSession = {
   type: AccountType;
@@ -20,10 +20,12 @@ interface AuthShape {
   accountType: AccountType | null;
   currentProfile: Profile | null;
   currentCustomerUser: CustomerUser | null;
+  currentCarrierUser: CarrierUser | null;
   signIn: (email: string, password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
   continueInMockMode: (email: string) => string | null;
   continueAsCustomer: (email: string) => string | null;
+  continueAsCarrier: (email: string) => string | null;
 }
 
 const AuthContext = createContext<AuthShape | null>(null);
@@ -79,11 +81,26 @@ function toCustomerUser(row: Record<string, unknown>): CustomerUser | null {
   };
 }
 
+function toCarrierUser(row: Record<string, unknown>): CarrierUser | null {
+  const status = row.status;
+  if (!(status === "aktiv" || status === "inbjuden" || status === "inaktiverad")) return null;
+  return {
+    id: String(row.id),
+    org_id: String(row.org_id),
+    supplier_id: String(row.supplier_id),
+    full_name: String(row.full_name),
+    email: String(row.email),
+    status,
+    initials: typeof row.initials === "string" && row.initials ? row.initials : initials(String(row.full_name)),
+    invited_at: typeof row.invited_at === "string" ? row.invited_at : undefined,
+  };
+}
+
 function readMockSession(raw: string | null): MockSession | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Partial<MockSession>;
-    if ((parsed.type === "internal" || parsed.type === "customer") && parsed.email) {
+    if ((parsed.type === "internal" || parsed.type === "customer" || parsed.type === "carrier") && parsed.email) {
       return { type: parsed.type, email: parsed.email };
     }
   } catch {
@@ -104,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [accountType, setAccountType] = useState<AccountType | null>(null);
   const [supabaseProfile, setSupabaseProfile] = useState<Profile | null>(null);
   const [supabaseCustomerUser, setSupabaseCustomerUser] = useState<CustomerUser | null>(null);
+  const [supabaseCarrierUser, setSupabaseCarrierUser] = useState<CarrierUser | null>(null);
 
   async function loadSupabaseIdentity(email: string) {
     if (!supabase) return null;
@@ -119,6 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (profile?.status === "aktiv") {
         setSupabaseProfile(profile);
         setSupabaseCustomerUser(null);
+        setSupabaseCarrierUser(null);
         setAccountType("internal");
         return { type: "internal" as const, email: profile.email };
       }
@@ -135,13 +154,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (customerUser?.status === "aktiv") {
         setSupabaseProfile(null);
         setSupabaseCustomerUser(customerUser);
+        setSupabaseCarrierUser(null);
         setAccountType("customer");
         return { type: "customer" as const, email: customerUser.email };
       }
     }
 
+    const { data: carrierData } = await supabase
+      .from("carrier_users")
+      .select("id, org_id, supplier_id, full_name, email, status, initials, invited_at")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (carrierData) {
+      const carrierUser = toCarrierUser(carrierData as Record<string, unknown>);
+      if (carrierUser?.status === "aktiv") {
+        setSupabaseProfile(null);
+        setSupabaseCustomerUser(null);
+        setSupabaseCarrierUser(carrierUser);
+        setAccountType("carrier");
+        return { type: "carrier" as const, email: carrierUser.email };
+      }
+    }
+
     setSupabaseProfile(null);
     setSupabaseCustomerUser(null);
+    setSupabaseCarrierUser(null);
     setAccountType(null);
     return null;
   }
@@ -176,6 +214,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           sessionStorage.removeItem(MOCK_SESSION_KEY);
         }
       }
+      else if (mockSession?.type === "carrier") {
+        const carrierUser = mockCarrierUsers.find((u) => u.email.toLowerCase() === mockSession.email.toLowerCase());
+        if (carrierUser && carrierUser.status === "aktiv") {
+          setIsAuthenticated(true);
+          setUserEmail(carrierUser.email);
+          setAccountType("carrier");
+        } else {
+          sessionStorage.removeItem(MOCK_SESSION_KEY);
+        }
+      }
       setIsLoading(false);
       return;
     }
@@ -192,6 +240,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAccountType(null);
         setSupabaseProfile(null);
         setSupabaseCustomerUser(null);
+        setSupabaseCarrierUser(null);
       }
       setIsLoading(false);
     });
@@ -208,6 +257,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAccountType(null);
         setSupabaseProfile(null);
         setSupabaseCustomerUser(null);
+        setSupabaseCarrierUser(null);
       }
     });
 
@@ -222,7 +272,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const identity = await loadSupabaseIdentity(email);
     if (!identity) {
       await supabase.auth.signOut();
-      return "Kontot saknar aktiv personal- eller kundprofil. Kontakta administratör.";
+      return "Kontot saknar aktiv personal-, kund- eller transportörsprofil. Kontakta administratör.";
     }
     setIsAuthenticated(true);
     setUserEmail(identity.email);
@@ -270,6 +320,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return null;
   }
 
+  function continueAsCarrier(email: string): string | null {
+    if (!allowMockAuth()) return "Testinloggning är avstängd i denna miljö.";
+    const carrierUser = mockCarrierUsers.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    if (!carrierUser) return "Ingen transportörsanvändare med den e-postadressen hittades.";
+    if (carrierUser.status === "inaktiverad") return "Transportörskontot är inaktiverat. Kontakta JK Projektlogistik.";
+    if (carrierUser.status === "inbjuden") return "Transportörskontot är inbjudet men har inte accepterats ännu.";
+    writeMockSession({ type: "carrier", email: carrierUser.email });
+    setIsAuthenticated(true);
+    setUserEmail(carrierUser.email);
+    setAccountType("carrier");
+    return null;
+  }
+
   const currentProfile =
     accountType === "internal" && userEmail
       ? isSupabaseConfigured
@@ -283,6 +346,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         : customerUsers.find((u) => u.email.toLowerCase() === userEmail.toLowerCase()) ?? null
       : null;
 
+  const currentCarrierUser =
+    accountType === "carrier" && userEmail
+      ? isSupabaseConfigured
+        ? supabaseCarrierUser
+        : mockCarrierUsers.find((u) => u.email.toLowerCase() === userEmail.toLowerCase()) ?? null
+      : null;
+
   return (
     <AuthContext.Provider
       value={{
@@ -292,10 +362,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         accountType,
         currentProfile,
         currentCustomerUser,
+        currentCarrierUser,
         signIn,
         signOut,
         continueInMockMode,
         continueAsCustomer,
+        continueAsCarrier,
       }}
     >
       {children}

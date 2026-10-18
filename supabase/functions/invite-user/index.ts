@@ -6,11 +6,12 @@ const ALLOWED_ORIGINS = new Set([APP_URL, "http://127.0.0.1:5173", "http://local
 const INTERNAL_ROLES = new Set(["admin", "projektledare", "ekonomi", "lasare"]);
 
 type InviteRequest = {
-  account_type?: "internal" | "customer";
+  account_type?: "internal" | "customer" | "carrier";
   full_name?: string;
   email?: string;
   role?: string;
   customer_id?: string;
+  supplier_id?: string;
   contact_person_id?: string | null;
 };
 
@@ -97,7 +98,7 @@ Deno.serve(async (request) => {
   const accountType = body.account_type;
   const fullName = body.full_name?.trim() ?? "";
   const email = body.email?.trim().toLowerCase() ?? "";
-  if (!accountType || !["internal", "customer"].includes(accountType)) {
+  if (!accountType || !["internal", "customer", "carrier"].includes(accountType)) {
     return json({ error: "Invalid account type" }, 400, origin);
   }
   if (fullName.length < 2 || fullName.length > 120) return json({ error: "Invalid name" }, 400, origin);
@@ -108,7 +109,8 @@ Deno.serve(async (request) => {
   const encodedEmail = encodeURIComponent(email);
   if (
     await rowExists("profiles", `email=ilike.${encodedEmail}`) ||
-    await rowExists("customer_users", `email=ilike.${encodedEmail}`)
+    await rowExists("customer_users", `email=ilike.${encodedEmail}`) ||
+    await rowExists("carrier_users", `email=ilike.${encodedEmail}`)
   ) {
     return json({ error: "Det finns redan ett konto med den e-postadressen." }, 409, origin);
   }
@@ -121,6 +123,23 @@ Deno.serve(async (request) => {
       full_name: fullName,
       email,
       role: body.role,
+      status: "inbjuden",
+      initials: initials(fullName),
+      invited_at: new Date().toISOString(),
+    };
+  } else if (accountType === "carrier") {
+    if (!body.supplier_id) return json({ error: "Supplier is required" }, 400, origin);
+    const supplierResponse = await api(
+      `/rest/v1/suppliers?id=eq.${encodeURIComponent(body.supplier_id)}&org_id=eq.${encodeURIComponent(admin.org_id)}&select=id`
+    );
+    const suppliers = supplierResponse.ok ? await supplierResponse.json() : [];
+    if (!Array.isArray(suppliers) || suppliers.length !== 1) return json({ error: "Supplier not found" }, 404, origin);
+
+    profilePayload = {
+      org_id: admin.org_id,
+      supplier_id: body.supplier_id,
+      full_name: fullName,
+      email,
       status: "inbjuden",
       initials: initials(fullName),
       invited_at: new Date().toISOString(),
@@ -170,7 +189,7 @@ Deno.serve(async (request) => {
     return json({ error: "Inbjudan kunde inte skickas. Kontrollera e-postinställningarna." }, 502, origin);
   }
 
-  const table = accountType === "internal" ? "profiles" : "customer_users";
+  const table = accountType === "internal" ? "profiles" : accountType === "carrier" ? "carrier_users" : "customer_users";
   const insertResponse = await api(`/rest/v1/${table}`, {
     method: "POST",
     headers: { Prefer: "return=representation" },

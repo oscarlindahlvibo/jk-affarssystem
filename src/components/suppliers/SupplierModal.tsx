@@ -4,6 +4,7 @@ import { Modal } from "../ui/Modal";
 import { Field, inputClass } from "../ui/Field";
 import { Button } from "../ui/Button";
 import type { Supplier, SupplierType } from "../../types";
+import { CarrierUsersSection } from "./CarrierUsersSection";
 
 const SUPPLIER_TYPES: SupplierType[] = ["Åkeri", "Kran", "Följebil", "Vägtransportledare", "Konsult", "Annat"];
 
@@ -150,6 +151,7 @@ export function SupplierModal({
           </div>
         </div>
       </form>
+      {supplier && <CarrierUsersSection supplier={supplier} />}
     </Modal>
   );
 }

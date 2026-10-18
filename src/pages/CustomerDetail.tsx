@@ -9,6 +9,7 @@ import { Modal } from "../components/ui/Modal";
 import { Field, inputClass } from "../components/ui/Field";
 import { formatDateAndTime } from "../lib/format";
 import { usePermissions } from "../lib/usePermissions";
+import { CustomerRatesPanel } from "../components/reports/CustomerRatesPanel";
 
 export function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
@@ -101,6 +102,8 @@ export function CustomerDetail() {
               <p className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">{customer.notes}</p>
             )}
           </Panel>
+
+          <CustomerRatesPanel customerId={customer.id} />
 
           <Panel
             title="Projekt kopplade till kunden"

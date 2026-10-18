@@ -4,6 +4,7 @@ import { PersonnelProvider } from "./data/personnel";
 import { GoogleDriveProvider } from "./lib/googleDriveContext";
 import { StoreProvider } from "./data/store";
 import { TimeTrackingProvider } from "./data/timeTracking";
+import { WorkReportsProvider } from "./data/workReports";
 import { AppLayout } from "./components/layout/AppLayout";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
@@ -23,6 +24,7 @@ import { ImportPage } from "./pages/ImportPage";
 import { OrderImportPage } from "./pages/OrderImportPage";
 import { ProjectPrint } from "./pages/ProjectPrint";
 import { CustomerPortalPage } from "./pages/CustomerPortalPage";
+import { CarrierPortalPage } from "./pages/CarrierPortalPage";
 import { FreightCalculatorSettingsPage } from "./pages/FreightCalculatorSettingsPage";
 import { ContactSubmissionsPage } from "./pages/ContactSubmissionsPage";
 import { SetPasswordPage } from "./pages/SetPasswordPage";
@@ -52,11 +54,19 @@ function RequireAdmin({ children }: { children: React.ReactElement }) {
 function RequireInternal({ children }: { children: React.ReactElement }) {
   const { accountType } = useAuth();
   if (accountType === "customer") return <Navigate to="/kundportal" replace />;
+  if (accountType === "carrier") return <Navigate to="/transportor" replace />;
+  return children;
+}
+
+function RequireCarrier({ children }: { children: React.ReactElement }) {
+  const { accountType } = useAuth();
+  if (accountType !== "carrier") return <Navigate to="/" replace />;
   return children;
 }
 
 function RequireCustomer({ children }: { children: React.ReactElement }) {
   const { accountType } = useAuth();
+  if (accountType === "carrier") return <Navigate to="/transportor" replace />;
   if (accountType !== "customer") return <Navigate to="/" replace />;
   return children;
 }
@@ -66,13 +76,16 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/set-password" element={<SetPasswordPage />} />
+      <Route path="/transportor" element={<RequireAuth><RequireCarrier><CarrierPortalPage /></RequireCarrier></RequireAuth>} />
       <Route
         element={
           <RequireAuth>
             <GoogleDriveProvider>
               <StoreProvider>
                 <TimeTrackingProvider>
-                  <Outlet />
+                  <WorkReportsProvider>
+                    <Outlet />
+                  </WorkReportsProvider>
                 </TimeTrackingProvider>
               </StoreProvider>
             </GoogleDriveProvider>

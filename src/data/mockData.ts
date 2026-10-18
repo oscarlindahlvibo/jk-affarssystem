@@ -1,5 +1,6 @@
 import type {
   Customer,
+  CarrierUser,
   CustomerUser,
   ContactPerson,
   Organization,
@@ -120,6 +121,12 @@ export const customerUsers: CustomerUser[] = [
   { id: "cu1", org_id: "org1", customer_id: "c1", contact_person_id: "p1", full_name: "Anna Bergström", email: "anna.bergstrom@holtab.se", status: "aktiv", initials: "AB" },
   { id: "cu2", org_id: "org1", customer_id: "c3", contact_person_id: "p4", full_name: "Marcus Holm", email: "marcus.holm@abb.com", status: "aktiv", initials: "MH" },
   { id: "cu3", org_id: "org1", customer_id: "c4", contact_person_id: "p5", full_name: "Lina Öberg", email: "lina.oberg@sverigeexpressen.se", status: "inbjuden", initials: "LÖ", invited_at: "2026-09-12T09:00:00Z" },
+];
+
+export const carrierUsers: CarrierUser[] = [
+  { id: "ca1", org_id: "org1", supplier_id: "s1", full_name: "Göran Svensson", email: "goran@sydtransport.se", status: "aktiv", initials: "GS" },
+  { id: "ca2", org_id: "org1", supplier_id: "s3", full_name: "Camilla Strand", email: "camilla@foljebilvast.se", status: "aktiv", initials: "CS" },
+  { id: "ca3", org_id: "org1", supplier_id: "s1", full_name: "Nils Åberg", email: "nils@sydtransport.se", status: "inbjuden", initials: "NÅ", invited_at: "2026-10-01T09:00:00Z" },
 ];
 
 const rawSuppliers: Omit<Supplier, "org_id">[] = [
