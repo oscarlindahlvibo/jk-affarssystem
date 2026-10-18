@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Calculator, Users } from "lucide-react";
+import { Calculator, Users, Wallet } from "lucide-react";
 import { Panel } from "../components/ui/Panel";
 import { TimeCategoriesPanel } from "../components/time/TimeCategoriesPanel";
 import { useStore } from "../data/store";
@@ -24,6 +24,20 @@ export function SettingsPage() {
               <div className="text-sm font-medium text-slate-800">Räknesnurra</div>
               <p className="mt-1 text-xs text-slate-500">
                 Administrera fordonskategorier, tilläggskostnader och ändringslogg för kalkylen.
+              </p>
+            </div>
+          </Link>
+          <Link
+            to="/installningar/lon"
+            className="flex items-start gap-3 rounded-lg border border-border p-4 transition hover:border-orange-200 hover:bg-orange-50/60"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+              <Wallet size={18} />
+            </div>
+            <div>
+              <div className="text-sm font-medium text-slate-800">Lön och arbetstid</div>
+              <p className="mt-1 text-xs text-slate-500">
+                Scheman, övertidsregler och lönekoder för löneunderlaget.
               </p>
             </div>
           </Link>

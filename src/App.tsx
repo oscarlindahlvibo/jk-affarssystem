@@ -5,6 +5,7 @@ import { GoogleDriveProvider } from "./lib/googleDriveContext";
 import { StoreProvider } from "./data/store";
 import { TimeTrackingProvider } from "./data/timeTracking";
 import { WorkReportsProvider } from "./data/workReports";
+import { AttendanceProvider } from "./data/attendance";
 import { AppLayout } from "./components/layout/AppLayout";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
@@ -20,6 +21,9 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { PersonnelPage } from "./pages/PersonnelPage";
 import { MyTasksPage } from "./pages/MyTasksPage";
 import { TimePage } from "./pages/TimePage";
+import { StampelklockaPage } from "./pages/StampelklockaPage";
+import { LoneunderlagPage } from "./pages/LoneunderlagPage";
+import { PayrollSettingsPage } from "./pages/PayrollSettingsPage";
 import { ImportPage } from "./pages/ImportPage";
 import { OrderImportPage } from "./pages/OrderImportPage";
 import { ProjectPrint } from "./pages/ProjectPrint";
@@ -84,7 +88,9 @@ function AppRoutes() {
               <StoreProvider>
                 <TimeTrackingProvider>
                   <WorkReportsProvider>
-                    <Outlet />
+                    <AttendanceProvider>
+                      <Outlet />
+                    </AttendanceProvider>
                   </WorkReportsProvider>
                 </TimeTrackingProvider>
               </StoreProvider>
@@ -98,6 +104,9 @@ function AppRoutes() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/mina-uppgifter" element={<MyTasksPage />} />
           <Route path="/tid" element={<TimePage />} />
+          <Route path="/stampelklocka" element={<StampelklockaPage />} />
+          <Route path="/loneunderlag" element={<LoneunderlagPage />} />
+          <Route path="/installningar/lon" element={<PayrollSettingsPage />} />
           <Route path="/projekt" element={<ProjectList />} />
           <Route path="/projekt/:id" element={<ProjectDetail />} />
           <Route path="/kunder" element={<CustomerList />} />

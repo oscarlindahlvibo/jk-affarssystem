@@ -8,7 +8,10 @@ import { useStore } from "../../data/store";
 const TITLE_BY_PATH: { pattern: string; title: string }[] = [
   { pattern: "/", title: "Dashboard" },
   { pattern: "/mina-uppgifter", title: "Mina uppgifter" },
-  { pattern: "/tid", title: "Tid" },
+  { pattern: "/stampelklocka", title: "Stämpelklocka" },
+  { pattern: "/tid", title: "Projekttid" },
+  { pattern: "/loneunderlag", title: "Löneunderlag" },
+  { pattern: "/installningar/lon", title: "Löneinställningar" },
   { pattern: "/projekt", title: "Projekt" },
   { pattern: "/projekt/:id", title: "Projektdetalj" },
   { pattern: "/kunder", title: "Kunder" },
