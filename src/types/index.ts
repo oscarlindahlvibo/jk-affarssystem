@@ -556,3 +556,175 @@ export interface CarrierAssignment {
   locations: { type: LocationType; name: string; address: string | null; company_name: string | null; contact_name: string | null; contact_phone: string | null }[];
   cargo: { description: string; length_m: number | null; width_m: number | null; height_m: number | null; weight_ton: number | null; quantity: number | null }[];
 }
+
+// ---- Stämpelklocka (närvaro), löneunderlag och export ----
+
+export type AttendanceEntryType = "work" | "break" | "lunch";
+export type AttendanceSource = "clock" | "manual" | "correction" | "admin";
+
+export interface AttendanceEntry {
+  id: string;
+  org_id: string;
+  user_id: string;
+  entry_type: AttendanceEntryType;
+  start_time: string;
+  end_time: string | null;
+  total_minutes: number;
+  source: AttendanceSource;
+  comment: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  edited_by: string | null;
+  edited_at: string | null;
+}
+
+export const ABSENCE_KINDS: { key: string; label: string }[] = [
+  { key: "absence_sick", label: "Sjukfrånvaro" },
+  { key: "absence_vab", label: "VAB" },
+  { key: "absence_vacation", label: "Semester" },
+  { key: "absence_leave", label: "Ledighet" },
+  { key: "absence_other", label: "Annan frånvaro" },
+];
+
+export interface AttendanceAbsence {
+  id: string;
+  org_id: string;
+  user_id: string;
+  absence_date: string;
+  kind: string;
+  minutes: number;
+  comment: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AttendanceAudit {
+  id: number | string;
+  org_id: string;
+  user_id: string;
+  entry_id: string | null;
+  action: "create" | "update" | "delete";
+  reason: string | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  changed_by: string | null;
+  changed_at: string;
+}
+
+export interface AttendanceCorrection {
+  id: string;
+  org_id: string;
+  user_id: string;
+  action: "change" | "add" | "delete";
+  entry_id: string | null;
+  proposed_type: AttendanceEntryType | null;
+  proposed_start: string | null;
+  proposed_end: string | null;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  decided_by: string | null;
+  decided_at: string | null;
+  decision_note: string | null;
+  created_at: string;
+}
+
+export interface OvertimeRuleSetRow {
+  id: string;
+  org_id: string;
+  name: string;
+  config: Record<string, unknown>;
+  active: boolean;
+}
+
+export interface EmployeeTermsRow {
+  id: string;
+  org_id: string;
+  user_id: string;
+  valid_from: string;
+  employment_number: string | null;
+  employment_type: string | null;
+  weekly_hours: number | null;
+  employment_rate: number | null;
+  schedule: Record<string, number>;
+  rule_set_id: string | null;
+  external_employee_ref: string | null;
+  note: string | null;
+}
+
+export interface PayrollCodeMapping {
+  id: string;
+  org_id: string;
+  time_type: string;
+  external_code: string;
+  label: string;
+}
+
+export interface PayrollPeriod {
+  id: string;
+  org_id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+}
+
+export type PayrollStatementStatus = "preliminary" | "submitted" | "attested" | "reviewed" | "exported";
+
+export interface PayrollStatement {
+  id: string;
+  org_id: string;
+  period_id: string;
+  user_id: string;
+  status: PayrollStatementStatus;
+  totals: Record<string, unknown> | null;
+  days: unknown[] | null;
+  rule_snapshot: Record<string, unknown> | null;
+  submitted_at: string | null;
+  attested_at: string | null;
+  attested_by: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  exported_at: string | null;
+  last_export_id: string | null;
+  pending_adjustment: boolean;
+}
+
+export interface PayrollAdjustment {
+  id: string;
+  org_id: string;
+  statement_id: string;
+  user_id: string;
+  time_type: string;
+  minutes_delta: number;
+  reason: string;
+  created_by: string | null;
+  created_at: string;
+  export_id: string | null;
+}
+
+export interface PayrollExportRecord {
+  id: string;
+  org_id: string;
+  period_id: string;
+  format: string;
+  kind: "regular" | "correction" | "reexport";
+  statement_ids: string[];
+  row_count: number;
+  checksum: string | null;
+  reason: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface PayrollLogRow {
+  id: number | string;
+  org_id: string;
+  statement_id: string | null;
+  period_id: string | null;
+  user_id: string | null;
+  action: string;
+  reason: string | null;
+  details: Record<string, unknown> | null;
+  actor: string | null;
+  at: string;
+}
