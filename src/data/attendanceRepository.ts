@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { pageAll } from "./pageAll";
 import type {
   AttendanceAbsence, AttendanceAudit, AttendanceCorrection, AttendanceEntry, EmployeeTermsRow, OvertimeRuleSetRow,
   PayrollAdjustment, PayrollCodeMapping, PayrollExportRecord, PayrollLogRow, PayrollPeriod, PayrollStatement,
@@ -25,20 +26,6 @@ export interface AttendanceData {
 }
 
 const num = (value: unknown) => (value === null || value === undefined ? null : Number(value));
-
-// PostgREST returnerar högst ett serverbestämt antal rader per anrop (normalt 1000) utan felmeddelande.
-// Alla listor hämtas därför sida för sida tills en sida är kortare än sidstorleken.
-const PAGE = 1000;
-async function pageAll<T>(query: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>, maxRows = 50000): Promise<T[]> {
-  const rows: T[] = [];
-  for (let from = 0; from < maxRows; from += PAGE) {
-    const { data, error } = await query(from, from + PAGE - 1);
-    check(error);
-    rows.push(...(data ?? []));
-    if ((data ?? []).length < PAGE) break;
-  }
-  return rows;
-}
 
 export interface AttendanceWindow {
   entries: AttendanceEntry[];

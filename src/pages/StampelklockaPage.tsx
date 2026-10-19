@@ -159,13 +159,13 @@ function MyWork() {
       </div>
       {adding && (
         <EntryModal open title="Lägg in missad stämpling" initial={null} allowRequest onClose={() => setAdding(false)}
-          onSave={(v) => att.addEntries([{ type: v.type, start: v.start, end: v.end, comment: v.comment }], null, v.reason)}
-          onRequest={(v) => att.requestCorrection({ action: "add", entryId: null, type: v.type, start: v.start, end: v.end, reason: v.reason })} />
+          onSave={(v) => att.addEntries([{ id: v.id, type: v.type, start: v.start, end: v.end, comment: v.comment }], null, v.reason)}
+          onRequest={(v) => att.requestCorrection({ id: v.id, action: "add", entryId: null, type: v.type, start: v.start, end: v.end, reason: v.reason })} />
       )}
       {editing && (
         <EntryModal open title="Ändra pass" initial={editing} allowRequest onClose={() => setEditing(null)}
           onSave={(v) => att.changeEntry(editing.id, { type: v.type, start: v.start, end: v.end, comment: v.comment }, v.reason)}
-          onRequest={(v) => att.requestCorrection({ action: "change", entryId: editing.id, type: v.type, start: v.start, end: v.end, reason: v.reason })} />
+          onRequest={(v) => att.requestCorrection({ id: v.id, action: "change", entryId: editing.id, type: v.type, start: v.start, end: v.end, reason: v.reason })} />
       )}
       <ReasonModal open={Boolean(deleting)} title="Ta bort pass" confirmLabel="Ta bort" onClose={() => setDeleting(null)} onConfirm={(reason) => att.deleteEntry(deleting!.id, reason)}>
         {deleting && <p className="text-sm text-slate-600">{dayLabel(localDateKey(deleting.start_time))} {timeRange(deleting)}. Borttagningen sparas i ändringsloggen.</p>}
@@ -260,7 +260,7 @@ function Staff() {
       )}
       {adding && selected && att.canAttest && (
         <EntryModal open title={`Lägg in pass för ${nameOf(selected)}`} initial={null} allowRequest={false} onClose={() => setAdding(false)}
-          onSave={(v) => att.addEntries([{ type: v.type, start: v.start, end: v.end, comment: v.comment }], selected, v.reason)} />
+          onSave={(v) => att.addEntries([{ id: v.id, type: v.type, start: v.start, end: v.end, comment: v.comment }], selected, v.reason)} />
       )}
       {editing && att.canAttest && (
         <EntryModal open title="Ändra pass" initial={editing} allowRequest={false} onClose={() => setEditing(null)}

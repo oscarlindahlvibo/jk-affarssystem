@@ -16,6 +16,7 @@ import type {
 import { localDateKey, minutesBetweenInstants } from "./stockholmTime";
 
 export const CLOCK_CONFLICT = "CLOCK_STATE_CONFLICT";
+export const MAX_CLOCK_BACKDATE_MS = 15 * 60000;
 
 export interface AttendanceState {
   entries: AttendanceEntry[];
@@ -139,7 +140,9 @@ export interface ClockArgs {
 export function clockTransition(state: AttendanceState, actor: Actor, args: ClockArgs, nowIso = new Date().toISOString()): { state: AttendanceState; current: AttendanceEntry | null } {
   const { action, eventIso } = args;
   const closing = (args.comment ?? "").trim();
-  if (new Date(eventIso).getTime() > new Date(nowIso).getTime() + 5 * 60000) throw new Error("Ogiltig stämpling.");
+  // Samma regel som databasen: stämplingen får inte backdateras (missad tid läggs in manuellt med orsak).
+  const skew = new Date(eventIso).getTime() - new Date(nowIso).getTime();
+  if (!Number.isFinite(skew) || skew > 5 * 60000 || skew < -MAX_CLOCK_BACKDATE_MS) throw new Error("Ogiltig stämpling.");
   const current = state.entries.find((e) => e.user_id === actor.id && !e.end_time) ?? null;
   if ((current?.id ?? null) !== args.expected) throw new Error(CLOCK_CONFLICT);
   if (!current && state.entries.some((e) => e.user_id === actor.id && e.end_time && new Date(e.end_time) > new Date(eventIso))) throw new Error(CLOCK_CONFLICT);

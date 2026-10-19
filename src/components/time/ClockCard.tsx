@@ -50,7 +50,7 @@ export function ClockCard() {
 
         {!openEntry ? (
           <>
-            <div className="text-sm text-slate-500">Du är inte instämplad. Välj vad du ska jobba med och starta klockan.</div>
+            <div className="text-sm text-slate-500">Ingen projekttid pågår. Välj vad du jobbar med och starta projektklockan. Detta är inte din stämpelklocka för lön – den hittar du under Stämpelklocka.</div>
             <JobPicker value={effectiveJob} onChange={setJob} stacked />
             <Field label="Anteckning (valfritt)">
               <textarea className={`${inputClass} min-h-16 resize-y`} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Vad ska du göra?" />
@@ -61,14 +61,14 @@ export function ClockCard() {
               disabled={busy || !effectiveJob.categoryKey}
               onClick={() => run(() => clockIn(toJob(effectiveJob), note))}
             >
-              <LogIn size={18} /> Stämpla in
+              <LogIn size={18} /> Starta projektklocka
             </Button>
           </>
         ) : (
           <>
             <div className={`rounded-xl p-4 text-center ${onPause ? "bg-amber-50" : "bg-green-50"}`}>
               <div className={`text-xs font-semibold uppercase tracking-wide ${onPause ? "text-amber-700" : "text-green-700"}`}>
-                {openEntry.entry_type === "lunch" ? "Lunch pågår" : openEntry.entry_type === "break" ? "Rast pågår" : "Instämplad"} sedan {formatTimeOfDay(openEntry.start_time)}
+                {openEntry.entry_type === "lunch" ? "Lunch pågår" : openEntry.entry_type === "break" ? "Rast pågår" : "Projektklocka igång"} sedan {formatTimeOfDay(openEntry.start_time)}
               </div>
               <div className="mt-1 font-mono text-4xl font-semibold tabular-nums text-slate-800" aria-live="off">
                 {formatClock(now - new Date(openEntry.start_time).getTime())}
@@ -77,7 +77,7 @@ export function ClockCard() {
                 {categoryLabel(openEntry.category_key)}
                 {openEntry.project_label ? ` · ${openEntry.project_label}` : " · Intern tid"}
               </div>
-              <div className="mt-1 text-xs text-slate-500">Arbetad tid idag: {formatMinutes(workedToday) || "0 min"}</div>
+              <div className="mt-1 text-xs text-slate-500">Projekttid idag: {formatMinutes(workedToday) || "0 min"}</div>
             </div>
 
             <Field label={onPause ? "Anteckning vid utstämpling (valfritt)" : "Anteckning för passet (valfritt)"}>
@@ -116,7 +116,7 @@ export function ClockCard() {
                 </>
               )}
               <Button type="button" className={`justify-center !py-3 ${onPause ? "" : ""}`} disabled={busy} onClick={() => run(() => clockOut(note))}>
-                <LogOut size={16} /> Stämpla ut
+                <LogOut size={16} /> Avsluta projekttid
               </Button>
             </div>
           </>

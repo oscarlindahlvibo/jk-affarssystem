@@ -28,22 +28,29 @@ set role authenticated;
 -- ===== Stämpelklockan: in, rast, lunch, ut =====
 select t.as_user('81000000-0000-0000-0000-000000000004');
 select t.ok('anställd kan stämpla in utan projekt eller kategori',
-  (attendance_clock_transition('a0000000-0000-0000-0000-000000000001', 'clockin', null, '2026-09-14T05:00:00Z', 'Start')) -> 'current' ->> 'entry_type' = 'work');
+  (attendance_clock_transition('a0000000-0000-0000-0000-000000000001', 'clockin', null, now() - interval '14 minutes', 'Start')) -> 'current' ->> 'entry_type' = 'work');
 select t.ok('omförsök med samma id ger samma resultat utan dubbel post', (select count(*) from attendance_entries where user_id = '81000000-0000-0000-0000-000000000004') = 1
-  and (attendance_clock_transition('a0000000-0000-0000-0000-000000000001', 'clockin', null, '2026-09-14T05:00:00Z', 'Start')) is not null
+  and (attendance_clock_transition('a0000000-0000-0000-0000-000000000001', 'clockin', null, now() - interval '14 minutes', 'Start')) is not null
   and (select count(*) from attendance_entries where user_id = '81000000-0000-0000-0000-000000000004') = 1);
-select t.fails('dubbel instämpling (annan enhet) nekas', $$select attendance_clock_transition('a0000000-0000-0000-0000-000000000002', 'clockin', null, '2026-09-14T05:01:00Z')$$, 'CLOCK_STATE_CONFLICT');
-select t.ok('lunch stänger arbetspasset och startar lunch', (attendance_clock_transition('a0000000-0000-0000-0000-000000000003', 'lunch', 'a0000000-0000-0000-0000-000000000001', '2026-09-14T10:00:00Z', 'Förmiddag klar')) -> 'current' ->> 'entry_type' = 'lunch');
-select t.fails('två enheter med samma förväntade pass: den andra får konflikt', $$select attendance_clock_transition('a0000000-0000-0000-0000-000000000004', 'resume', 'a0000000-0000-0000-0000-000000000001', '2026-09-14T10:30:00Z')$$, 'CLOCK_STATE_CONFLICT');
-select t.ok('återgång till arbete efter lunch', (attendance_clock_transition('a0000000-0000-0000-0000-000000000005', 'resume', 'a0000000-0000-0000-0000-000000000003', '2026-09-14T10:30:00Z')) -> 'current' ->> 'entry_type' = 'work');
-select t.ok('utstämpling med anteckning', (attendance_clock_transition('a0000000-0000-0000-0000-000000000006', 'clockout', 'a0000000-0000-0000-0000-000000000005', '2026-09-14T15:00:00Z', 'Klar för dagen')) ->> 'current' is null);
-select t.ok('arbetad tid 9,5 h (07:00-17:00 svensk tid med 30 min lunch)',
-  (select sum(total_minutes) from attendance_entries where user_id = '81000000-0000-0000-0000-000000000004' and entry_type = 'work') = 570
-  and (select total_minutes from attendance_entries where entry_type = 'lunch' and user_id = '81000000-0000-0000-0000-000000000004') = 30);
+select t.fails('dubbel instämpling (annan enhet) nekas', $$select attendance_clock_transition('a0000000-0000-0000-0000-000000000002', 'clockin', null, now() - interval '13 minutes')$$, 'CLOCK_STATE_CONFLICT');
+select t.ok('lunch stänger arbetspasset och startar lunch', (attendance_clock_transition('a0000000-0000-0000-0000-000000000003', 'lunch', 'a0000000-0000-0000-0000-000000000001', now() - interval '10 minutes', 'Förmiddag klar')) -> 'current' ->> 'entry_type' = 'lunch');
+select t.fails('två enheter med samma förväntade pass: den andra får konflikt', $$select attendance_clock_transition('a0000000-0000-0000-0000-000000000004', 'resume', 'a0000000-0000-0000-0000-000000000001', now() - interval '9 minutes')$$, 'CLOCK_STATE_CONFLICT');
+select t.ok('återgång till arbete efter lunch', (attendance_clock_transition('a0000000-0000-0000-0000-000000000005', 'resume', 'a0000000-0000-0000-0000-000000000003', now() - interval '9 minutes')) -> 'current' ->> 'entry_type' = 'work');
+select t.ok('utstämpling med anteckning', (attendance_clock_transition('a0000000-0000-0000-0000-000000000006', 'clockout', 'a0000000-0000-0000-0000-000000000005', now() - interval '3 minutes', 'Klar för dagen')) ->> 'current' is null);
+select t.ok('arbetad tid 10 min och lunch 1 min enligt stämplingarna',
+  (select sum(total_minutes) from attendance_entries where user_id = '81000000-0000-0000-0000-000000000004' and entry_type = 'work') = 10
+  and (select total_minutes from attendance_entries where entry_type = 'lunch' and user_id = '81000000-0000-0000-0000-000000000004') = 1);
 select t.ok('ingen öppen post kvar', (select count(*) from attendance_entries where end_time is null and user_id = '81000000-0000-0000-0000-000000000004') = 0);
-select t.fails('utstämpling utan pågående pass nekas', $$select attendance_clock_transition('a0000000-0000-0000-0000-000000000007', 'clockout', null, '2026-09-14T16:00:00Z')$$, 'Ingen pågående');
+select t.fails('utstämpling utan pågående pass nekas', $$select attendance_clock_transition('a0000000-0000-0000-0000-000000000007', 'clockout', null, now() - interval '1 minute')$$, 'Ingen pågående');
 select t.fails('stämpling långt fram i tiden nekas', $$select attendance_clock_transition('a0000000-0000-0000-0000-000000000008', 'clockin', null, '2030-01-01T05:00:00Z')$$, 'Ogiltig');
+select t.fails('backdaterad stämpling (2 timmar bakåt) nekas, missad tid läggs in manuellt', $$select attendance_clock_transition('a0000000-0000-0000-0000-000000000009', 'clockin', null, now() - interval '2 hours')$$, 'Ogiltig');
 select t.fails('direkt skrivning i attendance_entries nekas', $$insert into attendance_entries (org_id, user_id, start_time, end_time) values ('91000000-0000-0000-0000-000000000001','81000000-0000-0000-0000-000000000004','2026-09-15T05:00:00Z','2026-09-15T06:00:00Z')$$);
+-- Måndag 14 sep: 07:00-17:00 svensk tid med 30 min lunch (9,5 h arbetad tid) som missad stämpling
+select t.ok('en hel arbetsdag med lunch kan läggas in som missad stämpling', attendance_add_entries('[
+  {"id":"b0000000-0000-0000-0000-000000000021","type":"work","start":"2026-09-14T05:00:00Z","end":"2026-09-14T10:00:00Z"},
+  {"id":"b0000000-0000-0000-0000-000000000022","type":"lunch","start":"2026-09-14T10:00:00Z","end":"2026-09-14T10:30:00Z"},
+  {"id":"b0000000-0000-0000-0000-000000000023","type":"work","start":"2026-09-14T10:30:00Z","end":"2026-09-14T15:00:00Z"}]'::jsonb) = 3);
+select t.ok('arbetad tid 14 sep är 9,5 h', (select sum(total_minutes) from attendance_entries where user_id = '81000000-0000-0000-0000-000000000004' and entry_type = 'work' and start_time::date = '2026-09-14') = 570);
 
 -- ===== Missad stämpling =====
 select t.ok('missad dag kan läggas in med lunch (3 pass atomiskt)', attendance_add_entries('[

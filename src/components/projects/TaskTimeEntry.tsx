@@ -103,11 +103,11 @@ export function TaskTimeEntry({ projectId, task, canEdit }: { projectId: string;
       )}
       {task.status !== "Klar" && (
         runningHere ? (
-          <span className="rounded-full bg-green-100 px-2 py-0.5 font-medium text-green-700">Stämplad på denna</span>
+          <span className="rounded-full bg-green-100 px-2 py-0.5 font-medium text-green-700">Projekttid pågår här</span>
         ) : onPause ? null : (
           <button type="button" disabled={stamping} onClick={() => void stamp()} className="inline-flex items-center gap-1 font-medium text-green-700 hover:text-green-800 disabled:opacity-50">
             {openEntry ? <Repeat size={12} /> : <Play size={12} />}
-            {openEntry ? "Byt stämpling hit" : "Stämpla in"}
+            {openEntry ? "Flytta projekttid hit" : "Starta projekttid"}
           </button>
         )
       )}

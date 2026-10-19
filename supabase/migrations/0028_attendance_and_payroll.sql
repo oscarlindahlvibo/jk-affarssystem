@@ -434,7 +434,10 @@ declare
 begin
   select * into actor from profiles where id = auth.uid() and status = 'aktiv';
   if actor.id is null or actor.org_id is null then raise exception 'Stämpling nekad.' using errcode = '42501'; end if;
+  -- Stämplingen får inte backdateras: tiden ska ligga nära serverns tid. Missad tid läggs in som manuell registrering
+  -- (med orsak och logg). Tröskeln kan bara ändras av databasägaren (testhook app.max_clock_skew).
   if p_id is null or p_event is null or not isfinite(p_event) or p_event > now() + interval '5 minutes'
+     or p_event < now() - coalesce(nullif(current_setting('app.max_clock_skew', true), ''), '15 minutes')::interval
      or p_action is null or p_action not in ('clockin', 'clockout', 'break', 'lunch', 'resume') or length(closing) > 10000 then
     raise exception 'Ogiltig stämpling.';
   end if;
@@ -774,11 +777,22 @@ as $$
 declare
   actor profiles;
   saved attendance_absences;
+  existing attendance_absences;
 begin
   select * into actor from profiles where id = auth.uid() and status = 'aktiv';
   if actor.id is null or actor.role not in ('admin', 'projektledare', 'ekonomi') then raise exception 'Åtgärden nekas.' using errcode = '42501'; end if;
   if not exists (select 1 from profiles where id = p_user and org_id = actor.org_id and status = 'aktiv') then raise exception 'Personen hittades inte.'; end if;
   if coalesce(btrim(p_reason), '') = '' then raise exception 'Ange orsak.'; end if;
+  perform pg_advisory_xact_lock(hashtextextended('attendance-clock:' || p_user::text, 0));
+  -- Ett befintligt id får bara ändras inom samma organisation och person (ingen överskrivning av andras rader).
+  select * into existing from attendance_absences where id = p_id for update;
+  if existing.id is not null then
+    if existing.org_id <> actor.org_id or existing.user_id <> p_user then raise exception 'Åtgärden nekas.' using errcode = '42501'; end if;
+    if actor.role = 'ekonomi' and attendance_lock_state(existing.user_id, existing.absence_date, existing.absence_date) is not null then
+      raise exception 'Perioden är attesterad eller exporterad.' using errcode = '42501';
+    end if;
+    if actor.role <> 'ekonomi' then perform attendance_guard_change(actor.id, existing.user_id, existing.absence_date, existing.absence_date, p_reason); end if;
+  end if;
   if actor.role = 'ekonomi' and attendance_lock_state(p_user, p_date, p_date) is not null then
     raise exception 'Perioden är attesterad eller exporterad.' using errcode = '42501';
   end if;
@@ -810,6 +824,7 @@ begin
   select * into target from attendance_absences where id = p_id and org_id = actor.org_id;
   if target.id is null then raise exception 'Frånvaron hittades inte.'; end if;
   if coalesce(btrim(p_reason), '') = '' then raise exception 'Ange orsak.'; end if;
+  perform pg_advisory_xact_lock(hashtextextended('attendance-clock:' || target.user_id::text, 0));
   if actor.role = 'ekonomi' and attendance_lock_state(target.user_id, target.absence_date, target.absence_date) is not null then
     raise exception 'Perioden är attesterad eller exporterad.' using errcode = '42501';
   end if;

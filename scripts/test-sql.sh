@@ -32,6 +32,11 @@ SQL
 
 echo "== Migrationer"
 for file in "$ROOT"/supabase/migrations/*.sql; do
+  # Data som motsvarar produktion läggs in före de nya migrationerna (0027 och senare) för att testa uppgradering.
+  if [[ "$(basename "$file")" == 0027_* && -f "$ROOT/supabase/tests/pre/legacy_seed.sql" ]]; then
+    psql_as postgres -o /dev/null < "$ROOT/supabase/tests/pre/legacy_seed.sql" || { echo "FEL i legacy_seed.sql"; exit 1; }
+    echo "ok pre/legacy_seed.sql (produktionsliknande data före 0027)"
+  fi
   psql_as postgres -o /dev/null < "$file" 2> >(grep -v '^NOTICE' >&2) || { echo "FEL i $(basename "$file")"; exit 1; }
   echo "ok $(basename "$file")"
 done

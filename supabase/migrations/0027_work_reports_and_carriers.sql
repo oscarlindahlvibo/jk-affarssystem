@@ -271,7 +271,7 @@ begin
   if v_report_id is null then raise exception 'Rapporten saknar id.'; end if;
   select * into project_row from projects where id = (p_report ->> 'project_id')::uuid and org_id = actor.org_id;
   if project_row.id is null then raise exception 'Projektet hittades inte.' using errcode = '42501'; end if;
-  if v_date is null or v_date > current_date + 1 then raise exception 'Ogiltigt datum.'; end if;
+  if v_date is null or v_date > current_date + 1 or v_date < date '2020-01-01' then raise exception 'Ogiltigt datum.'; end if;
   if v_performer_type not in ('employee', 'carrier') then raise exception 'Ogiltig utförare.'; end if;
 
   v_hours := parse_report_number(p_report, 'hours', 999);
@@ -287,9 +287,11 @@ begin
     raise exception 'Arbetsordern tillhör inte projektet.';
   end if;
 
-  select * into existing from work_reports where id = v_report_id;
+  -- Raden låses så att en samtidig faktureringsmarkering inte kan passera kontrollen nedan.
+  select * into existing from work_reports where id = v_report_id for update;
   if existing.id is not null then
     if existing.org_id <> actor.org_id then raise exception 'Åtgärden nekas.' using errcode = '42501'; end if;
+    if existing.project_id <> project_row.id then raise exception 'Rapporten tillhör ett annat projekt och kan inte flyttas.'; end if;
     if not is_manager and existing.created_by <> actor.id then raise exception 'Du kan bara ändra egna rapporter.' using errcode = '42501'; end if;
     if work_report_is_invoiced(existing.id) then raise exception 'Rapporten är fakturerad och kan inte ändras.'; end if;
   end if;
@@ -364,7 +366,7 @@ declare
 begin
   select * into actor from profiles where id = auth.uid() and status = 'aktiv';
   if actor.id is null then raise exception 'Åtgärden nekas.' using errcode = '42501'; end if;
-  select * into target from work_reports where id = p_id and org_id = actor.org_id;
+  select * into target from work_reports where id = p_id and org_id = actor.org_id for update;
   if target.id is null then raise exception 'Rapporten hittades inte.'; end if;
   if actor.role not in ('admin', 'projektledare', 'ekonomi') and target.created_by <> actor.id then
     raise exception 'Du kan bara ta bort egna rapporter.' using errcode = '42501';
@@ -392,7 +394,7 @@ declare
 begin
   select * into actor from profiles where id = auth.uid() and status = 'aktiv';
   if actor.id is null or not can_edit_finance() then raise exception 'Åtgärden nekas.' using errcode = '42501'; end if;
-  select * into target from work_reports where id = p_report_id and org_id = actor.org_id;
+  select * into target from work_reports where id = p_report_id and org_id = actor.org_id for update;
   if target.id is null then raise exception 'Rapporten hittades inte.'; end if;
   if work_report_is_invoiced(target.id) then raise exception 'Rapporten är fakturerad. Ta bort faktureringsmarkeringen först.'; end if;
 
@@ -440,6 +442,10 @@ begin
      or (select count(*) from billing_extra_lines where id = any (coalesce(p_extra_ids, '{}')) and org_id = actor.org_id) <> coalesce(array_length(p_extra_ids, 1), 0) then
     raise exception 'Någon av posterna hittades inte.';
   end if;
+
+  -- Lås rapporterna/posterna så att två samtidiga faktureringar inte kan båda passera kontrollen (dubbeldebitering).
+  perform 1 from work_reports where id = any (coalesce(p_report_ids, '{}')) and org_id = actor.org_id order by id for update;
+  perform 1 from billing_extra_lines where id = any (coalesce(p_extra_ids, '{}')) and org_id = actor.org_id order by id for update;
 
   select string_agg(report_id::text, ', ') into already
   from work_report_billing where report_id = any (coalesce(p_report_ids, '{}')) and invoiced_at is not null;
@@ -531,7 +537,7 @@ begin
   select * into actor from profiles where id = auth.uid() and status = 'aktiv';
   if actor.id is null or not can_edit_finance() then raise exception 'Åtgärden nekas.' using errcode = '42501'; end if;
   if not exists (select 1 from projects where id = (p_line ->> 'project_id')::uuid and org_id = actor.org_id) then raise exception 'Projektet hittades inte.'; end if;
-  select * into existing from billing_extra_lines where id = line_id;
+  select * into existing from billing_extra_lines where id = line_id for update;
   if existing.id is not null then
     if existing.org_id <> actor.org_id then raise exception 'Åtgärden nekas.' using errcode = '42501'; end if;
     if existing.invoiced_at is not null then raise exception 'Posten är fakturerad och kan inte ändras.'; end if;
@@ -561,7 +567,7 @@ declare
 begin
   select * into actor from profiles where id = auth.uid() and status = 'aktiv';
   if actor.id is null or not can_edit_finance() then raise exception 'Åtgärden nekas.' using errcode = '42501'; end if;
-  select * into existing from billing_extra_lines where id = p_id and org_id = actor.org_id;
+  select * into existing from billing_extra_lines where id = p_id and org_id = actor.org_id for update;
   if existing.id is null then raise exception 'Posten hittades inte.'; end if;
   if existing.invoiced_at is not null then raise exception 'Posten är fakturerad och kan inte tas bort.'; end if;
   delete from billing_extra_lines where id = existing.id;
@@ -588,6 +594,7 @@ as $$
     join project_suppliers ps on ps.supplier_id = c.supplier_id
     join projects p on p.id = ps.project_id and p.org_id = c.org_id
     where c.id = auth.uid() and c.status = 'aktiv' and ps.project_id = p_project_id
+      and p.status not in ('Avbokad', 'Fakturerad')
   );
 $$;
 
@@ -688,7 +695,7 @@ begin
   if carrier.id is null then raise exception 'Åtgärden nekas.' using errcode = '42501'; end if;
   if v_report_id is null then raise exception 'Rapporten saknar id.'; end if;
   if not carrier_is_assigned(v_project_id) then raise exception 'Uppdraget är inte tilldelat dig.' using errcode = '42501'; end if;
-  if v_date is null or v_date > current_date + 1 then raise exception 'Ogiltigt datum.'; end if;
+  if v_date is null or v_date > current_date + 1 or v_date < date '2020-01-01' then raise exception 'Ogiltigt datum.'; end if;
 
   v_hours := parse_report_number(p_report, 'hours', 999);
   v_km := parse_report_number(p_report, 'distance_km', 99999);
@@ -697,9 +704,10 @@ begin
     raise exception 'Ange minst tid, körsträcka eller väntetid.';
   end if;
 
-  select * into existing from work_reports where id = v_report_id;
+  select * into existing from work_reports where id = v_report_id for update;
   if existing.id is not null then
     if existing.performer_carrier_user_id is distinct from carrier.id then raise exception 'Du kan bara ändra egna rapporter.' using errcode = '42501'; end if;
+    if existing.project_id <> v_project_id then raise exception 'Rapporten tillhör ett annat uppdrag.' using errcode = '42501'; end if;
     select * into billing from work_report_billing b where b.report_id = existing.id;
     if billing.report_id is not null and (billing.invoiced_at is not null or billing.adjusted_at is not null) then
       raise exception 'Rapporten är behandlad av JK och kan inte ändras. Kontakta JK.';
@@ -744,7 +752,7 @@ declare
 begin
   select * into carrier from carrier_users where id = auth.uid() and status = 'aktiv';
   if carrier.id is null then raise exception 'Åtgärden nekas.' using errcode = '42501'; end if;
-  select * into existing from work_reports where id = p_id and performer_carrier_user_id = carrier.id;
+  select * into existing from work_reports where id = p_id and performer_carrier_user_id = carrier.id for update;
   if existing.id is null then raise exception 'Rapporten hittades inte.'; end if;
   select * into billing from work_report_billing b where b.report_id = existing.id;
   if billing.report_id is not null and (billing.invoiced_at is not null or billing.adjusted_at is not null) then

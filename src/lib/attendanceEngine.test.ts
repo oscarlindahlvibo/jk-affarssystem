@@ -25,10 +25,10 @@ function dayShift(state: AttendanceState, actor: Actor, date: string) {
 describe("stämpelklocka", () => {
   it("stämplar in, tar lunch, återgår och stämplar ut: 9,5 timmar arbete", () => {
     let s = emptyAttendanceState();
-    let r = clockTransition(s, emp, { id: "a", action: "clockin", expected: null, eventIso: at("2026-10-12", "07:00") }, NOW);
-    r = clockTransition(r.state, emp, { id: "b", action: "lunch", expected: "a", eventIso: at("2026-10-12", "12:00"), comment: "Förmiddag" }, NOW);
-    r = clockTransition(r.state, emp, { id: "c", action: "resume", expected: "b", eventIso: at("2026-10-12", "12:30") }, NOW);
-    r = clockTransition(r.state, emp, { id: "d", action: "clockout", expected: "c", eventIso: at("2026-10-12", "17:00"), comment: "Klart" }, NOW);
+    let r = clockTransition(s, emp, { id: "a", action: "clockin", expected: null, eventIso: at("2026-10-12", "07:00") }, at("2026-10-12", "07:00"));
+    r = clockTransition(r.state, emp, { id: "b", action: "lunch", expected: "a", eventIso: at("2026-10-12", "12:00"), comment: "Förmiddag" }, at("2026-10-12", "12:00"));
+    r = clockTransition(r.state, emp, { id: "c", action: "resume", expected: "b", eventIso: at("2026-10-12", "12:30") }, at("2026-10-12", "12:30"));
+    r = clockTransition(r.state, emp, { id: "d", action: "clockout", expected: "c", eventIso: at("2026-10-12", "17:00"), comment: "Klart" }, at("2026-10-12", "17:00"));
     s = r.state;
     expect(r.current).toBeNull();
     expect(s.entries.filter((e) => e.entry_type === "work").reduce((m, e) => m + e.total_minutes, 0)).toBe(570);
@@ -37,16 +37,19 @@ describe("stämpelklocka", () => {
   });
 
   it("förhindrar dubbla öppna stämplingar och hanterar flera enheter säkert", () => {
-    const first = clockTransition(emptyAttendanceState(), emp, { id: "a", action: "clockin", expected: null, eventIso: at("2026-10-12", "07:00") }, NOW);
-    expect(() => clockTransition(first.state, emp, { id: "x", action: "clockin", expected: null, eventIso: at("2026-10-12", "07:05") }, NOW)).toThrow("CLOCK_STATE_CONFLICT");
-    const paused = clockTransition(first.state, emp, { id: "b", action: "break", expected: "a", eventIso: at("2026-10-12", "09:00") }, NOW);
-    expect(() => clockTransition(paused.state, emp, { id: "y", action: "break", expected: "a", eventIso: at("2026-10-12", "09:05") }, NOW)).toThrow("CLOCK_STATE_CONFLICT");
-    expect(() => clockTransition(first.state, emp, { id: "z", action: "clockout", expected: null, eventIso: at("2026-10-12", "10:00") }, NOW)).toThrow("CLOCK_STATE_CONFLICT");
+    const first = clockTransition(emptyAttendanceState(), emp, { id: "a", action: "clockin", expected: null, eventIso: at("2026-10-12", "07:00") }, at("2026-10-12", "07:00"));
+    expect(() => clockTransition(first.state, emp, { id: "x", action: "clockin", expected: null, eventIso: at("2026-10-12", "07:05") }, at("2026-10-12", "07:05"))).toThrow("CLOCK_STATE_CONFLICT");
+    const paused = clockTransition(first.state, emp, { id: "b", action: "break", expected: "a", eventIso: at("2026-10-12", "09:00") }, at("2026-10-12", "09:00"));
+    expect(() => clockTransition(paused.state, emp, { id: "y", action: "break", expected: "a", eventIso: at("2026-10-12", "09:05") }, at("2026-10-12", "09:05"))).toThrow("CLOCK_STATE_CONFLICT");
+    expect(() => clockTransition(first.state, emp, { id: "z", action: "clockout", expected: null, eventIso: at("2026-10-12", "10:00") }, at("2026-10-12", "10:00"))).toThrow("CLOCK_STATE_CONFLICT");
   });
 
   it("nekar utstämpling utan pågående pass och pass i framtiden", () => {
-    expect(() => clockTransition(emptyAttendanceState(), emp, { id: "a", action: "clockout", expected: null, eventIso: at("2026-10-12", "07:00") }, NOW)).toThrow("Ingen pågående");
+    expect(() => clockTransition(emptyAttendanceState(), emp, { id: "a", action: "clockout", expected: null, eventIso: at("2026-10-12", "07:00") }, at("2026-10-12", "07:00"))).toThrow("Ingen pågående");
     expect(() => clockTransition(emptyAttendanceState(), emp, { id: "a", action: "clockin", expected: null, eventIso: "2027-01-01T07:00:00Z" }, NOW)).toThrow("Ogiltig");
+    // backdaterad stämpling (2 timmar bakåt) nekas; missad tid läggs in manuellt
+    expect(() => clockTransition(emptyAttendanceState(), emp, { id: "b", action: "clockin", expected: null, eventIso: "2026-10-18T10:00:00.000Z" }, NOW)).toThrow("Ogiltig");
+    expect(clockTransition(emptyAttendanceState(), emp, { id: "c", action: "clockin", expected: null, eventIso: "2026-10-18T11:50:00.000Z" }, NOW).current?.id).toBe("c");
   });
 
   it("lägger till missad dag atomiskt och nekar överlapp, framtid och >24 h", () => {

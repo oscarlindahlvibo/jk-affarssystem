@@ -20,7 +20,7 @@ export function ProjectTimePanel({ project }: { project: Project }) {
       action={<Link to="/tid" className="text-xs font-medium text-orange-600 hover:text-orange-700">Stämpelklocka</Link>}
     >
       {total === 0 ? (
-        <p className="flex items-center gap-1.5 text-sm text-slate-500"><Clock size={14} /> Ingen stämplad eller registrerad tid ännu.</p>
+        <p className="flex items-center gap-1.5 text-sm text-slate-500"><Clock size={14} /> Ingen projekttid registrerad ännu.</p>
       ) : (
         <>
           <div className="text-2xl font-semibold text-slate-800">{formatMinutes(total)}</div>

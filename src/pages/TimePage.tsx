@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Download, Plus } from "lucide-react";
 import { useStore } from "../data/store";
 import { useAuth } from "../lib/auth";
@@ -66,7 +67,7 @@ function MyTime() {
         <ClockCard />
         <Panel title="Veckosammanfattning">
           <div className="text-3xl font-semibold text-slate-800">{formatMinutes(total) || "0 min"}</div>
-          <div className="text-xs text-slate-500">arbetad tid veckan du tittar på (exklusive raster)</div>
+          <div className="text-xs text-slate-500">tid på projekt veckan du tittar på (exklusive raster)</div>
           <ul className="mt-3 space-y-1.5 text-sm">
             {[...byCategory.entries()].sort((a, b) => b[1] - a[1]).map(([key, minutes]) => (
               <li key={key} className="flex justify-between">
@@ -78,7 +79,7 @@ function MyTime() {
         </Panel>
       </div>
       <Panel
-        title="Min tid"
+        title="Min projekttid"
         className="lg:col-span-2"
         action={
           <Button type="button" variant="secondary" onClick={() => setAdding(true)} className="!px-2.5 !py-1.5">
@@ -180,10 +181,13 @@ export function TimePage() {
   const [tab, setTab] = useState<"mine" | "all">("mine");
   return (
     <div className="space-y-5">
+      <p className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        Projekttid är intern uppföljning av tid per projekt och uppgift. Den påverkar varken lön (se <Link to="/stampelklocka" className="font-medium underline">Stämpelklocka</Link>) eller kundfakturering (se Rapporterat arbete på projektet).
+      </p>
       {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
       {canViewAll && (
         <div className="inline-flex rounded-lg border border-border bg-white p-1 text-sm">
-          {([["mine", "Min tid"], ["all", "Allas tid"]] as const).map(([key, label]) => (
+          {([["mine", "Min projekttid"], ["all", "Allas projekttid"]] as const).map(([key, label]) => (
             <button
               key={key}
               type="button"

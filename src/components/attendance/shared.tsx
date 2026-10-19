@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { AttendanceEntry, AttendanceEntryType } from "../../types";
 import { addDays, localDateKey, localTimeKey, startOfIsoWeek, zonedTimeToUtc } from "../../lib/stockholmTime";
 import { Button } from "../ui/Button";
@@ -40,6 +40,8 @@ export function periodBounds(today: string) {
 }
 
 export interface EntryFormResult {
+  // Stabilt id per öppnad dialog: ett omförsök sparar aldrig samma tid två gånger.
+  id: string;
   type: AttendanceEntryType;
   start: string;
   end: string;
@@ -71,15 +73,17 @@ export function EntryModal({
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const entryId = useRef(crypto.randomUUID()).current;
 
   async function submit(handler: (value: EntryFormResult) => Promise<void>) {
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
       const startIso = toIso(date, startTime);
       const endIso = toIso(endDate, endTime);
       if (new Date(endIso) <= new Date(startIso)) throw new Error("Sluttiden måste vara efter starttiden.");
-      await handler({ type, start: startIso, end: endIso, comment, reason });
+      await handler({ id: entryId, type, start: startIso, end: endIso, comment, reason });
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Kunde inte spara.");

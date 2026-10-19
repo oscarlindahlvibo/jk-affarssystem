@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { pageAll } from "./pageAll";
 import type { BillingExtraLine, BillingRate, BillingRateType, CarrierAssignment, WorkReport, WorkReportBilling } from "../types";
 import type { WorkReportInput } from "../lib/workReportEngine";
 
@@ -25,30 +26,25 @@ function toReport(row: Record<string, unknown>, cost: number | null): WorkReport
 
 export async function loadWorkReportData(canSeeFinance: boolean) {
   const db = client();
-  const reports = await db.from("work_reports").select("*").order("report_date", { ascending: false }).limit(5000);
-  check(reports.error);
+  const reports = await pageAll<Record<string, unknown>>((from, to) => db.from("work_reports").select("*").order("report_date", { ascending: false }).order("id").range(from, to));
   if (!canSeeFinance) {
     return {
-      reports: ((reports.data ?? []) as Record<string, unknown>[]).map((row) => toReport(row, null)),
+      reports: reports.map((row) => toReport(row, null)),
       billings: [] as WorkReportBilling[],
       rates: [] as BillingRate[],
       extraLines: [] as BillingExtraLine[],
     };
   }
   const [costs, billings, rates, extraLines] = await Promise.all([
-    db.from("work_report_costs").select("report_id, internal_cost"),
-    db.from("work_report_billing").select("*"),
-    db.from("billing_rates").select("*"),
-    db.from("billing_extra_lines").select("*").order("created_at"),
+    pageAll<{ report_id: string; internal_cost: number | string }>((from, to) => db.from("work_report_costs").select("report_id, internal_cost").order("report_id").range(from, to)),
+    pageAll<Record<string, unknown>>((from, to) => db.from("work_report_billing").select("*").order("report_id").range(from, to)),
+    pageAll<Record<string, unknown>>((from, to) => db.from("billing_rates").select("*").order("id").range(from, to)),
+    pageAll<Record<string, unknown>>((from, to) => db.from("billing_extra_lines").select("*").order("created_at").order("id").range(from, to)),
   ]);
-  check(costs.error);
-  check(billings.error);
-  check(rates.error);
-  check(extraLines.error);
-  const costByReport = new Map(((costs.data ?? []) as { report_id: string; internal_cost: number | string }[]).map((c) => [c.report_id, Number(c.internal_cost)]));
+  const costByReport = new Map(costs.map((c) => [c.report_id, Number(c.internal_cost)]));
   return {
-    reports: ((reports.data ?? []) as Record<string, unknown>[]).map((row) => toReport(row, costByReport.get(String(row.id)) ?? null)),
-    billings: ((billings.data ?? []) as Record<string, unknown>[]).map((row) => ({
+    reports: reports.map((row) => toReport(row, costByReport.get(String(row.id)) ?? null)),
+    billings: billings.map((row) => ({
       ...(row as unknown as WorkReportBilling),
       billable_hours: num(row.billable_hours),
       billable_distance_km: num(row.billable_distance_km),
@@ -57,8 +53,8 @@ export async function loadWorkReportData(canSeeFinance: boolean) {
       distance_rate: num(row.distance_rate),
       waiting_rate: num(row.waiting_rate),
     })),
-    rates: ((rates.data ?? []) as Record<string, unknown>[]).map((row) => ({ ...(row as unknown as BillingRate), unit_price: Number(row.unit_price) })),
-    extraLines: ((extraLines.data ?? []) as Record<string, unknown>[]).map((row) => ({
+    rates: rates.map((row) => ({ ...(row as unknown as BillingRate), unit_price: Number(row.unit_price) })),
+    extraLines: extraLines.map((row) => ({
       ...(row as unknown as BillingExtraLine),
       quantity: Number(row.quantity),
       unit_price: Number(row.unit_price),

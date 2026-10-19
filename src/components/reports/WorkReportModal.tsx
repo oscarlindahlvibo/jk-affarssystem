@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { Project, WorkReport } from "../../types";
 import { WORK_TYPES } from "../../types";
 import { useAuth } from "../../lib/auth";
@@ -35,6 +35,8 @@ export function WorkReportModal({ project, report, onClose }: { project: Project
   const [comment, setComment] = useState(report?.comment ?? "");
   const [taskId, setTaskId] = useState(report?.task_id ?? "");
   const [saving, setSaving] = useState(false);
+  // Samma id vid omförsök (t.ex. efter bortfallet nätverk) så att rapporten aldrig sparas två gånger.
+  const reportId = useRef(report?.id ?? crypto.randomUUID()).current;
   const [error, setError] = useState<string | null>(null);
 
   const activeProfiles = useMemo(() => profiles.filter((p) => p.status === "aktiv"), [profiles]);
@@ -54,6 +56,7 @@ export function WorkReportModal({ project, report, onClose }: { project: Project
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (saving) return;
     setError(null);
     const parsed = { hours: parseDecimal(hours), waiting: parseDecimal(waiting), cost: parseDecimal(cost) };
     if ([parsed.hours, distanceKm, parsed.waiting, parsed.cost].some((value) => value !== null && Number.isNaN(value))) {
@@ -68,7 +71,7 @@ export function WorkReportModal({ project, report, onClose }: { project: Project
     setSaving(true);
     try {
       await saveReport({
-        id: report?.id ?? crypto.randomUUID(),
+        id: reportId,
         project_id: project.id,
         task_id: taskId || null,
         report_date: date,
@@ -95,25 +98,28 @@ export function WorkReportModal({ project, report, onClose }: { project: Project
     <Modal open onClose={onClose} title={report ? "Ändra rapport" : "Rapportera arbete"} wide>
       <form onSubmit={submit} className="space-y-4">
         {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+        <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700"><span className="text-slate-500">Uppdrag:</span> <strong>{project.project_number}</strong> {project.name}</div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Datum">
             <input type="date" required className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />
           </Field>
-          <Field label="Utförare">
-            <select className={inputClass} value={performer} onChange={(e) => setPerformer(e.target.value)} disabled={!isManager}>
-              {!isManager && <option value={`profile:${currentProfile?.id ?? ""}`}>{currentProfile?.full_name ?? "Jag"}</option>}
-              {isManager && (
-                <>
-                  <optgroup label="Anställda">
-                    {activeProfiles.map((p) => <option key={p.id} value={`profile:${p.id}`}>{p.full_name}</option>)}
-                  </optgroup>
-                  <optgroup label="Extern transportör">
-                    {supplierOptions.map((s) => <option key={s.id} value={`supplier:${s.id}`}>{s.company_name}{projectSupplierIds.has(s.id) ? " (på projektet)" : ""}</option>)}
-                  </optgroup>
-                </>
-              )}
-            </select>
-          </Field>
+          {isManager && (
+            <Field label="Utförare">
+              <select className={inputClass} value={performer} onChange={(e) => setPerformer(e.target.value)} disabled={!isManager}>
+                {!isManager && <option value={`profile:${currentProfile?.id ?? ""}`}>{currentProfile?.full_name ?? "Jag"}</option>}
+                {isManager && (
+                  <>
+                    <optgroup label="Anställda">
+                      {activeProfiles.map((p) => <option key={p.id} value={`profile:${p.id}`}>{p.full_name}</option>)}
+                    </optgroup>
+                    <optgroup label="Extern transportör">
+                      {supplierOptions.map((s) => <option key={s.id} value={`supplier:${s.id}`}>{s.company_name}{projectSupplierIds.has(s.id) ? " (på projektet)" : ""}</option>)}
+                    </optgroup>
+                  </>
+                )}
+              </select>
+            </Field>
+          )}
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Arbetstid (timmar)">
@@ -135,6 +141,12 @@ export function WorkReportModal({ project, report, onClose }: { project: Project
             <input inputMode="decimal" className={inputClass} value={waiting} onChange={(e) => setWaiting(e.target.value)} placeholder="0" />
           </Field>
         </div>
+        <Field label="Kommentar">
+          <textarea className={`${inputClass} min-h-16 resize-y`} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Vad gjordes, eventuella avvikelser…" />
+        </Field>
+        <details className="rounded-lg border border-border px-3 py-2 text-sm" open={Boolean(report && (report.work_type !== "transport" || !report.billable || report.task_id))}>
+          <summary className="cursor-pointer font-medium text-slate-600">Fler val (typ av arbete, arbetsorder, debitering)</summary>
+          <div className="mt-3 space-y-3">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Typ av arbete">
             <select className={inputClass} value={workType} onChange={(e) => setWorkType(e.target.value)}>
@@ -148,9 +160,6 @@ export function WorkReportModal({ project, report, onClose }: { project: Project
             </select>
           </Field>
         </div>
-        <Field label="Kommentar">
-          <textarea className={`${inputClass} min-h-16 resize-y`} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Vad gjordes, eventuella avvikelser…" />
-        </Field>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-slate-700">
             <input type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} />
@@ -162,6 +171,8 @@ export function WorkReportModal({ project, report, onClose }: { project: Project
             </Field>
           )}
         </div>
+          </div>
+        </details>
         <p className="text-xs text-slate-500">Rapporterad tid hos kund påverkar aldrig någons lönegrundande arbetstid.</p>
         <div className="flex justify-end gap-2 border-t border-border pt-4">
           <Button type="button" variant="secondary" onClick={onClose}>Avbryt</Button>

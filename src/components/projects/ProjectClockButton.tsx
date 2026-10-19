@@ -52,7 +52,7 @@ export function ProjectClockButton({ project, className = "" }: { project: Proje
     }
   }
 
-  const label = runningHere ? "Stämplad här – byt uppgift" : openEntry ? "Byt stämpling hit" : "Stämpla in";
+  const label = runningHere ? "Projekttid pågår här – byt uppgift" : openEntry ? "Flytta projekttid hit" : "Starta projekttid";
   const Icon = openEntry ? Repeat : LogIn;
 
   return (
@@ -67,12 +67,12 @@ export function ProjectClockButton({ project, className = "" }: { project: Proje
       >
         {runningHere ? <Clock size={14} className="text-green-600" /> : <Icon size={14} />} {label}
       </Button>
-      <Modal open={open} onClose={() => setOpen(false)} title={openEntry ? "Byt stämpling till projektet" : "Stämpla in på projektet"}>
+      <Modal open={open} onClose={() => setOpen(false)} title={openEntry ? "Flytta projekttiden till projektet" : "Starta projekttid på projektet"}>
         <div className="space-y-4">
           <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">{project.project_number} · {project.name}</div>
           {openEntry && (
             <p className="text-xs text-slate-500">
-              Din pågående stämpling ({openEntry.project_label ?? "intern tid"}) avslutas nu och en ny startar på det här projektet.
+              Din pågående projekttid ({openEntry.project_label ?? "intern tid"}) avslutas nu och en ny startar på det här projektet.
             </p>
           )}
           {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
@@ -98,7 +98,7 @@ export function ProjectClockButton({ project, className = "" }: { project: Proje
           <div className="flex justify-end gap-2 border-t border-border pt-4">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Avbryt</Button>
             <Button type="button" disabled={busy || !effectiveCategory} onClick={() => void submit()}>
-              {openEntry ? <Repeat size={15} /> : <LogIn size={15} />} {openEntry ? "Byt hit" : "Stämpla in"}
+              {openEntry ? <Repeat size={15} /> : <LogIn size={15} />} {openEntry ? "Flytta hit" : "Starta projekttid"}
             </Button>
           </div>
         </div>

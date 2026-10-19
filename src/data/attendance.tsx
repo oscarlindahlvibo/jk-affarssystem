@@ -88,7 +88,7 @@ interface AttendanceShape {
   addEntries: (items: NewEntry[], userId?: string | null, reason?: string | null) => Promise<void>;
   changeEntry: (id: string, change: { type: AttendanceEntry["entry_type"]; start: string; end: string; comment: string }, reason: string) => Promise<void>;
   deleteEntry: (id: string, reason: string) => Promise<void>;
-  requestCorrection: (req: Omit<CorrectionRequest, "id">) => Promise<void>;
+  requestCorrection: (req: Omit<CorrectionRequest, "id"> & { id?: string }) => Promise<void>;
   decideCorrection: (id: string, approve: boolean, note: string) => Promise<void>;
   saveAbsence: (a: { id?: string; userId: string; date: string; kind: string; minutes: number; comment: string }, reason: string) => Promise<void>;
   deleteAbsence: (id: string, reason: string) => Promise<void>;
@@ -289,7 +289,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
   const deleteEntry: AttendanceShape["deleteEntry"] = useCallback((id, reason) => mutate(() => repo.rpcDeleteEntry(id, reason), (s, who) => engineDeleteEntry(s, who, id, reason)), [mutate]);
   const requestCorrection: AttendanceShape["requestCorrection"] = useCallback(
     (req) => {
-      const full = { ...req, id: crypto.randomUUID() };
+      const full = { ...req, id: req.id ?? crypto.randomUUID() };
       return mutate(() => repo.rpcRequestCorrection(full), (s, who) => engineRequest(s, who, full));
     },
     [mutate]

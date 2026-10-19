@@ -15,8 +15,11 @@ export function formatDecimal(value: number, digits = 2) {
   return value.toLocaleString("sv-SE", { minimumFractionDigits: 0, maximumFractionDigits: digits });
 }
 
+// Hela kronor visas utan decimaler, annars med öre (svenskt talformat: 1 234,50 kr).
 export function formatMoney(value: number) {
-  return `${Math.round(value).toLocaleString("sv-SE")} kr`;
+  const rounded = round2(value);
+  const whole = Number.isInteger(rounded);
+  return `${rounded.toLocaleString("sv-SE", { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 })} kr`;
 }
 
 export interface ResolvedRates {

@@ -87,6 +87,9 @@ select t.ok('attesten bär kvar den godkända regelkopian', (select (rule_snapsh
 
 -- Anställd 2 med pågående stämpling kan inte attesteras
 select t.as_user('a1000000-0000-0000-0000-000000000004');
+-- Testhook: tillåt ett daterat klockslag (i skarp drift gäller högst 15 min avvikelse från serverns tid).
+set app.max_clock_skew = '100 years';
 select attendance_clock_transition('c2000000-0000-0000-0000-000000000001', 'clockin', null, '2026-10-12T06:00:00Z');
+reset app.max_clock_skew;
 select t.as_user('a1000000-0000-0000-0000-000000000002');
 select t.fails('pågående stämpling blockerar attest', $$select payroll_statement_attest((select id from payroll_periods where name = 'Oktober 2026'), 'a1000000-0000-0000-0000-000000000004', '{}'::jsonb, '[]'::jsonb, 'x')$$, 'pågående');

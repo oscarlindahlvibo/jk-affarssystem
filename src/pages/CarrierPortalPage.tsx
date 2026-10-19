@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Clock, FileText, Loader2, LogOut, MapPin, Package, Pencil, Plus, Trash2, Truck } from "lucide-react";
 import type { CarrierAssignment } from "../types";
 import { WORK_TYPES } from "../types";
@@ -33,11 +33,13 @@ function ReportModal({
   const [workType, setWorkType] = useState(report?.work_type ?? "transport");
   const [comment, setComment] = useState(report?.comment ?? "");
   const [saving, setSaving] = useState(false);
+  // Samma id vid omförsök så att rapporten aldrig sparas två gånger (t.ex. efter bortfallet nätverk eller dubbelklick).
+  const reportId = useRef(report?.id ?? crypto.randomUUID()).current;
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!currentCarrierUser) return;
+    if (!currentCarrierUser || saving) return;
     setError(null);
     const h = parseDecimal(hours);
     const d = parseDecimal(distance);
@@ -48,7 +50,7 @@ function ReportModal({
     setSaving(true);
     try {
       await saveCarrierReport(currentCarrierUser, {
-        id: report?.id ?? crypto.randomUUID(),
+        id: reportId,
         project_id: assignment.id,
         task_id: null,
         report_date: date,
@@ -83,10 +85,15 @@ function ReportModal({
           </Field>
           <Field label="Väntetid (timmar)"><input inputMode="decimal" className={`${inputClass} !py-3`} value={waiting} onChange={(e) => setWaiting(e.target.value)} placeholder="0" /></Field>
         </div>
-        <Field label="Typ av arbete">
-          <select className={inputClass} value={workType} onChange={(e) => setWorkType(e.target.value)}>{WORK_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select>
-        </Field>
         <Field label="Kommentar"><textarea className={`${inputClass} min-h-16 resize-y`} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Vad gjordes, avvikelser…" /></Field>
+        <details className="rounded-lg border border-border px-3 py-2 text-sm" open={workType !== "transport"}>
+          <summary className="cursor-pointer font-medium text-slate-600">Fler val</summary>
+          <div className="mt-3">
+            <Field label="Typ av arbete">
+              <select className={inputClass} value={workType} onChange={(e) => setWorkType(e.target.value)}>{WORK_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select>
+            </Field>
+          </div>
+        </details>
         <div className="flex justify-end gap-2 border-t border-border pt-4">
           <Button type="button" variant="secondary" onClick={onClose}>Avbryt</Button>
           <Button type="submit" disabled={saving} className="!px-5 !py-3">{saving ? "Sparar..." : "Skicka rapport"}</Button>

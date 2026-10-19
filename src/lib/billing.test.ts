@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alreadyInvoiced, buildInvoiceBasis, kmToMil, milToKm, resolveRates, reportHasContent } from "./billing";
+import { alreadyInvoiced, buildInvoiceBasis, formatMoney, kmToMil, milToKm, resolveRates, reportHasContent } from "./billing";
 import type { BillingRate, WorkReport, WorkReportBilling } from "../types";
 
 function report(partial: Partial<WorkReport> & { id: string }): WorkReport {
@@ -126,5 +126,18 @@ describe("fakturaunderlag", () => {
     expect(milToKm(1.5)).toBe(15);
     expect(reportHasContent({ hours: null, distance_km: null, waiting_hours: 0.25 })).toBe(true);
     expect(reportHasContent({ hours: 0, distance_km: null, waiting_hours: null })).toBe(false);
+  });
+});
+
+describe("pengaformat och decimaler", () => {
+  it("visar öre när beloppet inte är jämnt och rundar till två decimaler", () => {
+    expect(formatMoney(5100)).toMatch(/^5\s100 kr$/);
+    expect(formatMoney(3827.25)).toMatch(/^3\s827,25 kr$/);
+    expect(formatMoney(0.1 + 0.2)).toBe("0,3 kr".replace("0,3", "0,30"));
+  });
+  it("kilometer blir mil med decimaler och räknas med projektpris före kundpris", () => {
+    expect(kmToMil(183)).toBeCloseTo(18.3, 5);
+    const rates = resolveRates([{ id: "p", org_id: "o", customer_id: null, project_id: "x", rate_type: "hours", unit_price: 900 }], [{ id: "c", org_id: "o", customer_id: "k", project_id: null, rate_type: "hours", unit_price: 800 }]);
+    expect(rates.hours).toEqual({ price: 900, source: "project" });
   });
 });
