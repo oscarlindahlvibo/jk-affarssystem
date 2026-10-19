@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import { pageAll } from "./pageAll";
+import { friendlyError, pageAll } from "./pageAll";
 import type {
   AttendanceAbsence, AttendanceAudit, AttendanceCorrection, AttendanceEntry, EmployeeTermsRow, OvertimeRuleSetRow,
   PayrollAdjustment, PayrollCodeMapping, PayrollExportRecord, PayrollLogRow, PayrollPeriod, PayrollStatement,
@@ -14,7 +14,7 @@ function client() {
 function check(error: { message: string } | null) {
   if (error) {
     if (error.message.includes("CLOCK_STATE_CONFLICT")) throw new Error("CLOCK_STATE_CONFLICT");
-    throw new Error(error.message);
+    throw new Error(friendlyError(error.message));
   }
 }
 

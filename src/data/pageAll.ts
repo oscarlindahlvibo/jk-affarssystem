@@ -9,9 +9,17 @@ export async function pageAll<T>(
   const rows: T[] = [];
   for (let from = 0; from < maxRows; from += PAGE_SIZE) {
     const { data, error } = await query(from, from + PAGE_SIZE - 1);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(friendlyError(error.message));
     rows.push(...(data ?? []));
     if ((data ?? []).length < PAGE_SIZE) break;
   }
   return rows;
+}
+
+// Nätverksfel ska aldrig se ut som att något sparats: tydligt svenskt meddelande i stället för "Failed to fetch".
+export function friendlyError(message: string): string {
+  if (/failed to fetch|networkerror|load failed|network request failed/i.test(message)) {
+    return "Kunde inte nå servern. Kontrollera nätverket. Ingenting har sparats – försök igen.";
+  }
+  return message;
 }

@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import { pageAll } from "./pageAll";
+import { friendlyError, pageAll } from "./pageAll";
 import type { BillingExtraLine, BillingRate, BillingRateType, CarrierAssignment, WorkReport, WorkReportBilling } from "../types";
 import type { WorkReportInput } from "../lib/workReportEngine";
 
@@ -9,7 +9,7 @@ function client() {
 }
 
 function check(error: { message: string } | null) {
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(friendlyError(error.message));
 }
 
 const num = (value: unknown) => (value === null || value === undefined ? null : Number(value));
