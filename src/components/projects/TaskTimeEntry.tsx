@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Clock } from "lucide-react";
 import type { ProjectTask } from "../../types";
 import { useStore } from "../../data/store";
-import { useTimeTracking } from "../../data/timeTracking";
 import { formatMinutes } from "../../lib/format";
 import { inputClass } from "../ui/Field";
 
@@ -12,14 +11,12 @@ function toHoursText(minutes: number | null | undefined) {
 
 export function TaskTimeEntry({ projectId, task, canEdit }: { projectId: string; task: ProjectTask; canEdit: boolean }) {
   const { updateTask } = useStore();
-  const { taskMinutes } = useTimeTracking();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const stamped = taskMinutes(task.id);
   const manual = task.time_spent_minutes ?? 0;
-  const total = stamped + manual;
+  const total = manual;
 
   function save() {
     const text = value.trim().replace(",", ".");
@@ -66,7 +63,6 @@ export function TaskTimeEntry({ projectId, task, canEdit }: { projectId: string;
         {logged ? (
           <span>
             Nedlagd tid: <span className="font-medium text-slate-700">{logged}</span>
-            {stamped > 0 && manual > 0 && <span className="text-slate-400"> (stämplat {formatMinutes(stamped)} + manuellt {formatMinutes(manual)})</span>}
           </span>
         ) : canEdit ? null : (
           <span>Ingen tid registrerad</span>

@@ -3,7 +3,6 @@ import { AuthProvider, useAuth } from "./lib/auth";
 import { PersonnelProvider } from "./data/personnel";
 import { GoogleDriveProvider } from "./lib/googleDriveContext";
 import { StoreProvider } from "./data/store";
-import { TimeTrackingProvider } from "./data/timeTracking";
 import { WorkReportsProvider } from "./data/workReports";
 import { AttendanceProvider } from "./data/attendance";
 import { SessionsProvider } from "./data/sessions";
@@ -21,7 +20,6 @@ import { DocumentsPage } from "./pages/DocumentsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { PersonnelPage } from "./pages/PersonnelPage";
 import { MyTasksPage } from "./pages/MyTasksPage";
-import { TimePage } from "./pages/TimePage";
 import { StampelklockaPage } from "./pages/StampelklockaPage";
 import { LoneunderlagPage } from "./pages/LoneunderlagPage";
 import { PayrollSettingsPage } from "./pages/PayrollSettingsPage";
@@ -87,7 +85,6 @@ function AppRoutes() {
           <RequireAuth>
             <GoogleDriveProvider>
               <StoreProvider>
-                <TimeTrackingProvider>
                   <WorkReportsProvider>
                     <AttendanceProvider>
                       <SessionsProvider>
@@ -95,7 +92,6 @@ function AppRoutes() {
                       </SessionsProvider>
                     </AttendanceProvider>
                   </WorkReportsProvider>
-                </TimeTrackingProvider>
               </StoreProvider>
             </GoogleDriveProvider>
           </RequireAuth>
@@ -106,7 +102,7 @@ function AppRoutes() {
         <Route element={<RequireInternal><AppLayout /></RequireInternal>}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/mina-uppgifter" element={<MyTasksPage />} />
-          <Route path="/tid" element={<TimePage />} />
+          <Route path="/tid" element={<Navigate to="/stampelklocka" replace />} />
           <Route path="/stampelklocka" element={<StampelklockaPage />} />
           <Route path="/loneunderlag" element={<LoneunderlagPage />} />
           <Route path="/installningar/lon" element={<PayrollSettingsPage />} />

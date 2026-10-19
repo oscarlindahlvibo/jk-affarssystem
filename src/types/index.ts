@@ -409,45 +409,6 @@ export interface Project {
   measurement_link?: MeasurementLink | null;
 }
 
-export type TimeEntryType = "work" | "break" | "lunch";
-
-export interface TimeCategory {
-  id: string;
-  org_id: string;
-  key: string;
-  label: string;
-  active: boolean;
-  sort_order: number;
-  is_builtin: boolean;
-}
-
-export interface TimeEntry {
-  id: string;
-  org_id: string;
-  user_id: string;
-  project_id: string | null;
-  project_label: string | null;
-  task_id: string | null;
-  category_key: string | null;
-  entry_type: TimeEntryType;
-  start_time: string;
-  end_time: string | null;
-  total_minutes: number;
-  comment: string;
-  source: "clock" | "manual";
-  edited_by: string | null;
-  edited_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface TimeTotalRow {
-  project_id: string;
-  task_id: string | null;
-  category_key: string | null;
-  minutes: number;
-}
-
 // ---- Rapporterat arbete, fakturaunderlag och transportörer ----
 
 export type WorkReportPerformerType = "employee" | "carrier";

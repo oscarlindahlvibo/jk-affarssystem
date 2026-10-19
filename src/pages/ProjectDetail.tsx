@@ -15,7 +15,6 @@ import { MeasurementPanel } from "../components/projects/MeasurementPanel";
 import { ProjectFormModal } from "../components/projects/NewProjectModal";
 import { TransportRuleList } from "../components/projects/TransportRuleList";
 import { FreightCalculatorPanel } from "../components/projects/FreightCalculatorPanel";
-import { ProjectTimePanel } from "../components/projects/ProjectTimePanel";
 import { ProjectClockButton } from "../components/projects/ProjectClockButton";
 import { WorkReportsPanel } from "../components/reports/WorkReportsPanel";
 import { InvoiceBasisPanel } from "../components/reports/InvoiceBasisPanel";
@@ -465,7 +464,6 @@ export function ProjectDetail() {
           />
           <FreightCalculatorPanel project={project} canApplyToFinance={permissions.canEditProjectFinance} />
           <TasksSection projectId={project.id} tasks={project.tasks ?? []} />
-          <ProjectTimePanel project={project} />
           <WorkReportsPanel project={project} />
           <InvoiceBasisPanel project={project} />
           <MeasurementPanel link={project.measurement_link} />

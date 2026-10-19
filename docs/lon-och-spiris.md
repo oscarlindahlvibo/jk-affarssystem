@@ -9,7 +9,6 @@ Status: byggt och verifierat lokalt/i testdatabas på grenen `feature/tid-lon-st
 | **Rapporterat arbete** (på projektet) | Timmar, mil, väntetid per uppdrag (`work_reports`) | Underlag för kundfakturering |
 | **Fakturaunderlag** (på projektet) | Debiterbara mängder × priser, justeringar, fakturerat/återstår | Faktura till kund |
 | **Löneunderlag** (`/loneunderlag`) | Attesterad arbetstid, övertid, frånvaro per löneperiod | Lönekörning |
-| **Projekttid (äldre)** (`/tid`) | Historik från den gamla projektklockan. Startas inte längre | Varken lön eller fakturering |
 
 Exempel: 07–17 stämplat = 10 h lön. Tre uppdrag med 6 + 5 + 4 = 15 fakturerbara timmar är avsiktligt och ger ingen varning. Det finns ingen spärr och ingen automatisk koppling åt något håll. Testas i `src/lib/workedVsBillable.integration.test.ts` och `supabase/tests/32_worked_vs_billable.sql` (bl.a. att löneunderlagets fingeravtryck inte ändras när fakturerbar tid justeras 4 → 6 h, att dubbeldebitering nekas och att flera chaufförer på samma projekt får egen lön).
 
@@ -20,7 +19,7 @@ Det finns en enda klocka att starta: **Stämpelklockan**. Under arbetsdagen:
 3. **Väntar / Sluta vänta** per uppdrag stämplar väntetid. Väntetid är arbetad tid för lön: den ligger redan inom stämplingen och ändrar ingenting i närvaron.
 4. **Klar med uppdraget** öppnar rapporten förifylld: arbetstid från klockan (raster avdragna och väntetid frånräknad, så väntetid inte debiteras två gånger), väntetid och uppdragets projekt. Man lägger bara till körsträcka (km eller mil) och sparar. Allt kan ändras. Uppdraget avslutas och rapporten sparas i samma databastransaktion (`session_finish`); misslyckas sparningen förblir uppdraget öppet.
 5. Stämpla ut. Man kan inte stämpla ut med pågående uppdrag i gränssnittet (avsluta eller avbryt dem först).
-Eftersom varje uppdrag rapporteras för sig och flera kan pågå samtidigt kan **fakturerbar tid bli högre än arbetad tid**. Det finns ingen spärr. Den gamla projektklockan startas inte längre; äldre registreringar ligger kvar som historik och en eventuellt pågående gammal stämpling kan fortfarande avslutas.
+Eftersom varje uppdrag rapporteras för sig och flera kan pågå samtidigt kan **fakturerbar tid bli högre än arbetad tid**. Det finns ingen spärr. Den gamla projektklockan ("Projekttid") är borttagen ur appen eftersom ingen tid var registrerad i den; `/tid` omdirigerar till Stämpelklockan. Databastabellerna från 0025 (`time_entries`, `time_categories`) ligger kvar orörda och oanvända.
 
 ## Löneflöde och skydd mot felaktigt underlag
 Preliminär → Inskickad → Attesterad → Granskad → Exporterad.
@@ -53,7 +52,7 @@ Alla RPC:er är `security definer`, kontrollerar `auth.uid()` + `status = 'aktiv
 
 ## Säkerhetsgranskning (fynd och åtgärder)
 Åtgärdade i 0027/0028/0029: serverkontroll av attest (ovan); samtidig fakturering kunde dubbeldebitera (rader låses nu med `for update`); en rapport kunde flyttas mellan projekt via återanvänt id; transportör kunde ändra rapport till annat uppdrag och rapportera på fakturerat/avbokat projekt; frånvarorad kunde skrivas över av annan organisation via känt id; frånvaro skrevs utan samma lås som stämpling; stämpling kunde backdateras (nu max 15 min från serverns tid, missad tid läggs in manuellt med orsak/logg); orimliga datum (före 2020) nekas; regelmallar valideras i databasen.
-Kvarstår/medvetet: alla interna användare kan läsa organisationens rapporterade arbete (inte kostnad/pris); anställd kan lägga in egen missad tid utan åldersgräns om perioden inte är attesterad (spåras i logg, kan begränsas); `time_entries` (äldre projekttid) laddas fortfarande med ett rader-tak som kan ge tyst trunkering om PostgREST `max_rows` är 1000 (äldre kod, orörd).
+Kvarstår/medvetet: alla interna användare kan läsa organisationens rapporterade arbete (inte kostnad/pris); anställd kan lägga in egen missad tid utan åldersgräns om perioden inte är attesterad (spåras i logg, kan begränsas).
 
 ## Spiris och export
 Stödda exporter: **CSV** (semikolon, decimalkomma, BOM, skydd mot formelinjektion), **XLSX** och **strukturerad JSON** (`jk.payroll-basis.v1`), alla med SHA-256-kontrollsumma, anställningsnummer, period, tidstyp, lönekod, timmar/minuter, status och rättelserader (negativa differenser stöds). Ingen filtyp utger sig för att vara Spiris-format.

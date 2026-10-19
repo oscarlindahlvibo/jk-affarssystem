@@ -9,7 +9,6 @@ const TITLE_BY_PATH: { pattern: string; title: string }[] = [
   { pattern: "/", title: "Dashboard" },
   { pattern: "/mina-uppgifter", title: "Mina uppgifter" },
   { pattern: "/stampelklocka", title: "Stämpelklocka" },
-  { pattern: "/tid", title: "Projekttid (äldre)" },
   { pattern: "/loneunderlag", title: "Löneunderlag" },
   { pattern: "/installningar/lon", title: "Löneinställningar" },
   { pattern: "/projekt", title: "Projekt" },
