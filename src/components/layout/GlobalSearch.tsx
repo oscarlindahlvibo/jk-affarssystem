@@ -2,6 +2,7 @@ import { useId, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useStore } from "../../data/store";
+import { projectSearchText } from "../../lib/projectSearch";
 
 export function GlobalSearch() {
   const { projects, customers, contactPersons, suppliers, isLoading, dataError } = useStore();
@@ -19,9 +20,7 @@ export function GlobalSearch() {
       return terms.every((term) => text.includes(term));
     };
     return [
-      ...projects.filter((p) => matches([p.project_number, p.name, p.customer?.company_name, p.customer_reference,
-        ...(p.locations ?? []).flatMap((l) => [l.name, l.address, l.company_name]),
-        ...(p.cargo_items ?? []).map((item) => item.description)]))
+      ...projects.filter((p) => terms.every((term) => projectSearchText(p).includes(term)))
         .slice(0, 5).map((p) => ({ key: `project-${p.id}`, title: `${p.project_number} · ${p.name}`, detail: `Projekt · ${p.status}`, to: `/projekt/${p.id}` })),
       ...customers.filter((c) => matches([c.company_name, c.org_number, c.email, c.phone]))
         .slice(0, 5).map((c) => ({ key: `customer-${c.id}`, title: c.company_name, detail: "Kund", to: `/kunder/${c.id}` })),

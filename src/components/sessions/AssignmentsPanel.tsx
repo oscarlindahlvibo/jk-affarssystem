@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Hourglass, Play, Square, X } from "lucide-react";
+import { Hourglass, History, Play, Square, X } from "lucide-react";
 import type { AssignmentSession, Project } from "../../types";
 import { useAttendance } from "../../data/attendance";
 import { useSessions } from "../../data/sessions";
@@ -7,6 +7,7 @@ import { useStore } from "../../data/store";
 import { useNow } from "../time/useNow";
 import { Button } from "../ui/Button";
 import { Field, inputClass } from "../ui/Field";
+import { Modal } from "../ui/Modal";
 import { Panel } from "../ui/Panel";
 import { WorkReportModal } from "../reports/WorkReportModal";
 import { ProjectPicker } from "./ProjectPicker";
@@ -100,6 +101,29 @@ function SessionCard({ session, project }: { session: AssignmentSession; project
   );
 }
 
+// Rapportera tid, väntetid och sträcka i efterhand på valfritt projekt, utan att ha startat ett uppdrag.
+function RetroReport() {
+  const [open, setOpen] = useState(false);
+  const [picked, setPicked] = useState<Project | null>(null);
+  const close = () => { setOpen(false); setPicked(null); };
+  return (
+    <>
+      <Button type="button" variant="secondary" className="w-full justify-center !py-3" onClick={() => setOpen(true)}>
+        <History size={16} /> Rapportera i efterhand
+      </Button>
+      <Modal open={open && !picked} onClose={close} title="Rapportera i efterhand">
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600">Välj projekt. Alla öppna projekt finns i listan, och sökningen letar bland alla projekt.</p>
+          <ProjectPicker value={null} onChange={setPicked} includeClosedOnSearch />
+        </div>
+      </Modal>
+      {picked && (
+        <WorkReportModal project={picked} report={null} title="Rapportera i efterhand" hint="Välj datum och fyll i timmar, väntetid och körsträcka. Det påverkar inte din stämplade arbetstid." lockPerformer onClose={close} />
+      )}
+    </>
+  );
+}
+
 export function AssignmentsPanel() {
   const sessions = useSessions();
   const attendance = useAttendance();
@@ -152,6 +176,7 @@ export function AssignmentsPanel() {
         {picked && !attendance.openEntry && <p className="text-xs text-slate-500">Du är inte instämplad. Du stämplas också in för dagen när uppdraget startar.</p>}
         {notice && <p role="status" className="text-sm text-emerald-700">{notice}</p>}
         {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        <div className="border-t border-border pt-3"><RetroReport /></div>
         <p className="text-xs text-slate-400">Väntetid räknas som arbetad tid för lön. Rapporterad (debiterbar) tid kan vara högre än arbetad tid, till exempel när du kör åt två projekt samtidigt.</p>
       </div>
     </Panel>
