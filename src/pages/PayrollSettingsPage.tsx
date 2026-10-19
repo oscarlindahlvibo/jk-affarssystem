@@ -94,6 +94,7 @@ function RuleSetsPanel() {
   const [name, setName] = useState(current?.name ?? "Ny regelmall");
   const [activeFlag, setActive] = useState(current?.active ?? true);
   const [rules, setRules] = useState<OvertimeRuleConfig>(() => normalizeRules(current?.config));
+  const [approvalNote, setApprovalNote] = useState("");
   useEffect(() => {
     const r = att.ruleSets.find((x) => x.id === id);
     setName(r?.name ?? "Ny regelmall");
@@ -111,6 +112,25 @@ function RuleSetsPanel() {
         <Field label="Namn"><input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} /></Field>
         <label className="flex items-center gap-2 pb-2 text-sm"><input type="checkbox" checked={activeFlag} onChange={(e) => setActive(e.target.checked)} /> Aktiv</label>
       </div>
+      {current && (
+        <div className={`mb-4 rounded-lg border px-3 py-3 text-sm ${current.approved_at ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-red-200 bg-red-50 text-red-800"}`}>
+          {current.approved_at ? (
+            <>Godkänd {new Date(current.approved_at).toLocaleDateString("sv-SE")}: {current.approval_note}. Ändras reglerna måste mallen godkännas på nytt.</>
+          ) : (
+            <>
+              <strong>Ej godkänd.</strong> Ingen person som använder denna mall kan attesteras. Godkänn först när reglerna bekräftats mot JK:s avtal.
+              {att.actor?.role === "admin" ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <input className={`${inputClass} max-w-sm`} placeholder="Grund, t.ex. kollektivavtal X, datum" value={approvalNote} onChange={(e) => setApprovalNote(e.target.value)} />
+                  <Button type="button" disabled={!approvalNote.trim()} onClick={() => run(async () => { await att.approveRuleSet(current.id, approvalNote); setApprovalNote(""); }, "Regelmallen är godkänd.")}>Godkänn regelmall</Button>
+                </div>
+              ) : (
+                <div className="mt-1 text-xs">Endast admin kan godkänna en regelmall.</div>
+              )}
+            </>
+          )}
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Pass över midnatt"><select className={inputClass} value={rules.dayBucketing} onChange={(e) => setRules({ ...rules, dayBucketing: e.target.value as OvertimeRuleConfig["dayBucketing"] })}><option value="start_day">Hela passet på startdagen</option><option value="split_midnight">Dela vid midnatt</option></select></Field>
         <Field label="Övertidsnivåer räknas"><select className={inputClass} value={rules.tierScope} onChange={(e) => setRules({ ...rules, tierScope: e.target.value as OvertimeRuleConfig["tierScope"] })}><option value="day">Per dag</option><option value="week">Ackumulerat per vecka</option></select></Field>
@@ -152,7 +172,7 @@ function RuleSetsPanel() {
       <div className="mt-4 space-y-3">
         {errors.length > 0 && <ul className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{errors.map((e) => <li key={e}>{e}</li>)}</ul>}
         <Msg msg={msg} />
-        <Button type="button" disabled={errors.length > 0 || !name.trim()} onClick={() => run(async () => { await att.saveRuleSet(id, name, rules as unknown as Record<string, unknown>, activeFlag); }, "Regelmallen sparades.")}>Spara regelmall</Button>
+        <Button type="button" disabled={errors.length > 0 || !name.trim()} onClick={() => run(async () => { const target = id ?? crypto.randomUUID(); await att.saveRuleSet(target, name, rules as unknown as Record<string, unknown>, activeFlag); setId(target); }, "Regelmallen sparades.")}>Spara regelmall</Button>
       </div>
     </Panel>
   );

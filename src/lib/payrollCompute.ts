@@ -36,6 +36,7 @@ export function validateRules(rules: OvertimeRuleConfig): string[] {
   const errors: string[] = [];
   const keys = new Set<string>();
   let previous = 0;
+  if (rules.tiers.length === 0) errors.push("Minst en övertidsnivå krävs.");
   rules.tiers.forEach((tier, index) => {
     if (!tier.key.trim()) errors.push(`Övertidsnivå ${index + 1} saknar nyckel.`);
     if (keys.has(tier.key)) errors.push(`Nivånyckeln "${tier.key}" används flera gånger.`);
@@ -90,6 +91,32 @@ export function computeEmployeePayroll(input: EmployeePayrollInput): PayrollResu
     termsVersions: versions,
   });
   return { ...result, hasTerms: versions.length > 0 };
+}
+
+// Skäl till att ett underlag inte går att beräkna tillförlitligt. Attest och export blockeras om listan inte är tom.
+// Servern (payroll_verify_computation i 0029) kontrollerar samma saker oberoende av klienten.
+export function payrollBlockers(args: {
+  userId: string;
+  result: PayrollResult & { hasTerms: boolean };
+  terms: EmployeeTermsRow[];
+  ruleSets: OvertimeRuleSetRow[];
+}): string[] {
+  const blockers = new Set<string>();
+  const rows = args.terms.filter((t) => t.user_id === args.userId);
+  for (const day of args.result.days) {
+    if (!(day.workedMinutes > 0 || Object.keys(day.absence).length > 0)) continue;
+    const row = rows.filter((t) => t.valid_from <= day.date).sort((a, b) => (a.valid_from < b.valid_from ? 1 : -1))[0];
+    if (!row) {
+      blockers.add(`Schema och regler saknas för ${day.date}. Ställ in dem under Inställningar → Lön.`);
+      continue;
+    }
+    const ruleSet = args.ruleSets.find((r) => r.id === row.rule_set_id);
+    if (!ruleSet) blockers.add(`Regelmall saknas för ${day.date}.`);
+    else if (!ruleSet.approved_at) blockers.add(`Regelmallen "${ruleSet.name}" är inte godkänd av admin. Löneunderlag kan inte attesteras förrän reglerna bekräftats.`);
+    else if (validateRules(normalizeRules(ruleSet.config)).length > 0) blockers.add(`Regelmallen "${ruleSet.name}" är ogiltig.`);
+  }
+  if (args.result.totals.openEntryIds.length > 0) blockers.add("Det finns en pågående stämpling i perioden.");
+  return [...blockers];
 }
 
 function addDays(date: string, days: number) {

@@ -15,7 +15,7 @@ const statement = (over: Partial<PayrollStatement> = {}): PayrollStatement => ({
 });
 const mapping = (time_type: string, external_code: string): PayrollCodeMapping => ({ id: time_type, org_id: "o", time_type, external_code, label: time_type });
 const employees = new Map([["u1", { userId: "u1", name: "Åsa Öberg", employmentNumber: "1001", externalRef: "S-17" }]]);
-const ruleSets = [{ id: "r", org_id: "o", name: "Std", active: true, config: { version: 1, tiers: [{ key: "overtime_1", label: "Övertid 1", upToMinutes: 120 }, { key: "overtime_2", label: "Övertid 2", upToMinutes: null }] } }];
+const ruleSets = [{ id: "r", org_id: "o", name: "Std", active: true, approved_at: "2026-01-01T00:00:00Z", approved_by: "u", approval_note: "test", config: { version: 1, tiers: [{ key: "overtime_1", label: "Övertid 1", upToMinutes: 120 }, { key: "overtime_2", label: "Övertid 2", upToMinutes: null }] } }];
 
 describe("exportformat", () => {
   it("formaterar svenska decimaler och minuter till timmar", () => {

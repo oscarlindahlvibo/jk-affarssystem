@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, Download, FileCheck2, Plus } from "lucide-react";
 import { useAttendance } from "../data/attendance";
@@ -12,6 +12,8 @@ import { ABSENCE_KINDS, type PayrollPeriod, type PayrollStatement, type PayrollS
 import type { PayrollDay, PayrollTotals } from "../lib/payrollRules";
 import { EXPORT_ADAPTERS } from "../lib/payrollExport/adapters";
 import { internalTimeTypes } from "../lib/payrollCompute";
+import { MissingCodesError } from "../lib/payrollExport/lines";
+import { addDays, localDateKey } from "../lib/stockholmTime";
 
 const STATUS_LABEL: Record<PayrollStatementStatus | "none", string> = {
   none: "Preliminär", preliminary: "Preliminär", submitted: "Inskickad av medarbetare", attested: "Attesterad", reviewed: "Granskad av lön", exported: "Exporterad",
@@ -118,6 +120,9 @@ export function LoneunderlagPage() {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [confirmForce, setConfirmForce] = useState(false);
   const [forceReason, setForceReason] = useState("");
+  const [missingCodes, setMissingCodes] = useState<string[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const today = localDateKey(new Date());
 
   const periods = [...att.state.periods].sort((a, b) => b.start_date.localeCompare(a.start_date));
   const period = periods.find((p) => p.id === periodId) ?? periods[0] ?? null;
@@ -125,6 +130,14 @@ export function LoneunderlagPage() {
     const all = profiles.filter((p) => p.org_id === att.actor?.orgId && p.status === "aktiv");
     return att.canViewPayroll ? all : all.filter((p) => p.id === att.actor?.id);
   }, [profiles, att.actor, att.canViewPayroll]);
+
+  const ensureRange = att.ensureRange;
+  useEffect(() => {
+    if (!period) return;
+    setLoadError(null);
+    ensureRange(addDays(period.start_date, -8), addDays(period.end_date, 1)).catch((e) => setLoadError(e instanceof Error ? e.message : "Kunde inte hämta perioden."));
+  }, [period, ensureRange]);
+  const periodLoaded = period ? att.isRangeLoaded(addDays(period.start_date, -8), addDays(period.end_date, 1)) : true;
 
   async function act(fn: () => Promise<void>, okText: string) {
     setBusy(true);
@@ -147,29 +160,39 @@ export function LoneunderlagPage() {
         const totals = (locked && statement?.totals ? statement.totals : live.totals) as unknown as PayrollTotals;
         const pendingAdjust = att.state.adjustments.some((a) => a.statement_id === statement?.id && a.export_id === null);
         const changedSince = Boolean(locked && statement?.totals && JSON.stringify([(statement.totals as unknown as PayrollTotals).workedMinutes, (statement.totals as unknown as PayrollTotals).ordinaryMinutes]) !== JSON.stringify([live.totals.workedMinutes, live.totals.ordinaryMinutes]));
-        return { person, statement, status: (statement?.status ?? "none") as PayrollStatementStatus | "none", totals, live, locked: Boolean(locked), pendingAdjust, changedSince };
+        // Schemalagda arbetsdagar som redan varit utan stämpling eller frånvaro (kan vara glömd stämpling).
+        const missingDays = live.hasTerms ? live.days.filter((d) => d.date < today && d.scheduledMinutes > 0 && d.workedMinutes === 0 && Object.keys(d.absence).length === 0).length : 0;
+        const blockers = locked ? [] : live.blockers;
+        return { person, statement, status: (statement?.status ?? "none") as PayrollStatementStatus | "none", totals, live, locked: Boolean(locked), pendingAdjust, changedSince, missingDays, blockers };
       })
     : [];
-  const shown = rows.filter((r) => (statusFilter === "alla" || r.status === statusFilter || (statusFilter === "preliminary" && r.status === "none")) && r.person.full_name.toLowerCase().includes(query.toLowerCase()));
+  const shown = rows.filter((r) => (statusFilter === "alla" || (statusFilter === "attention" && !r.locked && (r.missingDays > 0 || r.blockers.length > 0 || r.status === "submitted")) || r.status === statusFilter || (statusFilter === "preliminary" && r.status === "none")) && r.person.full_name.toLowerCase().includes(query.toLowerCase()));
 
   const exportable = shown.filter((r) => r.statement && (r.status === "reviewed" || r.status === "exported"));
   const chosen = exportable.filter((r) => picked.has(r.statement!.id));
   const alreadyExported = chosen.filter((r) => r.status === "exported" && !r.pendingAdjust);
   const adapter = EXPORT_ADAPTERS.find((a) => a.id === formatId)!;
 
-  async function doExport(force: boolean) {
+  async function doExport(force: boolean, allowMissingCodes = false) {
     if (!period) return;
     setBusy(true);
     setMessage(null);
     try {
-      const built = await att.exportPeriod({ periodId: period.id, statementIds: chosen.map((r) => r.statement!.id), formatId, force, reason: forceReason });
+      const built = await att.exportPeriod({ periodId: period.id, statementIds: chosen.map((r) => r.statement!.id), formatId, force, reason: forceReason, allowMissingCodes });
       download(built.fileName, built.mimeType, built.content);
       setPicked(new Set());
+      setMissingCodes(null);
       setConfirmForce(false);
       setForceReason("");
       setMessage({ kind: "ok", text: `Exporterade ${built.rowCount} rader till ${built.fileName}.${built.warnings.length ? ` Obs: ${built.warnings.join(" ")}` : ""}` });
     } catch (e) {
-      setMessage({ kind: "err", text: e instanceof Error ? e.message : "Exporten misslyckades." });
+      if (e instanceof MissingCodesError) {
+        setMissingCodes(e.labels);
+        setConfirmForce(false);
+        setMessage({ kind: "err", text: `${e.message} Ställ in lönekoder under Löneinställningar, eller bekräfta export utan kod nedan.` });
+      } else {
+        setMessage({ kind: "err", text: e instanceof Error ? e.message : "Exporten misslyckades." });
+      }
     } finally {
       setBusy(false);
     }
@@ -182,6 +205,13 @@ export function LoneunderlagPage() {
       </div>
       {message && <p className={`rounded-lg px-3 py-2 text-sm ${message.kind === "ok" ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`} role={message.kind === "err" ? "alert" : "status"}>{message.text}</p>}
       {att.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{att.error}</p>}
+      {loadError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{loadError}</p>}
+      {!periodLoaded && !loadError && <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-800" role="status">Hämtar arbetstid för perioden…</p>}
+      {att.ruleSets.length > 0 && !att.ruleSets.some((r) => r.approved_at) && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+          Inga övertidsregler är godkända ännu. Preliminära summor visas, men attest och export är spärrade tills admin har bekräftat reglerna under Löneinställningar.
+        </p>
+      )}
 
       <Panel title="Löneperiod">
         <div className="flex flex-wrap items-end gap-3">
@@ -209,6 +239,7 @@ export function LoneunderlagPage() {
               <input className={`${inputClass} max-w-56`} placeholder="Sök person" value={query} onChange={(e) => setQuery(e.target.value)} />
               <select className={`${inputClass} max-w-56`} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                 <option value="alla">Alla statusar</option>
+                <option value="attention">Behöver åtgärd (saknade dagar, blockerat, inskickat)</option>
                 {(["preliminary", "submitted", "attested", "reviewed", "exported"] as const).map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
               </select>
             </div>
@@ -232,11 +263,13 @@ export function LoneunderlagPage() {
                       {!r.locked && <div className="text-[11px] text-slate-400">beräknas löpande</div>}
                       {r.changedSince && <div className="flex items-center gap-1 text-[11px] text-amber-700"><AlertTriangle size={11} /> Stämplingar ändrade efter attest</div>}
                       {r.pendingAdjust && <div className="text-[11px] text-amber-700">Rättelse väntar på export</div>}
+                      {r.missingDays > 0 && <div className="text-[11px] text-amber-700">{r.missingDays} schemalagd(a) dag(ar) utan stämpling</div>}
+                      {r.blockers.length > 0 && !r.locked && att.canAttest && <div className="max-w-64 text-[11px] text-red-700">{r.blockers[0]}</div>}
                     </td>
                     <td className="whitespace-nowrap text-right">
                       <div className="flex flex-wrap justify-end gap-1.5 py-1">
                         {r.person.id === att.actor?.id && r.status !== "attested" && r.status !== "reviewed" && r.status !== "exported" && <Button type="button" variant="secondary" disabled={busy} onClick={() => act(() => att.submitStatement(period.id), "Din tid är inskickad för attest.")}>Skicka in</Button>}
-                        {att.canAttest && !r.locked && <Button type="button" disabled={busy} onClick={() => act(() => att.attest(period.id, r.person.id), `${r.person.full_name} är attesterad.`)}>Attestera</Button>}
+                        {att.canAttest && !r.locked && <Button type="button" disabled={busy || !periodLoaded || r.blockers.length > 0} title={r.blockers.join(" ")} onClick={() => act(() => att.attest(period.id, r.person.id), `${r.person.full_name} är attesterad.`)}>Attestera</Button>}
                         {att.canAttest && r.statement && (r.status === "attested" || r.status === "reviewed") && <Button type="button" variant="secondary" onClick={() => setUnattesting(r.statement)}>Öppna igen</Button>}
                         {att.isPayrollAdmin && r.status === "attested" && r.statement && <Button type="button" disabled={busy} onClick={() => act(() => att.review(r.statement!.id), "Markerad som granskad.")}><FileCheck2 size={14} /> Granska</Button>}
                         {att.isPayrollAdmin && r.status === "exported" && r.statement && r.changedSince && <Button type="button" variant="secondary" onClick={() => setAdjusting(r.statement)}>Registrera rättelse</Button>}
@@ -267,6 +300,12 @@ export function LoneunderlagPage() {
             <div className="space-y-3">
               <p className="text-sm text-slate-600">{chosen.length} person(er) valda. Endast granskade (eller exporterade med väntande rättelse) kan exporteras.</p>
               <Button type="button" disabled={busy || chosen.length === 0} onClick={() => (alreadyExported.length > 0 ? setConfirmForce(true) : doExport(false))}><Download size={15} /> Exportera valda</Button>
+              {missingCodes && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  Lönekod saknas för: <strong>{missingCodes.join(", ")}</strong>. Raderna får tom kod i filen och måste kompletteras manuellt.
+                  <div className="mt-2"><Button type="button" variant="secondary" disabled={busy} onClick={() => doExport(alreadyExported.length > 0, true)}>Exportera ändå utan lönekod</Button></div>
+                </div>
+              )}
             </div>
           </div>
           {att.state.exports.filter((x) => x.period_id === period.id).length > 0 && (
@@ -291,7 +330,7 @@ export function LoneunderlagPage() {
         <div className="space-y-3">
           <p className="text-sm text-amber-800"><AlertTriangle className="mr-1 inline" size={15} />Minst en vald person är redan exporterad för perioden. En ny export kan ge dubbla belopp i lönesystemet.</p>
           <Field label="Orsak till omexport (krävs)"><textarea className={inputClass} rows={2} value={forceReason} onChange={(e) => setForceReason(e.target.value)} /></Field>
-          <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setConfirmForce(false)}>Avbryt</Button><Button type="button" disabled={!forceReason.trim() || busy} onClick={() => doExport(true)}>Exportera ändå</Button></div>
+          <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setConfirmForce(false)}>Avbryt</Button><Button type="button" disabled={!forceReason.trim() || busy} onClick={() => doExport(true, Boolean(missingCodes))}>Exportera ändå</Button></div>
         </div>
       </Modal>
     </div>

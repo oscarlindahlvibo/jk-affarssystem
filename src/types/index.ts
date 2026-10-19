@@ -635,6 +635,10 @@ export interface OvertimeRuleSetRow {
   name: string;
   config: Record<string, unknown>;
   active: boolean;
+  // Satt av admin när regelmallen bekräftats mot JK:s avtal. Utan godkännande kan inget attesteras.
+  approved_at: string | null;
+  approved_by: string | null;
+  approval_note: string | null;
 }
 
 export interface EmployeeTermsRow {

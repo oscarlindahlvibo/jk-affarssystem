@@ -21,7 +21,17 @@ export interface BuildLinesArgs {
 }
 
 // Bygger exportrader från attesterade underlag. Lönekoder hämtas bara från JK:s egen mappning.
-export function buildExportLines(args: BuildLinesArgs): { lines: ExportLine[]; warnings: string[] } {
+// Kastas när rader saknar lönekod. Exporten får bara göras med uttrycklig bekräftelse.
+export class MissingCodesError extends Error {
+  labels: string[];
+  constructor(labels: string[]) {
+    super(`Lönekod saknas för: ${labels.join(", ")}.`);
+    this.name = "MissingCodesError";
+    this.labels = labels;
+  }
+}
+
+export function buildExportLines(args: BuildLinesArgs): { lines: ExportLine[]; warnings: string[]; missingCodes: string[] } {
   const types = new Map(internalTimeTypes(args.ruleSets).map((t) => [t.key, t.label]));
   const codeFor = new Map(args.mappings.map((m) => [m.time_type, m.external_code.trim()]));
   const unmapped = new Set<string>();
@@ -46,7 +56,7 @@ export function buildExportLines(args: BuildLinesArgs): { lines: ExportLine[]; w
 
   lines.sort((a, b) => a.employee.name.localeCompare(b.employee.name, "sv") || a.kind.localeCompare(b.kind) || a.timeType.localeCompare(b.timeType));
   const warnings = [...unmapped].map((label) => `Lönekod saknas för "${label}". Ställ in den under Inställningar → Lön innan filen används.`);
-  return { lines, warnings };
+  return { lines, warnings, missingCodes: [...unmapped] };
 }
 
 export function exportInput(period: PayrollPeriod, lines: ExportLine[], kind: ExportInput["exportKind"], exportedAt = new Date().toISOString()): ExportInput {

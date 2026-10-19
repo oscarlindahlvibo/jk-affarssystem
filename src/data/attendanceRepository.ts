@@ -26,40 +26,98 @@ export interface AttendanceData {
 
 const num = (value: unknown) => (value === null || value === undefined ? null : Number(value));
 
-export async function loadAttendanceData(): Promise<AttendanceData> {
+// PostgREST returnerar högst ett serverbestämt antal rader per anrop (normalt 1000) utan felmeddelande.
+// Alla listor hämtas därför sida för sida tills en sida är kortare än sidstorleken.
+const PAGE = 1000;
+async function pageAll<T>(query: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>, maxRows = 50000): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; from < maxRows; from += PAGE) {
+    const { data, error } = await query(from, from + PAGE - 1);
+    check(error);
+    rows.push(...(data ?? []));
+    if ((data ?? []).length < PAGE) break;
+  }
+  return rows;
+}
+
+export interface AttendanceWindow {
+  entries: AttendanceEntry[];
+  absences: AttendanceAbsence[];
+  audit: AttendanceAudit[];
+}
+
+// Närvaro, frånvaro och ändringslogg för ett datumintervall (svenska lokala datum). RLS gäller som vanligt.
+export async function loadAttendanceWindow(fromDate: string, toDate: string): Promise<AttendanceWindow> {
   const db = client();
-  const since = new Date(Date.now() - 400 * 86400000).toISOString();
-  const [entries, absences, corrections, audit, periods, statements, adjustments, exportsResult, log, terms, ruleSets, mappings] = await Promise.all([
-    db.from("attendance_entries").select("*").gte("start_time", since).order("start_time", { ascending: false }).limit(20000),
-    db.from("attendance_absences").select("*").gte("absence_date", since.slice(0, 10)),
-    db.from("attendance_corrections").select("*").order("created_at", { ascending: false }).limit(2000),
-    db.from("attendance_audit").select("*").gte("changed_at", since).order("changed_at", { ascending: false }).limit(5000),
-    db.from("payroll_periods").select("*").order("start_date", { ascending: false }),
-    db.from("payroll_statements").select("*"),
-    db.from("payroll_adjustments").select("*"),
-    db.from("payroll_exports").select("*").order("created_at", { ascending: false }),
-    db.from("payroll_log").select("*").order("at", { ascending: false }).limit(2000),
-    db.from("employee_terms").select("*").order("valid_from", { ascending: false }),
-    db.from("overtime_rule_sets").select("*").order("name"),
-    db.from("payroll_code_mappings").select("*").order("time_type"),
+  // Marginal i UTC så att pass nära midnatt (svensk tid) inte tappas; exakt filtrering sker i beräkningen.
+  const fromIso = new Date(`${fromDate}T00:00:00Z`).getTime() - 86400000;
+  const toIso = new Date(`${toDate}T00:00:00Z`).getTime() + 2 * 86400000;
+  const [entries, absences, audit] = await Promise.all([
+    pageAll<AttendanceEntry>((from, to) => db.from("attendance_entries").select("*").gte("start_time", new Date(fromIso).toISOString()).lt("start_time", new Date(toIso).toISOString()).order("start_time", { ascending: false }).order("id").range(from, to)),
+    pageAll<AttendanceAbsence>((from, to) => db.from("attendance_absences").select("*").gte("absence_date", fromDate).lte("absence_date", toDate).order("absence_date", { ascending: false }).order("id").range(from, to)),
+    pageAll<AttendanceAudit>((from, to) => db.from("attendance_audit").select("*").gte("changed_at", new Date(fromIso).toISOString()).lt("changed_at", new Date(toIso).toISOString()).order("changed_at", { ascending: false }).order("id").range(from, to)),
   ]);
-  for (const result of [entries, absences, corrections, audit, periods, statements, adjustments, exportsResult, log, terms, ruleSets, mappings]) check(result.error);
+  return { entries, absences, audit };
+}
+
+// Grunddata: perioder, sammanställningar, inställningar och de senaste dagarnas närvaro.
+// Äldre perioder hämtas vid behov med loadAttendanceWindow när användaren öppnar dem.
+export const DEFAULT_WINDOW_DAYS = 100;
+
+export async function loadAttendanceData(): Promise<AttendanceData & { windowFrom: string }> {
+  const db = client();
+  const today = new Date();
+  const windowFrom = new Date(today.getTime() - DEFAULT_WINDOW_DAYS * 86400000).toISOString().slice(0, 10);
+  const [window, corrections, periods, statements, adjustments, exportsRows, log, terms, ruleSets, mappings] = await Promise.all([
+    loadAttendanceWindow(windowFrom, today.toISOString().slice(0, 10)),
+    pageAll<AttendanceCorrection>((from, to) => db.from("attendance_corrections").select("*").order("created_at", { ascending: false }).order("id").range(from, to), 5000),
+    pageAll<PayrollPeriod>((from, to) => db.from("payroll_periods").select("*").order("start_date", { ascending: false }).order("id").range(from, to)),
+    pageAll<PayrollStatement>((from, to) => db.from("payroll_statements").select("*").order("id").range(from, to)),
+    pageAll<PayrollAdjustment>((from, to) => db.from("payroll_adjustments").select("*").order("id").range(from, to)),
+    pageAll<PayrollExportRecord>((from, to) => db.from("payroll_exports").select("*").order("created_at", { ascending: false }).order("id").range(from, to)),
+    pageAll<PayrollLogRow>((from, to) => db.from("payroll_log").select("*").order("at", { ascending: false }).order("id").range(from, to), 3000),
+    pageAll<EmployeeTermsRow>((from, to) => db.from("employee_terms").select("*").order("valid_from", { ascending: false }).order("id").range(from, to)),
+    pageAll<OvertimeRuleSetRow>((from, to) => db.from("overtime_rule_sets").select("*").order("name").order("id").range(from, to)),
+    pageAll<PayrollCodeMapping>((from, to) => db.from("payroll_code_mappings").select("*").order("time_type").order("id").range(from, to)),
+  ]);
   return {
+    windowFrom,
     state: {
-      entries: (entries.data ?? []) as AttendanceEntry[],
-      absences: (absences.data ?? []) as AttendanceAbsence[],
-      corrections: (corrections.data ?? []) as AttendanceCorrection[],
-      audit: (audit.data ?? []) as AttendanceAudit[],
-      periods: (periods.data ?? []) as PayrollPeriod[],
-      statements: (statements.data ?? []) as PayrollStatement[],
-      adjustments: ((adjustments.data ?? []) as PayrollAdjustment[]).map((a) => ({ ...a, minutes_delta: Number(a.minutes_delta) })),
-      exports: (exportsResult.data ?? []) as PayrollExportRecord[],
-      log: (log.data ?? []) as PayrollLogRow[],
+      entries: window.entries,
+      absences: window.absences,
+      corrections,
+      audit: window.audit,
+      periods,
+      statements,
+      adjustments: adjustments.map((a) => ({ ...a, minutes_delta: Number(a.minutes_delta) })),
+      exports: exportsRows,
+      log,
     },
-    terms: ((terms.data ?? []) as EmployeeTermsRow[]).map((t) => ({ ...t, weekly_hours: num(t.weekly_hours), employment_rate: num(t.employment_rate) })),
-    ruleSets: (ruleSets.data ?? []) as OvertimeRuleSetRow[],
-    mappings: (mappings.data ?? []) as PayrollCodeMapping[],
+    terms: terms.map((t) => ({ ...t, weekly_hours: num(t.weekly_hours), employment_rate: num(t.employment_rate) })),
+    ruleSets,
+    mappings,
   };
+}
+
+export interface PayrollInputs {
+  entries: AttendanceEntry[];
+  absences: AttendanceAbsence[];
+  terms: EmployeeTermsRow[];
+  ruleSets: OvertimeRuleSetRow[];
+  fingerprint: string;
+}
+
+// Färska rader + fingeravtryck från servern. Attest och rättelse räknas alltid på dessa.
+export async function rpcInputs(periodId: string, userId: string): Promise<PayrollInputs> {
+  const { data, error } = await client().rpc("payroll_inputs", { p_period_id: periodId, p_user_id: userId });
+  check(error);
+  const row = data as PayrollInputs;
+  return { ...row, terms: row.terms.map((t) => ({ ...t, weekly_hours: num(t.weekly_hours), employment_rate: num(t.employment_rate) })) };
+}
+
+export async function rpcApproveRuleSet(id: string, note: string) {
+  const { error } = await client().rpc("overtime_rule_set_approve", { p_id: id, p_note: note });
+  check(error);
 }
 
 export async function rpcClock(args: { id: string; action: ClockAction; expected: string | null; eventIso: string; comment?: string }) {
@@ -127,8 +185,8 @@ export async function rpcSubmitStatement(periodId: string) {
   check(error);
 }
 
-export async function rpcAttest(periodId: string, userId: string, totals: unknown, days: unknown, ruleSnapshot: unknown) {
-  const { error } = await client().rpc("payroll_statement_attest", { p_period_id: periodId, p_user_id: userId, p_totals: totals, p_days: days, p_rule_snapshot: ruleSnapshot });
+export async function rpcAttest(periodId: string, userId: string, totals: unknown, days: unknown, fingerprint: string) {
+  const { error } = await client().rpc("payroll_statement_attest", { p_period_id: periodId, p_user_id: userId, p_totals: totals, p_days: days, p_fingerprint: fingerprint });
   check(error);
 }
 
@@ -142,8 +200,8 @@ export async function rpcReview(statementId: string) {
   check(error);
 }
 
-export async function rpcRecordAdjustment(statementId: string, totals: unknown, days: unknown, reason: string) {
-  const { error } = await client().rpc("payroll_record_adjustment", { p_statement_id: statementId, p_new_totals: totals, p_new_days: days, p_reason: reason });
+export async function rpcRecordAdjustment(statementId: string, totals: unknown, days: unknown, reason: string, fingerprint: string) {
+  const { error } = await client().rpc("payroll_record_adjustment", { p_statement_id: statementId, p_new_totals: totals, p_new_days: days, p_reason: reason, p_fingerprint: fingerprint });
   check(error);
 }
 

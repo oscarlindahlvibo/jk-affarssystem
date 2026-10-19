@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AttendanceEntry, EmployeeTermsRow, OvertimeRuleSetRow, PayrollCodeMapping, PayrollPeriod, PayrollStatement } from "../types";
 import { useAuth } from "../lib/auth";
 import { useStore } from "./store";
@@ -24,10 +24,11 @@ import {
   type NewEntry,
 } from "../lib/attendanceEngine";
 import { attestStatement, createExport, createPeriod, recordAdjustment, reviewStatement, submitStatement, unattestStatement } from "../lib/payrollFlow";
-import { computeEmployeePayroll, normalizeRules } from "../lib/payrollCompute";
+import { computeEmployeePayroll, payrollBlockers } from "../lib/payrollCompute";
 import { DEFAULT_OVERTIME_RULES, type PayrollResult } from "../lib/payrollRules";
+import { addDays } from "../lib/stockholmTime";
 import { adapterById } from "../lib/payrollExport/adapters";
-import { buildExportLines, exportInput } from "../lib/payrollExport/lines";
+import { buildExportLines, exportInput, MissingCodesError } from "../lib/payrollExport/lines";
 import { sha256Hex } from "../lib/payrollExport/format";
 import type { BuiltExport, ExportEmployee } from "../lib/payrollExport/types";
 import * as repo from "./attendanceRepository";
@@ -64,7 +65,11 @@ export interface ExportOptions {
   formatId: string;
   force: boolean;
   reason: string;
+  // Måste uttryckligen sättas för att exportera rader utan lönekod.
+  allowMissingCodes?: boolean;
 }
+
+export type PayrollComputation = PayrollResult & { hasTerms: boolean; blockers: string[] };
 
 interface AttendanceShape {
   isLoading: boolean;
@@ -97,7 +102,11 @@ interface AttendanceShape {
   saveTerms: (terms: Omit<EmployeeTermsRow, "id" | "org_id">) => Promise<void>;
   saveRuleSet: (id: string | null, name: string, config: Record<string, unknown>, active: boolean) => Promise<void>;
   saveMapping: (timeType: string, code: string, label: string) => Promise<void>;
-  compute: (userId: string, period: Pick<PayrollPeriod, "start_date" | "end_date">) => PayrollResult & { hasTerms: boolean };
+  compute: (userId: string, period: Pick<PayrollPeriod, "start_date" | "end_date">) => PayrollComputation;
+  // Säkerställer att närvaro för intervallet är inläst (äldre perioder hämtas vid behov).
+  ensureRange: (from: string, to: string) => Promise<void>;
+  isRangeLoaded: (from: string, to: string) => boolean;
+  approveRuleSet: (id: string, note: string) => Promise<void>;
   statementFor: (periodId: string, userId: string) => PayrollStatement | null;
   employeeInfo: (userId: string) => ExportEmployee;
   refresh: () => Promise<void>;
@@ -108,7 +117,7 @@ const Ctx = createContext<AttendanceShape | null>(null);
 function mockSettings(orgId: string, userIds: string[]): Settings {
   const ruleSetId = "mock-rules";
   return {
-    ruleSets: [{ id: ruleSetId, org_id: orgId, name: "Standard (exempel för test)", config: DEFAULT_OVERTIME_RULES as unknown as Record<string, unknown>, active: true }],
+    ruleSets: [{ id: ruleSetId, org_id: orgId, name: "EXEMPEL – ej bekräftade avtalsregler", config: DEFAULT_OVERTIME_RULES as unknown as Record<string, unknown>, active: true, approved_at: null, approved_by: null, approval_note: null }],
     mappings: [],
     terms: userIds.map((userId, index) => ({
       id: `mock-terms-${userId}`, org_id: orgId, user_id: userId, valid_from: "2026-01-01", employment_number: String(1001 + index), employment_type: "tillsvidare",
@@ -127,13 +136,53 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(() => (isSupabaseConfigured ? { terms: [], ruleSets: [], mappings: [] } : readJson<Settings | null>(MOCK_SETTINGS_KEY, null) ?? { terms: [], ruleSets: [], mappings: [] }));
   const [isLoading, setIsLoading] = useState(isSupabaseConfigured);
   const [error, setError] = useState<string | null>(null);
+  // Senaste tillstånd även mellan renderingar, så två snabba åtgärder i mockläget inte skriver över varandra.
+  const stateRef = useRef(state);
+  const commit = useCallback((next: AttendanceState) => {
+    stateRef.current = next;
+    setState(next);
+  }, []);
+  // Intervall (lokala datum) vars närvaro är inläst. Standard är de senaste dagarna; äldre hämtas vid behov.
+  const rangesRef = useRef<{ from: string; to: string }[]>([]);
+  const [rangeVersion, setRangeVersion] = useState(0);
+
+  const mergeWindow = useCallback((base: AttendanceState, window: repo.AttendanceWindow): AttendanceState => {
+    const byId = <T extends { id: string | number }>(existing: T[], incoming: T[]) => {
+      const map = new Map(existing.map((row) => [row.id, row]));
+      for (const row of incoming) map.set(row.id, row);
+      return [...map.values()];
+    };
+    return { ...base, entries: byId(base.entries, window.entries), absences: byId(base.absences, window.absences), audit: byId(base.audit, window.audit) };
+  }, []);
 
   const reload = useCallback(async () => {
     if (!isSupabaseConfigured || !active) return;
     const data = await repo.loadAttendanceData();
-    setState(data.state);
+    let next = data.state;
+    // Behåll tidigare inlästa äldre intervall (färska rader ersätter gamla).
+    const extra = rangesRef.current.filter((r) => r.from < data.windowFrom);
+    for (const range of extra) next = mergeWindow(next, await repo.loadAttendanceWindow(range.from, range.to));
+    rangesRef.current = [{ from: data.windowFrom, to: "9999-12-31" }, ...extra];
+    commit(next);
+    setRangeVersion((v) => v + 1);
     setSettings({ terms: data.terms, ruleSets: data.ruleSets, mappings: data.mappings });
-  }, [active]);
+  }, [active, commit, mergeWindow]);
+
+  const isRangeLoaded = useCallback(
+    (from: string, to: string) => !isSupabaseConfigured || rangesRef.current.some((r) => r.from <= from && r.to >= to),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rangeVersion]
+  );
+  const ensureRange = useCallback(
+    async (from: string, to: string) => {
+      if (!isSupabaseConfigured || isRangeLoaded(from, to)) return;
+      const window = await repo.loadAttendanceWindow(from, to);
+      commit(mergeWindow(stateRef.current, window));
+      rangesRef.current = [...rangesRef.current, { from, to }];
+      setRangeVersion((v) => v + 1);
+    },
+    [commit, isRangeLoaded, mergeWindow]
+  );
 
   useEffect(() => {
     if (!isSupabaseConfigured || !active) return;
@@ -208,10 +257,9 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
         await reload();
         return;
       }
-      const next = mock(state, who);
-      setState(next);
+      commit(mock(stateRef.current, who));
     },
-    [reload, requireActor, state]
+    [commit, reload, requireActor]
   );
 
   const clock: AttendanceShape["clock"] = useCallback(
@@ -254,44 +302,74 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
   const submit: AttendanceShape["submitStatement"] = useCallback((periodId) => mutate(() => repo.rpcSubmitStatement(periodId), (s, who) => submitStatement(s, who, periodId)), [mutate]);
 
   const compute: AttendanceShape["compute"] = useCallback(
-    (userId, period) =>
-      computeEmployeePayroll({
+    (userId, period) => {
+      const result = computeEmployeePayroll({
         userId, periodStart: period.start_date, periodEnd: period.end_date, entries: state.entries, absences: state.absences, terms: settings.terms, ruleSets: settings.ruleSets,
-      }),
-    [state.entries, state.absences, settings.terms, settings.ruleSets]
+      });
+      const blockers = payrollBlockers({ userId, result, terms: settings.terms, ruleSets: settings.ruleSets });
+      if (!isRangeLoaded(addDays(period.start_date, -8), addDays(period.end_date, 1))) blockers.push("Perioden är inte fullständigt inläst ännu. Vänta tills hämtningen är klar.");
+      return { ...result, blockers };
+    },
+    [state.entries, state.absences, settings.terms, settings.ruleSets, isRangeLoaded]
   );
 
   const statementFor: AttendanceShape["statementFor"] = useCallback((periodId, userId) => visible.statements.find((s) => s.period_id === periodId && s.user_id === userId) ?? null, [visible.statements]);
 
+  // Attest och rättelse räknas på färska rader från servern tillsammans med ett fingeravtryck. Servern
+  // verifierar fingeravtryck, arbetad tid, rast och frånvaro innan underlaget sparas (se 0029).
+  const computeFresh = useCallback(
+    async (periodId: string, userId: string, period: PayrollPeriod) => {
+      const inputs = await repo.rpcInputs(periodId, userId);
+      const result = computeEmployeePayroll({ userId, periodStart: period.start_date, periodEnd: period.end_date, entries: inputs.entries, absences: inputs.absences, terms: inputs.terms, ruleSets: inputs.ruleSets });
+      const blockers = payrollBlockers({ userId, result, terms: inputs.terms, ruleSets: inputs.ruleSets });
+      if (!result.hasTerms) blockers.unshift("Personen saknar schema och regler. Ställ in dem under Inställningar → Lön.");
+      if (blockers.length > 0) throw new Error(blockers.join(" "));
+      return { inputs, result, days: result.days.map((day) => ({ ...day })) };
+    },
+    []
+  );
+
   const attest: AttendanceShape["attest"] = useCallback(
     async (periodId, userId) => {
-      const period = state.periods.find((p) => p.id === periodId);
+      const who = requireActor();
+      const period = stateRef.current.periods.find((p) => p.id === periodId);
       if (!period) throw new Error("Löneperioden hittades inte.");
+      if (isSupabaseConfigured) {
+        const { inputs, result, days } = await computeFresh(periodId, userId, period);
+        await repo.rpcAttest(periodId, userId, result.totals, days, inputs.fingerprint);
+        await reload();
+        return;
+      }
       const result = compute(userId, period);
       if (!result.hasTerms) throw new Error("Personen saknar schema och regler. Ställ in dem under Inställningar → Lön innan attestering.");
-      if (result.totals.openEntryIds.length > 0) throw new Error("Personen har en pågående stämpling i perioden.");
-      const snapshot = { computedAt: new Date().toISOString(), rules: normalizeRules(null) };
+      if (result.blockers.length > 0) throw new Error(result.blockers.join(" "));
       const days = result.days.map((day) => ({ ...day }));
-      await mutate(() => repo.rpcAttest(periodId, userId, result.totals, days, snapshot), (s, who) => attestStatement(s, who, periodId, userId, result.totals as unknown as Record<string, unknown>, days, snapshot));
+      const snapshot = { verifiedAt: new Date().toISOString(), ruleSets: settings.ruleSets, terms: settings.terms.filter((t) => t.user_id === userId) };
+      commit(attestStatement(stateRef.current, who, periodId, userId, result.totals as unknown as Record<string, unknown>, days, snapshot));
     },
-    [compute, mutate, state.periods]
+    [commit, compute, computeFresh, reload, requireActor, settings.ruleSets, settings.terms]
   );
   const unattest: AttendanceShape["unattest"] = useCallback((id, reason) => mutate(() => repo.rpcUnattest(id, reason), (s, who) => unattestStatement(s, who, id, reason)), [mutate]);
   const review: AttendanceShape["review"] = useCallback((id) => mutate(() => repo.rpcReview(id), (s, who) => reviewStatement(s, who, id)), [mutate]);
 
   const recordAdjustmentAction: AttendanceShape["recordAdjustment"] = useCallback(
     async (statementId, reason) => {
-      const statement = state.statements.find((s) => s.id === statementId);
-      const period = statement ? state.periods.find((p) => p.id === statement.period_id) : null;
+      const who = requireActor();
+      const statement = stateRef.current.statements.find((s) => s.id === statementId);
+      const period = statement ? stateRef.current.periods.find((p) => p.id === statement.period_id) : null;
       if (!statement || !period) throw new Error("Sammanställningen hittades inte.");
+      if (isSupabaseConfigured) {
+        const { inputs, result, days } = await computeFresh(period.id, statement.user_id, period);
+        await repo.rpcRecordAdjustment(statementId, result.totals, days, reason, inputs.fingerprint);
+        await reload();
+        return;
+      }
       const result = compute(statement.user_id, period);
+      if (result.blockers.length > 0) throw new Error(result.blockers.join(" "));
       const days = result.days.map((day) => ({ ...day }));
-      await mutate(
-        () => repo.rpcRecordAdjustment(statementId, result.totals, days, reason),
-        (s, who) => recordAdjustment(s, who, statementId, result.totals as unknown as Record<string, unknown>, days, reason).state
-      );
+      commit(recordAdjustment(stateRef.current, who, statementId, result.totals as unknown as Record<string, unknown>, days, reason).state);
     },
-    [compute, mutate, state.periods, state.statements]
+    [commit, compute, computeFresh, reload, requireActor]
   );
 
   const employeeInfo: AttendanceShape["employeeInfo"] = useCallback(
@@ -319,17 +397,20 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
       const kind = correctionOnly.length > 0 && periodStatements.length === 0 ? "correction" : periodStatements.some((s) => s.status === "exported") ? "reexport" : "regular";
       const built = adapterById(options.formatId).build(exportInput(period, lines, kind));
       built.warnings = [...new Set([...periodPart.warnings, ...correctionPart.warnings])];
+      const missing = [...new Set([...periodPart.missingCodes, ...correctionPart.missingCodes])];
+      if (missing.length > 0 && !options.allowMissingCodes) throw new MissingCodesError(missing);
+      if (statements.some((s) => !s.totals || !s.rule_snapshot)) throw new Error("Någon sammanställning saknar verifierat underlag och kan inte exporteras.");
       const checksum = await sha256Hex(built.content);
       const request = { periodId: options.periodId, statementIds: options.statementIds, format: options.formatId, checksum, rowCount: built.rowCount, force: options.force, reason: options.reason };
       if (isSupabaseConfigured) {
         await repo.rpcCreateExport(request);
         await reload();
       } else {
-        setState(createExport(state, who, request).state);
+        commit(createExport(stateRef.current, who, request).state);
       }
       return built;
     },
-    [employeeInfo, reload, requireActor, settings.mappings, settings.ruleSets, state]
+    [commit, employeeInfo, reload, requireActor, settings.mappings, settings.ruleSets, state]
   );
 
   const saveTerms: AttendanceShape["saveTerms"] = useCallback(
@@ -360,9 +441,26 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
         return;
       }
       setSettings((prev) => {
-        const row: OvertimeRuleSetRow = { id: id ?? crypto.randomUUID(), org_id: who.orgId, name: name.trim(), config, active: activeFlag };
+        const previous = prev.ruleSets.find((r) => r.id === id);
+        const unchanged = previous && JSON.stringify(previous.config) === JSON.stringify(config);
+        const row: OvertimeRuleSetRow = { id: id ?? crypto.randomUUID(), org_id: who.orgId, name: name.trim(), config, active: activeFlag, approved_at: unchanged ? previous.approved_at : null, approved_by: unchanged ? previous.approved_by : null, approval_note: unchanged ? previous.approval_note : null };
         return { ...prev, ruleSets: prev.ruleSets.some((r) => r.id === row.id) ? prev.ruleSets.map((r) => (r.id === row.id ? row : r)) : [...prev.ruleSets, row] };
       });
+    },
+    [reload, requireActor]
+  );
+
+  const approveRuleSet: AttendanceShape["approveRuleSet"] = useCallback(
+    async (id, note) => {
+      const who = requireActor();
+      if (who.role !== "admin") throw new Error("Endast admin kan godkänna en regelmall.");
+      if (!note.trim()) throw new Error("Ange vad godkännandet grundar sig på (t.ex. avtal och datum).");
+      if (isSupabaseConfigured) {
+        await repo.rpcApproveRuleSet(id, note);
+        await reload();
+        return;
+      }
+      setSettings((prev) => ({ ...prev, ruleSets: prev.ruleSets.map((r) => (r.id === id ? { ...r, approved_at: new Date().toISOString(), approved_by: who.id, approval_note: note.trim() } : r)) }));
     },
     [reload, requireActor]
   );
@@ -393,7 +491,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     isLoading, error, actor, canAttest, isPayrollAdmin, canViewPayroll, state: visible, ...visibleSettings, myEntries, openEntry,
     clock, addEntries, changeEntry, deleteEntry, requestCorrection, decideCorrection, saveAbsence, deleteAbsence,
     createPeriod: createPeriodAction, submitStatement: submit, attest, unattest, review, recordAdjustment: recordAdjustmentAction,
-    exportPeriod, saveTerms, saveRuleSet, saveMapping, compute, statementFor, employeeInfo, refresh,
+    exportPeriod, saveTerms, saveRuleSet, saveMapping, compute, ensureRange, isRangeLoaded, approveRuleSet, statementFor, employeeInfo, refresh,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

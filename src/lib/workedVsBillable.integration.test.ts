@@ -16,7 +16,7 @@ const driver: Actor = { id: "u-anna", orgId: ORG, role: "lasare" };
 const driver2: Actor = { id: "u-bo", orgId: ORG, role: "lasare" };
 const asReporter = (actor: Actor, fullName: string): ReportActor => ({ id: actor.id, orgId: ORG, role: actor.role, fullName });
 
-const ruleSets: OvertimeRuleSetRow[] = [{ id: "rs1", org_id: ORG, name: "Test", config: DEFAULT_OVERTIME_RULES as unknown as Record<string, unknown>, active: true }];
+const ruleSets: OvertimeRuleSetRow[] = [{ id: "rs1", org_id: ORG, name: "Test", config: DEFAULT_OVERTIME_RULES as unknown as Record<string, unknown>, active: true, approved_at: '2026-01-01T00:00:00Z', approved_by: 'u', approval_note: 'test' }];
 const terms = (userId: string): EmployeeTermsRow => ({
   id: `t-${userId}`, org_id: ORG, user_id: userId, valid_from: "2026-01-01", employment_number: null, employment_type: "tillsvidare", weekly_hours: 40, employment_rate: 100,
   schedule: { mon: 480, tue: 480, wed: 480, thu: 480, fri: 480, sat: 0, sun: 0 }, rule_set_id: "rs1", external_employee_ref: null, note: null,
