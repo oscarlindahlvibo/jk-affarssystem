@@ -14,7 +14,7 @@ import {
 } from "./workReportRepository";
 import { MOCK_BILLING_KEY, MOCK_REPORTS_KEY, readJson } from "./workReports";
 
-export type CarrierReportInput = Pick<WorkReportInput, "id" | "project_id" | "task_id" | "report_date" | "hours" | "distance_km" | "waiting_hours" | "work_type" | "comment">;
+export type CarrierReportInput = Pick<WorkReportInput, "id" | "project_id" | "task_id" | "report_date" | "hours" | "distance_km" | "waiting_hours" | "work_type" | "comment" | "report_start" | "report_end">;
 
 interface MockProjectLike {
   id: string;
@@ -71,6 +71,8 @@ function mockReports(carrier: CarrierUser): CarrierReportRow[] {
         project_id: r.project_id,
         task_id: r.task_id,
         report_date: r.report_date,
+        report_start: r.report_start ?? null,
+        report_end: r.report_end ?? null,
         hours: r.hours,
         distance_km: r.distance_km,
         waiting_hours: r.waiting_hours,

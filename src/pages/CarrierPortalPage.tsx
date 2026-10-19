@@ -8,6 +8,8 @@ import type { CarrierReportRow } from "../data/workReportRepository";
 import { formatDecimal, kmToMil, KM_PER_MIL } from "../lib/billing";
 import { decimalText, parseDecimal } from "../lib/numberInput";
 import { localDateKey } from "../lib/stockholmTime";
+import { formatTimeRange, normalizeTime } from "../lib/reportTimes";
+import { TimeFields, useAutoHours } from "../components/reports/TimeFields";
 import { Button } from "../components/ui/Button";
 import { Field, inputClass } from "../components/ui/Field";
 import { Modal } from "../components/ui/Modal";
@@ -32,6 +34,9 @@ function ReportModal({
   const [waiting, setWaiting] = useState(decimalText(report?.waiting_hours));
   const [workType, setWorkType] = useState(report?.work_type ?? "transport");
   const [comment, setComment] = useState(report?.comment ?? "");
+  const [startTime, setStartTime] = useState(normalizeTime(report?.report_start) ?? "");
+  const [endTime, setEndTime] = useState(normalizeTime(report?.report_end) ?? "");
+  const auto = useAutoHours(setHours, Boolean(report?.hours));
   const [saving, setSaving] = useState(false);
   // Samma id vid omförsök så att rapporten aldrig sparas två gånger (t.ex. efter bortfallet nätverk eller dubbelklick).
   const reportId = useRef(report?.id ?? crypto.randomUUID()).current;
@@ -47,6 +52,7 @@ function ReportModal({
     if ([h, d, w].some((v) => v !== null && Number.isNaN(v))) return setError("Kontrollera att siffrorna är rätt ifyllda (t.ex. 4,5).");
     const km = d === null ? null : unit === "mil" ? d * KM_PER_MIL : d;
     if ((h ?? 0) <= 0 && (km ?? 0) <= 0 && (w ?? 0) <= 0) return setError("Ange minst tid, körsträcka eller väntetid.");
+    if (Boolean(startTime) !== Boolean(endTime)) return setError("Ange både start- och sluttid, eller lämna båda tomma.");
     setSaving(true);
     try {
       await saveCarrierReport(currentCarrierUser, {
@@ -54,6 +60,8 @@ function ReportModal({
         project_id: assignment.id,
         task_id: null,
         report_date: date,
+        report_start: startTime || null,
+        report_end: endTime || null,
         hours: h,
         distance_km: km,
         waiting_hours: w,
@@ -75,15 +83,22 @@ function ReportModal({
         <p className="text-sm text-slate-600">{assignment.project_number} · {assignment.name}</p>
         {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
         <Field label="Datum"><input type="date" required className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+        <TimeFields
+          big
+          start={startTime}
+          end={endTime}
+          onStart={(v) => { setStartTime(v); auto.recompute(v, endTime, waiting); }}
+          onEnd={(v) => { setEndTime(v); auto.recompute(startTime, v, waiting); }}
+        />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Field label="Arbetstid (timmar)"><input inputMode="decimal" className={`${inputClass} !py-3`} value={hours} onChange={(e) => setHours(e.target.value)} placeholder="t.ex. 4,5" /></Field>
+          <Field label="Arbetstid (timmar)"><input inputMode="decimal" className={`${inputClass} !py-3`} value={hours} onChange={(e) => { setHours(e.target.value); auto.hoursChanged(e.target.value); }} placeholder="t.ex. 4,5" /></Field>
           <Field label="Körsträcka">
             <div className="flex gap-2">
               <input inputMode="decimal" className={`${inputClass} !py-3`} value={distance} onChange={(e) => setDistance(e.target.value)} placeholder="0" />
               <select className={`${inputClass} !w-24`} value={unit} onChange={(e) => setUnit(e.target.value as "km" | "mil")} aria-label="Enhet"><option value="km">km</option><option value="mil">mil</option></select>
             </div>
           </Field>
-          <Field label="Väntetid (timmar)"><input inputMode="decimal" className={`${inputClass} !py-3`} value={waiting} onChange={(e) => setWaiting(e.target.value)} placeholder="0" /></Field>
+          <Field label="Väntetid (timmar)"><input inputMode="decimal" className={`${inputClass} !py-3`} value={waiting} onChange={(e) => { setWaiting(e.target.value); auto.recompute(startTime, endTime, e.target.value); }} placeholder="0" /></Field>
         </div>
         <Field label="Kommentar"><textarea className={`${inputClass} min-h-16 resize-y`} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Vad gjordes, avvikelser…" /></Field>
         <details className="rounded-lg border border-border px-3 py-2 text-sm" open={workType !== "transport"}>
@@ -198,7 +213,7 @@ export function CarrierPortalPage() {
                           <div className="min-w-0">
                             <div className="font-medium text-slate-700">{r.report_date}</div>
                             <div className="text-slate-600">
-                              {[r.hours ? `${formatDecimal(r.hours)} h` : null, r.distance_km ? `${formatDecimal(kmToMil(r.distance_km))} mil` : null, r.waiting_hours ? `väntetid ${formatDecimal(r.waiting_hours)} h` : null].filter(Boolean).join(" · ")}
+                              {[formatTimeRange(r.report_start, r.report_end), r.hours ? `${formatDecimal(r.hours)} h` : null, r.distance_km ? `${formatDecimal(kmToMil(r.distance_km))} mil` : null, r.waiting_hours ? `väntetid ${formatDecimal(r.waiting_hours)} h` : null].filter(Boolean).join(" · ")}
                             </div>
                             {r.comment && <div className="text-slate-500">{r.comment}</div>}
                             {r.locked && <div className="mt-0.5 text-amber-700">Behandlad av JK – kontakta JK för ändring.</div>}

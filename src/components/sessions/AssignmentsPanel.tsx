@@ -12,6 +12,7 @@ import { Panel } from "../ui/Panel";
 import { WorkReportModal } from "../reports/WorkReportModal";
 import { ProjectPicker } from "./ProjectPicker";
 import { elapsedMinutes, suggestedReport, waitingMinutes } from "../../lib/sessionEngine";
+import { localTimeKey } from "../../lib/stockholmTime";
 import { formatClock } from "../../lib/format";
 import { hm } from "../attendance/shared";
 import type { AttendanceEntry } from "../../types";
@@ -52,7 +53,12 @@ function SessionCard({ session, project }: { session: AssignmentSession; project
   const suggestion = useMemo(() => {
     const base = suggestedReport(session, now);
     const breaks = breakOverlapMinutes(attendance.myEntries, session.user_id, new Date(session.started_at).getTime(), now);
-    return { hours: Math.max(Math.round(((base.hours * 60 - breaks) / 60) * 100) / 100, 0), waitingHours: base.waitingHours };
+    return {
+      hours: Math.max(Math.round(((base.hours * 60 - breaks) / 60) * 100) / 100, 0),
+      waitingHours: base.waitingHours,
+      start: localTimeKey(session.started_at),
+      end: localTimeKey(new Date(now)),
+    };
     // Förslaget räknas när dialogen öppnas (finishing växlar), inte varje sekund.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finishing]);
@@ -90,7 +96,7 @@ function SessionCard({ session, project }: { session: AssignmentSession; project
           project={project}
           report={null}
           title="Klar med uppdraget"
-          prefill={{ hours: suggestion.hours, waitingHours: suggestion.waitingHours, taskId: session.task_id }}
+          prefill={{ hours: suggestion.hours, waitingHours: suggestion.waitingHours, taskId: session.task_id, start: suggestion.start, end: suggestion.end }}
           hint="Timmar och väntetid kommer från klockan (rast är avdragen). Lägg till körsträcka. Du kan ändra allt innan du sparar."
           lockPerformer
           onSubmitReport={(input) => sessions.finish(session.id, input)}

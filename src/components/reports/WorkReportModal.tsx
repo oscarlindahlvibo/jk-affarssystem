@@ -11,11 +11,15 @@ import { decimalText, parseDecimal } from "../../lib/numberInput";
 import { Button } from "../ui/Button";
 import { Field, inputClass } from "../ui/Field";
 import { Modal } from "../ui/Modal";
+import { TimeFields, useAutoHours } from "./TimeFields";
+import { normalizeTime } from "../../lib/reportTimes";
 
 export interface WorkReportPrefill {
   hours: number;
   waitingHours: number;
   taskId?: string | null;
+  start?: string | null;
+  end?: string | null;
 }
 
 export function WorkReportModal({
@@ -46,6 +50,9 @@ export function WorkReportModal({
   const [date, setDate] = useState(report?.report_date ?? localDateKey(new Date()));
   const [performer, setPerformer] = useState(initialPerformer);
   const [hours, setHours] = useState(decimalText(report?.hours ?? (prefill && prefill.hours > 0 ? prefill.hours : null)));
+  const [startTime, setStartTime] = useState(normalizeTime(report?.report_start ?? prefill?.start) ?? "");
+  const [endTime, setEndTime] = useState(normalizeTime(report?.report_end ?? prefill?.end) ?? "");
+  const auto = useAutoHours(setHours, Boolean(report?.hours) || Boolean(prefill && prefill.hours > 0));
   const [distance, setDistance] = useState(decimalText(report?.distance_km));
   const [distanceUnit, setDistanceUnit] = useState<"km" | "mil">("km");
   const [waiting, setWaiting] = useState(decimalText(report?.waiting_hours ?? (prefill && prefill.waitingHours > 0 ? prefill.waitingHours : null)));
@@ -87,6 +94,10 @@ export function WorkReportModal({
       setError("Ange minst tid, körsträcka eller väntetid.");
       return;
     }
+    if (Boolean(startTime) !== Boolean(endTime)) {
+      setError("Ange både start- och sluttid, eller lämna båda tomma.");
+      return;
+    }
     const [kind, id] = performer.split(":");
     setSaving(true);
     try {
@@ -96,6 +107,8 @@ export function WorkReportModal({
         project_id: project.id,
         task_id: taskId || null,
         report_date: date,
+        report_start: startTime || null,
+        report_end: endTime || null,
         performer_type: kind === "supplier" ? "carrier" : "employee",
         performer_profile_id: kind === "profile" ? id : null,
         performer_supplier_id: kind === "supplier" ? id : null,
@@ -143,9 +156,15 @@ export function WorkReportModal({
             </Field>
           )}
         </div>
+        <TimeFields
+          start={startTime}
+          end={endTime}
+          onStart={(v) => { setStartTime(v); auto.recompute(v, endTime, waiting); }}
+          onEnd={(v) => { setEndTime(v); auto.recompute(startTime, v, waiting); }}
+        />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Arbetstid (timmar)">
-            <input inputMode="decimal" className={inputClass} value={hours} onChange={(e) => setHours(e.target.value)} placeholder="t.ex. 4,5" />
+            <input inputMode="decimal" className={inputClass} value={hours} onChange={(e) => { setHours(e.target.value); auto.hoursChanged(e.target.value); }} placeholder="t.ex. 4,5" />
           </Field>
           <Field label="Körsträcka">
             <div className="flex gap-2">
@@ -160,7 +179,7 @@ export function WorkReportModal({
             )}
           </Field>
           <Field label="Väntetid (timmar)">
-            <input inputMode="decimal" className={inputClass} value={waiting} onChange={(e) => setWaiting(e.target.value)} placeholder="0" />
+            <input inputMode="decimal" className={inputClass} value={waiting} onChange={(e) => { setWaiting(e.target.value); auto.recompute(startTime, endTime, e.target.value); }} placeholder="0" />
           </Field>
         </div>
         <Field label="Kommentar">

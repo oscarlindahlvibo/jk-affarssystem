@@ -428,6 +428,9 @@ export interface WorkReport {
   project_id: string;
   task_id: string | null;
   report_date: string;
+  // Valfria klockslag (svensk tid, "HH:MM"). Timmar anges ändå direkt och begränsas inte av dem.
+  report_start?: string | null;
+  report_end?: string | null;
   performer_type: WorkReportPerformerType;
   performer_profile_id: string | null;
   performer_carrier_user_id: string | null;

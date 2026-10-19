@@ -2,12 +2,15 @@
 // supabase/migrations/0027_work_reports_and_carriers.sql och används i mockläget.
 import type { UserRole, WorkReport, WorkReportBilling, WorkReportPerformerType } from "../types";
 import { reportHasContent } from "./billing";
+import { normalizeTime } from "./reportTimes";
 
 export interface WorkReportInput {
   id: string;
   project_id: string;
   task_id: string | null;
   report_date: string;
+  report_start?: string | null;
+  report_end?: string | null;
   performer_type: WorkReportPerformerType;
   performer_profile_id: string | null;
   performer_supplier_id: string | null;
@@ -33,6 +36,15 @@ export const FINANCE_ROLES: UserRole[] = ["admin", "projektledare", "ekonomi"];
 function assertNumber(value: number | null, label: string, max: number) {
   if (value === null) return;
   if (!Number.isFinite(value) || value < 0 || value > max) throw new Error(`Ogiltigt värde för ${label}.`);
+}
+
+// Start och slut måste anges tillsammans och vara giltiga klockslag.
+function checkTimes(input: { report_start?: string | null; report_end?: string | null }) {
+  const start = input.report_start ? normalizeTime(input.report_start) : null;
+  const end = input.report_end ? normalizeTime(input.report_end) : null;
+  if ((input.report_start && !start) || (input.report_end && !end)) throw new Error("Ogiltigt klockslag.");
+  if ((start === null) !== (end === null)) throw new Error("Ange både start- och sluttid, eller ingen av dem.");
+  return { start, end };
 }
 
 export function isInvoiced(billings: WorkReportBilling[], reportId: string) {
@@ -64,6 +76,7 @@ export function saveInternalReport(
   assertNumber(input.distance_km, "körsträcka", 99999);
   assertNumber(input.waiting_hours, "väntetid", 999);
   if (!reportHasContent(input)) throw new Error("Ange minst tid, körsträcka eller väntetid.");
+  const times = checkTimes(input);
 
   const existing = ctx.reports.find((report) => report.id === input.id);
   if (existing) {
@@ -95,6 +108,8 @@ export function saveInternalReport(
     project_id: input.project_id,
     task_id: input.task_id,
     report_date: input.report_date,
+    report_start: times.start,
+    report_end: times.end,
     performer_type: input.performer_type,
     performer_profile_id: performerProfile,
     performer_carrier_user_id: existing?.performer_carrier_user_id ?? null,
@@ -134,7 +149,7 @@ export interface CarrierActor {
 export function carrierSaveReport(
   ctx: { reports: WorkReport[]; billings: WorkReportBilling[]; assignedProjectIds: string[]; today: string },
   carrier: CarrierActor,
-  input: Pick<WorkReportInput, "id" | "project_id" | "report_date" | "hours" | "distance_km" | "waiting_hours" | "work_type" | "comment" | "task_id">,
+  input: Pick<WorkReportInput, "id" | "project_id" | "report_date" | "hours" | "distance_km" | "waiting_hours" | "work_type" | "comment" | "task_id" | "report_start" | "report_end">,
   nowIso = new Date().toISOString()
 ): WorkReport[] {
   if (!ctx.assignedProjectIds.includes(input.project_id)) throw new Error("Uppdraget är inte tilldelat dig.");
@@ -145,6 +160,7 @@ export function carrierSaveReport(
   assertNumber(input.distance_km, "körsträcka", 99999);
   assertNumber(input.waiting_hours, "väntetid", 999);
   if (!reportHasContent(input)) throw new Error("Ange minst tid, körsträcka eller väntetid.");
+  const times = checkTimes(input);
 
   const existing = ctx.reports.find((report) => report.id === input.id);
   if (existing) {
@@ -158,6 +174,8 @@ export function carrierSaveReport(
     project_id: input.project_id,
     task_id: input.task_id ?? null,
     report_date: input.report_date,
+    report_start: times.start,
+    report_end: times.end,
     performer_type: "carrier",
     performer_profile_id: null,
     performer_carrier_user_id: carrier.id,

@@ -6,6 +6,7 @@ import { useAuth } from "../../lib/auth";
 import { useWorkReports } from "../../data/workReports";
 import { formatDecimal, kmToMil } from "../../lib/billing";
 import { isInvoiced } from "../../lib/workReportEngine";
+import { formatTimeRange } from "../../lib/reportTimes";
 import { Button } from "../ui/Button";
 import { Modal } from "../ui/Modal";
 import { Panel } from "../ui/Panel";
@@ -65,6 +66,7 @@ export function WorkReportsPanel({ project }: { project: Project }) {
                   </div>
                   <div className="mt-0.5 text-xs text-slate-600">
                     {[
+                      formatTimeRange(r.report_start, r.report_end),
                       r.hours ? `${formatDecimal(r.hours)} h` : null,
                       r.distance_km ? `${formatDecimal(kmToMil(r.distance_km))} mil (${formatDecimal(r.distance_km, 1)} km)` : null,
                       r.waiting_hours ? `väntetid ${formatDecimal(r.waiting_hours)} h` : null,

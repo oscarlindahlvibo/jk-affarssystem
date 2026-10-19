@@ -114,6 +114,8 @@ export interface CarrierReportRow {
   project_id: string;
   task_id: string | null;
   report_date: string;
+  report_start?: string | null;
+  report_end?: string | null;
   hours: number | null;
   distance_km: number | null;
   waiting_hours: number | null;
@@ -134,7 +136,7 @@ export async function rpcCarrierReports(): Promise<CarrierReportRow[]> {
   }));
 }
 
-export async function rpcCarrierSaveReport(input: Pick<WorkReportInput, "id" | "project_id" | "report_date" | "hours" | "distance_km" | "waiting_hours" | "work_type" | "comment" | "task_id">) {
+export async function rpcCarrierSaveReport(input: Pick<WorkReportInput, "id" | "project_id" | "report_date" | "hours" | "distance_km" | "waiting_hours" | "work_type" | "comment" | "task_id" | "report_start" | "report_end">) {
   const { error } = await client().rpc("carrier_work_report_save", { p_report: input });
   check(error);
 }
