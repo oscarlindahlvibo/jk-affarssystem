@@ -6,6 +6,7 @@ import { StoreProvider } from "./data/store";
 import { TimeTrackingProvider } from "./data/timeTracking";
 import { WorkReportsProvider } from "./data/workReports";
 import { AttendanceProvider } from "./data/attendance";
+import { SessionsProvider } from "./data/sessions";
 import { AppLayout } from "./components/layout/AppLayout";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
@@ -89,7 +90,9 @@ function AppRoutes() {
                 <TimeTrackingProvider>
                   <WorkReportsProvider>
                     <AttendanceProvider>
-                      <Outlet />
+                      <SessionsProvider>
+                        <Outlet />
+                      </SessionsProvider>
                     </AttendanceProvider>
                   </WorkReportsProvider>
                 </TimeTrackingProvider>

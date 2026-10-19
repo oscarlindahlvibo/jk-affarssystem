@@ -9,9 +9,18 @@ Status: byggt och verifierat lokalt/i testdatabas på grenen `feature/tid-lon-st
 | **Rapporterat arbete** (på projektet) | Timmar, mil, väntetid per uppdrag (`work_reports`) | Underlag för kundfakturering |
 | **Fakturaunderlag** (på projektet) | Debiterbara mängder × priser, justeringar, fakturerat/återstår | Faktura till kund |
 | **Löneunderlag** (`/loneunderlag`) | Attesterad arbetstid, övertid, frånvaro per löneperiod | Lönekörning |
-| **Projekttid** (`/tid`) | Äldre intern uppföljning av tid per projekt/uppgift | Varken lön eller fakturering |
+| **Projekttid (äldre)** (`/tid`) | Historik från den gamla projektklockan. Startas inte längre | Varken lön eller fakturering |
 
 Exempel: 07–17 stämplat = 10 h lön. Tre uppdrag med 6 + 5 + 4 = 15 fakturerbara timmar är avsiktligt och ger ingen varning. Det finns ingen spärr och ingen automatisk koppling åt något håll. Testas i `src/lib/workedVsBillable.integration.test.ts` och `supabase/tests/32_worked_vs_billable.sql` (bl.a. att löneunderlagets fingeravtryck inte ändras när fakturerbar tid justeras 4 → 6 h, att dubbeldebitering nekas och att flera chaufförer på samma projekt får egen lön).
+
+## En klocka: uppdrag, väntetid och rapport (0030)
+Det finns en enda klocka att starta: **Stämpelklockan**. Under arbetsdagen:
+1. Stämpla in (görs automatiskt om man startar ett uppdrag utan att vara instämplad).
+2. **Starta uppdrag**: välj projekt (sök på nummer, namn eller kund) och eventuell arbetsorder, antingen på Stämpelklockan eller med knappen på projektet. Flera uppdrag på olika projekt kan pågå samtidigt (högst fem; samma projekt inte två gånger).
+3. **Väntar / Sluta vänta** per uppdrag stämplar väntetid. Väntetid är arbetad tid för lön: den ligger redan inom stämplingen och ändrar ingenting i närvaron.
+4. **Klar med uppdraget** öppnar rapporten förifylld: arbetstid från klockan (raster avdragna och väntetid frånräknad, så väntetid inte debiteras två gånger), väntetid och uppdragets projekt. Man lägger bara till körsträcka (km eller mil) och sparar. Allt kan ändras. Uppdraget avslutas och rapporten sparas i samma databastransaktion (`session_finish`); misslyckas sparningen förblir uppdraget öppet.
+5. Stämpla ut. Man kan inte stämpla ut med pågående uppdrag i gränssnittet (avsluta eller avbryt dem först).
+Eftersom varje uppdrag rapporteras för sig och flera kan pågå samtidigt kan **fakturerbar tid bli högre än arbetad tid**. Det finns ingen spärr. Den gamla projektklockan startas inte längre; äldre registreringar ligger kvar som historik och en eventuellt pågående gammal stämpling kan fortfarande avslutas.
 
 ## Löneflöde och skydd mot felaktigt underlag
 Preliminär → Inskickad → Attesterad → Granskad → Exporterad.

@@ -4,7 +4,6 @@ import type { Project } from "../../types";
 import { useTimeTracking } from "../../data/timeTracking";
 import { formatMinutes } from "../../lib/format";
 import { Panel } from "../ui/Panel";
-import { ProjectClockButton } from "./ProjectClockButton";
 
 export function ProjectTimePanel({ project }: { project: Project }) {
   const projectId = project.id;
@@ -16,8 +15,8 @@ export function ProjectTimePanel({ project }: { project: Project }) {
   }
   return (
     <Panel
-      title="Registrerad tid"
-      action={<Link to="/tid" className="text-xs font-medium text-orange-600 hover:text-orange-700">Stämpelklocka</Link>}
+      title="Äldre projekttid (historik)"
+      action={<Link to="/tid" className="text-xs font-medium text-orange-600 hover:text-orange-700">Visa allt</Link>}
     >
       {total === 0 ? (
         <p className="flex items-center gap-1.5 text-sm text-slate-500"><Clock size={14} /> Ingen projekttid registrerad ännu.</p>
@@ -34,7 +33,6 @@ export function ProjectTimePanel({ project }: { project: Project }) {
           </ul>
         </>
       )}
-      <div className="mt-4"><ProjectClockButton project={project} className="w-full justify-center" /></div>
     </Panel>
   );
 }

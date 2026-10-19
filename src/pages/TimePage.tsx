@@ -1,12 +1,11 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Download, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { useStore } from "../data/store";
 import { useAuth } from "../lib/auth";
 import { useTimeTracking } from "../data/timeTracking";
 import { ClockCard } from "../components/time/ClockCard";
 import { TimeEntryList } from "../components/time/TimeEntryList";
-import { TimeEntryModal } from "../components/time/TimeEntryModal";
 import { Button } from "../components/ui/Button";
 import { inputClass } from "../components/ui/Field";
 import { Panel } from "../components/ui/Panel";
@@ -52,9 +51,8 @@ function inWeek(entry: TimeEntry, offset: number) {
 }
 
 function MyTime() {
-  const { myEntries, categories } = useTimeTracking();
+  const { myEntries, categories, openEntry } = useTimeTracking();
   const [offset, setOffset] = useState(0);
-  const [adding, setAdding] = useState(false);
   const weekEntries = useMemo(() => myEntries.filter((e) => inWeek(e, offset)), [myEntries, offset]);
   const work = weekEntries.filter((e) => e.entry_type === "work" && e.end_time);
   const total = work.reduce((sum, e) => sum + e.total_minutes, 0);
@@ -64,7 +62,8 @@ function MyTime() {
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
       <div className="space-y-6">
-        <ClockCard />
+        {/* Den gamla projektklockan startas inte längre här; en pågående äldre stämpling kan fortfarande avslutas. */}
+        {openEntry && <ClockCard />}
         <Panel title="Veckosammanfattning">
           <div className="text-3xl font-semibold text-slate-800">{formatMinutes(total) || "0 min"}</div>
           <div className="text-xs text-slate-500">tid på projekt veckan du tittar på (exklusive raster)</div>
@@ -81,16 +80,10 @@ function MyTime() {
       <Panel
         title="Min projekttid"
         className="lg:col-span-2"
-        action={
-          <Button type="button" variant="secondary" onClick={() => setAdding(true)} className="!px-2.5 !py-1.5">
-            <Plus size={14} /> Lägg till tid
-          </Button>
-        }
       >
         <div className="mb-4"><WeekNav offset={offset} onChange={setOffset} /></div>
         <TimeEntryList entries={weekEntries} canEdit={() => true} />
       </Panel>
-      {adding && <TimeEntryModal entry={null} onClose={() => setAdding(false)} />}
     </div>
   );
 }
@@ -182,7 +175,7 @@ export function TimePage() {
   return (
     <div className="space-y-5">
       <p className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">
-        Projekttid är intern uppföljning av tid per projekt och uppgift. Den påverkar varken lön (se <Link to="/stampelklocka" className="font-medium underline">Stämpelklocka</Link>) eller kundfakturering (se Rapporterat arbete på projektet).
+        Äldre projekttid (historik). Nya uppdrag startas på <Link to="/stampelklocka" className="font-medium underline">Stämpelklockan</Link>, och kundfakturering sker via Rapporterat arbete på projektet. Det här är intern uppföljning som varken påverkar lön eller fakturering.
       </p>
       {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
       {canViewAll && (

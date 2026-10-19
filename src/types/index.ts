@@ -732,3 +732,19 @@ export interface PayrollLogRow {
   actor: string | null;
   at: string;
 }
+
+// ---- Uppdrag på stämpelklockan ----
+// Underlag för rapportering (projekt, väntetid). Påverkar aldrig lönegrundande närvarotid.
+export interface AssignmentSession {
+  id: string;
+  org_id: string;
+  user_id: string;
+  project_id: string;
+  task_id: string | null;
+  started_at: string;
+  ended_at: string | null;
+  waiting_started_at: string | null;
+  waiting_minutes: number;
+  report_id: string | null;
+  created_at: string;
+}

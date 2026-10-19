@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { Coffee, LogIn, LogOut, Pencil, Play, Plus, Trash2, Utensils } from "lucide-react";
 import { useAttendance } from "../data/attendance";
+import { useSessions } from "../data/sessions";
+import { AssignmentsPanel } from "../components/sessions/AssignmentsPanel";
 import { useStore } from "../data/store";
 import { useNow } from "../components/time/useNow";
 import { Button } from "../components/ui/Button";
@@ -30,6 +32,7 @@ function EntryRow({ entry, onEdit, onDelete }: { entry: AttendanceEntry; onEdit?
 
 function ClockPanel() {
   const att = useAttendance();
+  const sessions = useSessions();
   const open = att.openEntry;
   const now = useNow(Boolean(open));
   const [busy, setBusy] = useState(false);
@@ -37,6 +40,10 @@ function ClockPanel() {
   const [comment, setComment] = useState("");
 
   async function run(action: Parameters<typeof att.clock>[0]) {
+    if (action === "clockout" && sessions.mine.length > 0) {
+      setError(`Du har ${sessions.mine.length} pågående uppdrag. Tryck "Klar med uppdraget" (eller avbryt) för varje uppdrag innan du stämplar ut.`);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -142,6 +149,7 @@ function MyWork() {
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
       <div className="space-y-6 lg:col-span-2">
         <ClockPanel />
+        <AssignmentsPanel />
         <Totals entries={att.myEntries} />
       </div>
       <div className="space-y-6 lg:col-span-3">
@@ -197,7 +205,8 @@ function AuditList({ rows }: { rows: ReturnType<typeof useAttendance>["state"]["
 
 function Staff() {
   const att = useAttendance();
-  const { profiles } = useStore();
+  const sessions = useSessions();
+  const { profiles, projects } = useStore();
   const now = useNow(true, 30000);
   const today = localDateKey(now);
   const b = periodBounds(today);
@@ -233,7 +242,7 @@ function Staff() {
       <Panel title="Personalens arbetstid">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="border-b border-border text-left text-xs text-slate-500"><th className="py-2">Namn</th><th>Status</th><th className="text-right">Idag</th><th className="text-right">Vecka</th><th className="text-right">Månad</th></tr></thead>
+            <thead><tr className="border-b border-border text-left text-xs text-slate-500"><th className="py-2">Namn</th><th>Status</th><th>Uppdrag</th><th className="text-right">Idag</th><th className="text-right">Vecka</th><th className="text-right">Månad</th></tr></thead>
             <tbody>
               {people.map((p) => {
                 const list = entriesOf(p.id);
@@ -242,6 +251,7 @@ function Staff() {
                   <tr key={p.id} className={`cursor-pointer border-b border-border hover:bg-slate-50 ${selected === p.id ? "bg-orange-50" : ""}`} onClick={() => setSelected(p.id)}>
                     <td className="py-2 font-medium text-slate-800">{p.full_name}</td>
                     <td>{open ? <span className="text-emerald-600">{open.entry_type === "work" ? `Instämplad ${localTimeKey(open.start_time)}` : `På ${ENTRY_TYPE_LABELS[open.entry_type].toLowerCase()}`}</span> : <span className="text-slate-400">Ej instämplad</span>}</td>
+                    <td className="max-w-48 truncate text-xs text-slate-600">{[...sessions.mine, ...sessions.others].filter((s) => s.user_id === p.id).map((s) => projects.find((x) => x.id === s.project_id)?.project_number ?? "").join(", ") || "–"}</td>
                     <td className="text-right">{hm(workedMinutes(list, today, today, now))}</td>
                     <td className="text-right">{hm(workedMinutes(list, b.weekStart, b.weekEnd, now))}</td>
                     <td className="text-right">{hm(workedMinutes(list, b.monthStart, b.monthEnd, now))}</td>

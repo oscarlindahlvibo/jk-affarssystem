@@ -4,6 +4,7 @@ import { WORK_TYPES } from "../../types";
 import { useAuth } from "../../lib/auth";
 import { useStore } from "../../data/store";
 import { useWorkReports } from "../../data/workReports";
+import type { WorkReportInput } from "../../lib/workReportEngine";
 import { localDateKey } from "../../lib/stockholmTime";
 import { KM_PER_MIL, kmToMil } from "../../lib/billing";
 import { decimalText, parseDecimal } from "../../lib/numberInput";
@@ -11,11 +12,30 @@ import { Button } from "../ui/Button";
 import { Field, inputClass } from "../ui/Field";
 import { Modal } from "../ui/Modal";
 
-export function WorkReportModal({ project, report, onClose }: { project: Project; report: WorkReport | null; onClose: () => void }) {
+export interface WorkReportPrefill {
+  hours: number;
+  waitingHours: number;
+  taskId?: string | null;
+}
+
+export function WorkReportModal({
+  project, report, onClose, prefill, title, hint, lockPerformer = false, onSubmitReport,
+}: {
+  project: Project;
+  report: WorkReport | null;
+  onClose: () => void;
+  // Förifyllda värden (t.ex. från ett uppdrag på klockan). Allt kan ändras innan sparning.
+  prefill?: WorkReportPrefill;
+  title?: string;
+  hint?: string;
+  lockPerformer?: boolean;
+  // Ersätter vanlig sparning (t.ex. "avsluta uppdrag och spara rapport" i en och samma åtgärd).
+  onSubmitReport?: (input: WorkReportInput) => Promise<void>;
+}) {
   const { currentProfile } = useAuth();
   const { profiles, suppliers } = useStore();
   const { saveReport, canManage, canSeeFinance } = useWorkReports();
-  const isManager = canManage;
+  const isManager = canManage && !lockPerformer;
 
   const initialPerformer = report
     ? report.performer_type === "carrier"
@@ -25,15 +45,15 @@ export function WorkReportModal({ project, report, onClose }: { project: Project
 
   const [date, setDate] = useState(report?.report_date ?? localDateKey(new Date()));
   const [performer, setPerformer] = useState(initialPerformer);
-  const [hours, setHours] = useState(decimalText(report?.hours));
+  const [hours, setHours] = useState(decimalText(report?.hours ?? (prefill && prefill.hours > 0 ? prefill.hours : null)));
   const [distance, setDistance] = useState(decimalText(report?.distance_km));
   const [distanceUnit, setDistanceUnit] = useState<"km" | "mil">("km");
-  const [waiting, setWaiting] = useState(decimalText(report?.waiting_hours));
+  const [waiting, setWaiting] = useState(decimalText(report?.waiting_hours ?? (prefill && prefill.waitingHours > 0 ? prefill.waitingHours : null)));
   const [workType, setWorkType] = useState(report?.work_type ?? "transport");
   const [billable, setBillable] = useState(report?.billable ?? true);
   const [cost, setCost] = useState(decimalText(report?.internal_cost));
   const [comment, setComment] = useState(report?.comment ?? "");
-  const [taskId, setTaskId] = useState(report?.task_id ?? "");
+  const [taskId, setTaskId] = useState(report?.task_id ?? prefill?.taskId ?? "");
   const [saving, setSaving] = useState(false);
   // Samma id vid omförsök (t.ex. efter bortfallet nätverk) så att rapporten aldrig sparas två gånger.
   const reportId = useRef(report?.id ?? crypto.randomUUID()).current;
@@ -70,7 +90,8 @@ export function WorkReportModal({ project, report, onClose }: { project: Project
     const [kind, id] = performer.split(":");
     setSaving(true);
     try {
-      await saveReport({
+      const submit_ = onSubmitReport ?? saveReport;
+      await submit_({
         id: reportId,
         project_id: project.id,
         task_id: taskId || null,
@@ -95,10 +116,11 @@ export function WorkReportModal({ project, report, onClose }: { project: Project
   }
 
   return (
-    <Modal open onClose={onClose} title={report ? "Ändra rapport" : "Rapportera arbete"} wide>
+    <Modal open onClose={onClose} title={title ?? (report ? "Ändra rapport" : "Rapportera arbete")} wide>
       <form onSubmit={submit} className="space-y-4">
         {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
         <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700"><span className="text-slate-500">Uppdrag:</span> <strong>{project.project_number}</strong> {project.name}</div>
+        {hint && <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800">{hint}</p>}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Datum">
             <input type="date" required className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />

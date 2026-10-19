@@ -1,105 +1,68 @@
 import { useState } from "react";
-import { Clock, LogIn, Repeat } from "lucide-react";
+import { Play } from "lucide-react";
+import { Link } from "react-router-dom";
 import type { Project } from "../../types";
-import { timeCategoryForTask, useTimeTracking } from "../../data/timeTracking";
+import { useAttendance } from "../../data/attendance";
+import { useSessions } from "../../data/sessions";
 import { Button } from "../ui/Button";
 import { Field, inputClass } from "../ui/Field";
 import { Modal } from "../ui/Modal";
 
+// Startar ett uppdrag på det här projektet på stämpelklockan (en enda klocka). Är man inte instämplad stämplas man också in.
 export function ProjectClockButton({ project, className = "" }: { project: Project; className?: string }) {
-  const { openEntry, activeCategories, clockIn, switchJob } = useTimeTracking();
+  const sessions = useSessions();
+  const attendance = useAttendance();
   const [open, setOpen] = useState(false);
   const [taskId, setTaskId] = useState("");
-  const [categoryKey, setCategoryKey] = useState("");
-  const [closing, setClosing] = useState("");
-  const [opening, setOpening] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const tasks = (project.tasks ?? []).filter((t) => t.status !== "Klar");
-  const onPause = openEntry && openEntry.entry_type !== "work";
-  const runningHere = openEntry?.entry_type === "work" && openEntry.project_id === project.id;
-  const effectiveCategory = categoryKey || activeCategories[0]?.key || "";
+  const runningHere = sessions.mine.some((s) => s.project_id === project.id);
+  const closed = project.status === "Avbokad" || project.status === "Fakturerad";
 
-  function openDialog() {
-    setTaskId("");
-    setCategoryKey("");
-    setClosing("");
-    setOpening("");
-    setError(null);
-    setOpen(true);
-  }
-
-  function changeTask(id: string) {
-    setTaskId(id);
-    const task = tasks.find((t) => t.id === id);
-    const suggested = task ? timeCategoryForTask(task.category) : null;
-    if (suggested && activeCategories.some((c) => c.key === suggested)) setCategoryKey(suggested);
+  if (runningHere) {
+    return (
+      <Link to="/stampelklocka" className={`inline-flex items-center justify-center gap-1.5 rounded-lg bg-green-100 px-3.5 py-2 text-sm font-medium text-green-800 ${className}`}>
+        Uppdrag pågår – öppna Stämpelklockan
+      </Link>
+    );
   }
 
   async function submit() {
     setBusy(true);
     setError(null);
     try {
-      const job = { projectId: project.id, taskId: taskId || null, categoryKey: effectiveCategory };
-      if (openEntry) await switchJob(job, closing, opening);
-      else await clockIn(job, opening);
+      await sessions.start(project.id, taskId || null);
       setOpen(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Stämplingen misslyckades.");
+      setError(e instanceof Error ? e.message : "Uppdraget kunde inte startas.");
     } finally {
       setBusy(false);
     }
   }
 
-  const label = runningHere ? "Projekttid pågår här – byt uppgift" : openEntry ? "Flytta projekttid hit" : "Starta projekttid";
-  const Icon = openEntry ? Repeat : LogIn;
-
   return (
     <>
-      <Button
-        type="button"
-        variant={runningHere ? "secondary" : "primary"}
-        className={className}
-        disabled={Boolean(onPause)}
-        title={onPause ? "Du är på rast. Fortsätt arbeta under Tid först." : undefined}
-        onClick={openDialog}
-      >
-        {runningHere ? <Clock size={14} className="text-green-600" /> : <Icon size={14} />} {label}
+      <Button type="button" disabled={closed} className={className} onClick={() => { setTaskId(""); setError(null); setOpen(true); }}>
+        <Play size={14} /> Starta uppdrag
       </Button>
-      <Modal open={open} onClose={() => setOpen(false)} title={openEntry ? "Flytta projekttiden till projektet" : "Starta projekttid på projektet"}>
-        <div className="space-y-4">
-          <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">{project.project_number} · {project.name}</div>
-          {openEntry && (
-            <p className="text-xs text-slate-500">
-              Din pågående projekttid ({openEntry.project_label ?? "intern tid"}) avslutas nu och en ny startar på det här projektet.
-            </p>
-          )}
-          {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
-          <Field label="Arbetsorder (valfritt)">
-            <select className={inputClass} value={taskId} onChange={(e) => changeTask(e.target.value)}>
-              <option value="">Ingen specifik arbetsorder</option>
-              {tasks.map((t) => <option key={t.id} value={t.id}>{t.task}</option>)}
-            </select>
-          </Field>
-          <Field label="Kategori">
-            <select className={inputClass} value={effectiveCategory} onChange={(e) => setCategoryKey(e.target.value)}>
-              {activeCategories.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-            </select>
-          </Field>
-          {openEntry && (
-            <Field label="Anteckning för passet du lämnar (valfritt)">
-              <textarea className={`${inputClass} min-h-16 resize-y`} value={closing} onChange={(e) => setClosing(e.target.value)} />
+      <Modal open={open} onClose={() => setOpen(false)} title="Starta uppdrag">
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600"><strong>{project.project_number}</strong> {project.name}</p>
+          {tasks.length > 0 && (
+            <Field label="Arbetsorder (valfritt)">
+              <select className={inputClass} value={taskId} onChange={(e) => setTaskId(e.target.value)}>
+                <option value="">Ingen specifik</option>
+                {tasks.map((t) => <option key={t.id} value={t.id}>{t.task}</option>)}
+              </select>
             </Field>
           )}
-          <Field label="Anteckning för nya passet (valfritt)">
-            <textarea className={`${inputClass} min-h-16 resize-y`} value={opening} onChange={(e) => setOpening(e.target.value)} placeholder="Vad ska du göra?" />
-          </Field>
-          <div className="flex justify-end gap-2 border-t border-border pt-4">
-            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Avbryt</Button>
-            <Button type="button" disabled={busy || !effectiveCategory} onClick={() => void submit()}>
-              {openEntry ? <Repeat size={15} /> : <LogIn size={15} />} {openEntry ? "Flytta hit" : "Starta projekttid"}
-            </Button>
+          {!attendance.openEntry && <p className="text-xs text-slate-500">Du är inte instämplad. Du stämplas också in för dagen när uppdraget startar.</p>}
+          {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Avbryt</Button>
+            <Button type="button" disabled={busy} onClick={() => void submit()}><Play size={14} /> Starta</Button>
           </div>
         </div>
       </Modal>
