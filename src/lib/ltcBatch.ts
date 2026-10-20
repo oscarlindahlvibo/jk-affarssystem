@@ -11,6 +11,8 @@ export interface LtcSheet {
   fileName: string;
   parsed: ParsedLtcOrder;
   previewUrl: string | null;
+  // Tolkad med AI (bladet saknade textlager). Allt ska kontrolleras extra noga.
+  ai?: boolean;
 }
 
 export interface EditableItem extends ParsedLtcItem {

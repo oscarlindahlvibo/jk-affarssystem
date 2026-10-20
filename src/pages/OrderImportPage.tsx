@@ -15,6 +15,9 @@ import { useAuth } from "../lib/auth";
 import { isCentralDriveEnabled, uploadCentralDriveFile } from "../lib/centralDrive";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import {
+  countPdfPages, estimateAiCost, fetchAiQuote, interpretWithAi, mapAiOrderToParsed, needsAiFallback, renderPdfPages, type AiQuote,
+} from "../lib/aiInterpretation";
+import {
   addSheetsToGroups,
   combinedDocumentRef,
   describeItem,
@@ -28,6 +31,17 @@ import {
 } from "../lib/ltcBatch";
 
 type Step = 1 | 2 | 3;
+interface AiCandidate {
+  id: string;
+  file: File;
+  pages: number;
+  tooLong: boolean;
+}
+interface AiOffer {
+  candidates: AiCandidate[];
+  held: LtcSheet[];
+  quote: AiQuote;
+}
 
 export function OrderImportPage() {
   const store = useStore();
@@ -41,6 +55,10 @@ export function OrderImportPage() {
   const dragDepth = useRef(0);
   const [parsing, setParsing] = useState<{ done: number; total: number } | null>(null);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
+  const [aiOffer, setAiOffer] = useState<AiOffer | null>(null);
+  const [aiRunning, setAiRunning] = useState(false);
+  // Stabilt request-id per dokument: ett omförsök efter nätverksfel debiteras aldrig två gånger.
+  const aiRequestIds = useRef(new Map<string, string>());
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [result, setResult] = useState<{ created: number; documentsSaved: number; documentsFailed: number; expectedDocuments: number; numbers: string[] } | null>(null);
@@ -57,6 +75,18 @@ export function OrderImportPage() {
     return url;
   }
 
+  function finishWith(toAdd: LtcSheet[]) {
+    setAiOffer(null);
+    if (toAdd.length === 0) return;
+    setSheets((prev) => [...prev, ...toAdd]);
+    setGroups((prev) => addSheetsToGroups(prev, toAdd, ctx));
+    setStep(2);
+  }
+
+  function blankSheet(file: File): LtcSheet {
+    return { id: crypto.randomUUID(), file, fileName: file.name, parsed: parseLtcOrder(""), previewUrl: trackPreview(file) };
+  }
+
   async function handleFiles(fileList: FileList | File[]) {
     const all = Array.from(fileList);
     const files = all.filter((file) => file.type === "application/pdf" || /\.pdf$/i.test(file.name));
@@ -64,6 +94,7 @@ export function OrderImportPage() {
     setParseErrors(errors);
     if (files.length === 0) return;
     const added: LtcSheet[] = [];
+    const candidates: AiCandidate[] = [];
     setParsing({ done: 0, total: files.length });
     for (const [index, file] of files.entries()) {
       try {
@@ -71,6 +102,12 @@ export function OrderImportPage() {
         let orders = isUppdragslista(rows) ? parseUppdragslista(rows) : [];
         if (orders.length === 0) {
           const parsed = parseLtcOrder(rowsToText(rows));
+          if (needsAiFallback(rows, parsed)) {
+            // Ingen läsbar text: erbjud AI-tolkning (efter kostnadsbesked) i stället för ett tomt blad.
+            candidates.push({ id: crypto.randomUUID(), file, pages: await countPdfPages(file).catch(() => 1), tooLong: false });
+            setParsing({ done: index + 1, total: files.length });
+            continue;
+          }
           if (parsed.items.length === 0 && !parsed.documentNumber) {
             errors.push(`${file.name}: kunde inte tolkas automatiskt. Kontrollera att PDF-filen har ett läsbart textlager. Bladet är med, fyll i uppgifterna manuellt.`);
           }
@@ -86,11 +123,75 @@ export function OrderImportPage() {
       setParsing({ done: index + 1, total: files.length });
     }
     setParsing(null);
+
+    if (candidates.length > 0) {
+      let quote: AiQuote | null = null;
+      if (isSupabaseConfigured) {
+        try {
+          quote = await fetchAiQuote();
+        } catch (error) {
+          errors.push(`AI-tolkning är inte tillgänglig just nu${error instanceof Error && error.message ? ` (${error.message.slice(0, 120)})` : ""}.`);
+        }
+      }
+      if (quote) {
+        const max = quote.max_pages_per_request;
+        const marked = candidates.map((candidate) => ({ ...candidate, tooLong: candidate.pages > max }));
+        setParseErrors([...errors]);
+        setAiOffer({ candidates: marked, held: added, quote });
+        setStep(1);
+        return;
+      }
+      for (const candidate of candidates) {
+        errors.push(`${candidate.file.name}: saknar läsbart textlager och kunde inte tolkas automatiskt. Bladet är med, fyll i uppgifterna manuellt.`);
+        added.push(blankSheet(candidate.file));
+      }
+    }
     setParseErrors([...errors]);
-    if (added.length === 0) return;
-    setSheets((prev) => [...prev, ...added]);
-    setGroups((prev) => addSheetsToGroups(prev, added, ctx));
-    setStep(2);
+    finishWith(added);
+  }
+
+  // Användaren avstår från AI: bladen läggs in tomma för manuell ifyllnad.
+  function declineAi() {
+    if (!aiOffer) return;
+    const blanks = aiOffer.candidates.map((candidate) => blankSheet(candidate.file));
+    setParseErrors((prev) => [...prev, ...aiOffer.candidates.map((candidate) => `${candidate.file.name}: lades in utan tolkning. Fyll i uppgifterna manuellt.`)]);
+    finishWith([...aiOffer.held, ...blanks]);
+  }
+
+  async function runAi() {
+    if (!aiOffer || aiRunning) return;
+    setAiRunning(true);
+    const errors: string[] = [];
+    const toAdd: LtcSheet[] = [...aiOffer.held];
+    let billedPages = 0;
+    for (const candidate of aiOffer.candidates) {
+      if (candidate.tooLong) {
+        errors.push(`${candidate.file.name}: har ${candidate.pages} sidor och kan inte AI-tolkas (högst ${aiOffer.quote.max_pages_per_request}). Bladet är med, fyll i manuellt.`);
+        toAdd.push(blankSheet(candidate.file));
+        continue;
+      }
+      try {
+        const images = await renderPdfPages(candidate.file, aiOffer.quote.max_pages_per_request);
+        if (!aiRequestIds.current.has(candidate.id)) aiRequestIds.current.set(candidate.id, crypto.randomUUID());
+        const result = await interpretWithAi(candidate.file, images, aiRequestIds.current.get(candidate.id)!);
+        if (result.billed) billedPages += result.pages;
+        const previewUrl = trackPreview(candidate.file);
+        for (const order of result.orders) toAdd.push({ id: crypto.randomUUID(), file: candidate.file, fileName: candidate.file.name, parsed: mapAiOrderToParsed(order, result.raw_text ?? ""), previewUrl, ai: true });
+        if (result.orders.length === 0) toAdd.push(blankSheet(candidate.file));
+        for (const warning of result.warnings) errors.push(`${candidate.file.name}: ${warning}`);
+      } catch (error) {
+        const message = error instanceof Error && error.message ? error.message : "AI-tolkningen misslyckades.";
+        errors.push(`${candidate.file.name}: ${message} Ingen debitering har gjorts. Bladet är med, fyll i uppgifterna manuellt.`);
+        toAdd.push(blankSheet(candidate.file));
+      }
+    }
+    if (billedPages > 0) {
+      const cost = estimateAiCost(billedPages, aiOffer.quote);
+      errors.push(`AI-tolkade ${billedPages} ${billedPages === 1 ? "sida" : "sidor"} (${cost.exVat.toLocaleString("sv-SE", { minimumFractionDigits: 2 })} kr exkl. moms). Kontrollera alla uppgifter noga.`);
+    }
+    setAiRunning(false);
+    setParseErrors((prev) => [...prev, ...errors]);
+    finishWith(toAdd);
   }
 
   const hasFiles = (event: DragEvent) => Array.from(event.dataTransfer.types).includes("Files");
@@ -116,7 +217,7 @@ export function OrderImportPage() {
       event.preventDefault();
       dragDepth.current = 0;
       setDragging(false);
-      if (!parsing && event.dataTransfer.files.length > 0) void handleFiles(event.dataTransfer.files);
+      if (!parsing && !aiOffer && !aiRunning && event.dataTransfer.files.length > 0) void handleFiles(event.dataTransfer.files);
     },
   };
 
@@ -136,6 +237,7 @@ export function OrderImportPage() {
     const groupSheets = sheets.filter((s) => group.sheetIds.includes(s.id));
     const warnings: string[] = [];
     for (const sheet of groupSheets) {
+      if (sheet.ai) warnings.push(`${sheet.fileName} är AI-tolkat. Kontrollera alla uppgifter extra noga.`);
       const number = sheet.parsed.documentNumber;
       if (!number) continue;
       const duplicatesInBatch = sheets.some((s) => s.id !== sheet.id && s.file !== sheet.file && s.parsed.documentNumber === number);
@@ -377,6 +479,7 @@ export function OrderImportPage() {
     previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     previewUrlsRef.current = [];
     setStep(1);
+    setAiOffer(null);
     setSheets([]);
     setGroups([]);
     setResult(null);
@@ -408,7 +511,7 @@ export function OrderImportPage() {
         accept=".pdf"
         multiple
         className="hidden"
-        disabled={Boolean(parsing)}
+        disabled={Boolean(parsing) || aiRunning || Boolean(aiOffer)}
         onChange={(e) => {
           if (e.target.files?.length) void handleFiles(e.target.files);
           e.target.value = "";
@@ -437,6 +540,33 @@ export function OrderImportPage() {
         <Panel title="Steg 1: Ladda upp orderblad (PDF)">
           <div className="space-y-4">
             {dropzone}
+            {aiOffer && (() => {
+              const billable = aiOffer.candidates.filter((candidate) => !candidate.tooLong);
+              const pages = billable.reduce((sum, candidate) => sum + candidate.pages, 0);
+              const cost = estimateAiCost(pages, aiOffer.quote);
+              return (
+                <div className="space-y-3 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900" role="region" aria-label="AI-tolkning">
+                  <p className="font-semibold">{aiOffer.candidates.length === 1 ? "Dokumentet saknar läsbar text." : `${aiOffer.candidates.length} dokument saknar läsbar text.`} AI kan läsa dem från bilden.</p>
+                  <ul className="list-disc pl-5">
+                    {aiOffer.candidates.map((candidate) => (
+                      <li key={candidate.id}>{candidate.file.name}: {candidate.pages} {candidate.pages === 1 ? "sida" : "sidor"}{candidate.tooLong ? ` (för många för AI, högst ${aiOffer.quote.max_pages_per_request})` : ""}</li>
+                    ))}
+                  </ul>
+                  {pages > 0 ? (
+                    <p>
+                      Kostnad: <strong>{aiOffer.quote.price_per_page.toLocaleString("sv-SE", { minimumFractionDigits: 2 })} kr per sida</strong> exkl. moms ({aiOffer.quote.vat_rate} %).
+                      Det här: {pages} {pages === 1 ? "sida" : "sidor"} = <strong>{cost.exVat.toLocaleString("sv-SE", { minimumFractionDigits: 2 })} kr + moms</strong> ({cost.total.toLocaleString("sv-SE", { minimumFractionDigits: 2 })} kr inkl. moms).
+                      Du debiteras bara om tolkningen lyckas, och du granskar alltid resultatet innan något skapas.
+                    </p>
+                  ) : <p>Inget av dokumenten kan AI-tolkas.</p>}
+                  {aiOffer.quote.monthly_page_limit !== null && <p className="text-xs">Månadsgräns: {aiOffer.quote.month_pages_used} av {aiOffer.quote.monthly_page_limit} sidor använda.</p>}
+                  <div className="flex flex-wrap gap-2">
+                    {pages > 0 && <Button type="button" disabled={aiRunning} onClick={() => void runAi()}>{aiRunning ? <><Loader2 size={14} className="animate-spin" /> Tolkar…</> : `Tolka med AI (${cost.exVat.toLocaleString("sv-SE", { minimumFractionDigits: 2 })} kr + moms)`}</Button>}
+                    <Button type="button" variant="secondary" disabled={aiRunning} onClick={declineAi}>Fortsätt utan AI (fyll i manuellt)</Button>
+                  </div>
+                </div>
+              );
+            })()}
             {parseErrors.map((message) => <p key={message} className="text-sm text-red-600">{message}</p>)}
             <div className="flex items-center gap-3 text-xs text-slate-400">
               <div className="h-px flex-1 bg-border" /> eller <div className="h-px flex-1 bg-border" />
@@ -448,9 +578,9 @@ export function OrderImportPage() {
           </div>
           <div className="mt-4 flex items-start gap-2 rounded-lg bg-slate-50 p-4 text-xs text-slate-500">
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-            Tolkningen sker lokalt i webbläsaren och är en bästa möjliga läsning av dokumentet – kontrollera och
-            komplettera alltid uppgifterna i nästa steg innan projekt skapas. Skannade/fotograferade dokument stöds
-            inte ännu, bara text-PDF:er skickade direkt från avsändarens system.
+            Text-PDF:er tolkas lokalt i webbläsaren. Saknar PDF:en läsbar text (skannad eller utskriven som bild) kan du välja AI-tolkning,
+            som debiteras per sida och bara när den lyckas. Tolkningen är en bästa möjliga läsning – kontrollera och komplettera alltid
+            uppgifterna i nästa steg innan projekt skapas.
           </div>
         </Panel>
       )}

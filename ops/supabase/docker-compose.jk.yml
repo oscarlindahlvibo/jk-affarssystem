@@ -55,6 +55,9 @@ services:
       SUPPLIER_BOOKING_FROM_EMAIL: ${SUPPLIER_BOOKING_FROM_EMAIL:-system@utskick.jkprojekt.se}
       SUPPLIER_BOOKING_FROM_NAME: ${SUPPLIER_BOOKING_FROM_NAME:-JK Projektlogistik Bokning}
       SUPPLIER_BOOKING_REPLY_TO_EMAIL: ${SUPPLIER_BOOKING_REPLY_TO_EMAIL:-bokning@jkprojekt.se}
+      # AI-tolkning av orderblad utan textlager via VI-HEM (se docs/ai-tolkning.md). Båda måste sättas, annars är funktionen avstängd.
+      VIHEM_AI_URL: ${VIHEM_AI_URL:-}
+      VIHEM_AI_CLIENT_KEY: ${VIHEM_AI_CLIENT_KEY:-}
     logging: *default-logging
 
   db:
