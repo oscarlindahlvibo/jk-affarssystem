@@ -15,7 +15,7 @@ import { useAuth } from "../lib/auth";
 import { isCentralDriveEnabled, uploadCentralDriveFile } from "../lib/centralDrive";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import {
-  countPdfPages, estimateAiCost, fetchAiQuote, interpretWithAi, mapAiOrderToParsed, needsAiFallback, renderPdfPages, type AiQuote,
+  countPdfPages, fetchAiQuote, interpretWithAi, mapAiOrderToParsed, needsAiFallback, renderPdfPages, type AiQuote,
 } from "../lib/aiInterpretation";
 import {
   addSheetsToGroups,
@@ -186,8 +186,7 @@ export function OrderImportPage() {
       }
     }
     if (billedPages > 0) {
-      const cost = estimateAiCost(billedPages, aiOffer.quote);
-      errors.push(`AI-tolkade ${billedPages} ${billedPages === 1 ? "sida" : "sidor"} (${cost.exVat.toLocaleString("sv-SE", { minimumFractionDigits: 2 })} kr exkl. moms). Kontrollera alla uppgifter noga.`);
+      errors.push(`AI-tolkade ${billedPages} ${billedPages === 1 ? "sida" : "sidor"}. Kontrollera alla uppgifter noga.`);
     }
     setAiRunning(false);
     setParseErrors((prev) => [...prev, ...errors]);
@@ -543,7 +542,6 @@ export function OrderImportPage() {
             {aiOffer && (() => {
               const billable = aiOffer.candidates.filter((candidate) => !candidate.tooLong);
               const pages = billable.reduce((sum, candidate) => sum + candidate.pages, 0);
-              const cost = estimateAiCost(pages, aiOffer.quote);
               return (
                 <div className="space-y-3 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900" role="region" aria-label="AI-tolkning">
                   <p className="font-semibold">{aiOffer.candidates.length === 1 ? "Dokumentet saknar läsbar text." : `${aiOffer.candidates.length} dokument saknar läsbar text.`} AI kan läsa dem från bilden.</p>
@@ -554,14 +552,12 @@ export function OrderImportPage() {
                   </ul>
                   {pages > 0 ? (
                     <p>
-                      Kostnad: <strong>{aiOffer.quote.price_per_page.toLocaleString("sv-SE", { minimumFractionDigits: 2 })} kr per sida</strong> exkl. moms ({aiOffer.quote.vat_rate} %).
-                      Det här: {pages} {pages === 1 ? "sida" : "sidor"} = <strong>{cost.exVat.toLocaleString("sv-SE", { minimumFractionDigits: 2 })} kr + moms</strong> ({cost.total.toLocaleString("sv-SE", { minimumFractionDigits: 2 })} kr inkl. moms).
-                      Du debiteras bara om tolkningen lyckas, och du granskar alltid resultatet innan något skapas.
+                      AI-tolkning ({pages} {pages === 1 ? "sida" : "sidor"}) debiteras enligt gällande villkor. Du debiteras bara om tolkningen lyckas, och du granskar alltid resultatet innan något skapas.
                     </p>
                   ) : <p>Inget av dokumenten kan AI-tolkas.</p>}
                   {aiOffer.quote.monthly_page_limit !== null && <p className="text-xs">Månadsgräns: {aiOffer.quote.month_pages_used} av {aiOffer.quote.monthly_page_limit} sidor använda.</p>}
                   <div className="flex flex-wrap gap-2">
-                    {pages > 0 && <Button type="button" disabled={aiRunning} onClick={() => void runAi()}>{aiRunning ? <><Loader2 size={14} className="animate-spin" /> Tolkar…</> : `Tolka med AI (${cost.exVat.toLocaleString("sv-SE", { minimumFractionDigits: 2 })} kr + moms)`}</Button>}
+                    {pages > 0 && <Button type="button" disabled={aiRunning} onClick={() => void runAi()}>{aiRunning ? <><Loader2 size={14} className="animate-spin" /> Tolkar…</> : "Tolka med AI"}</Button>}
                     <Button type="button" variant="secondary" disabled={aiRunning} onClick={declineAi}>Fortsätt utan AI (fyll i manuellt)</Button>
                   </div>
                 </div>

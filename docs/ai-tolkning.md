@@ -4,7 +4,7 @@ Status: byggt och testat lokalt. Inte driftsatt. Kräver att VI-HEM-sidan (gren 
 
 ## Så fungerar det
 1. Vid **Importera order** läser webbläsaren PDF:en som vanligt (textlager, ingen kostnad).
-2. Saknar PDF:en läsbar text (skannad eller utskriven som bild, t.ex. "Microsoft Print to PDF") erbjuds **AI-tolkning**. Användaren ser först kostnaden: *5,00 kr per sida exkl. moms, antal sidor, summa + moms*. Inget skickas och inget debiteras förrän man trycker **Tolka med AI**. Alternativet är **Fortsätt utan AI**, som lägger in bladet tomt för manuell ifyllnad.
+2. Saknar PDF:en läsbar text (skannad eller utskriven som bild, t.ex. "Microsoft Print to PDF") erbjuds **AI-tolkning**. Användaren ser antal sidor och att tolkningen debiteras enligt gällande villkor (priset visas inte; det styrs i VI-HEM och kan ändras). Inget skickas och inget debiteras förrän man trycker **Tolka med AI**. Alternativet är **Fortsätt utan AI**, som lägger in bladet tomt för manuell ifyllnad.
 3. Webbläsaren renderar sidorna till bilder och skickar dem till JK:s funktion `interpret-order-document` (endast aktiva admin/projektledare). Den vidarebefordrar server-till-server till VI-HEM:s `vihem-ai-interpret-document` med JK:s kundnyckel.
 4. VI-HEM kör OCR (Google Vision) och strukturering (OpenAI, bildtolkning som komplement) med Vibogruppens befintliga nycklar, loggar tolkningen och returnerar orderfälten i samma struktur som textläsningen (`ParsedLtcOrder`).
 5. Resultatet visas i den vanliga granskningsvyn med en tydlig varning om att bladet är AI-tolkat. **Inget projekt skapas utan att användaren granskat och bekräftat.**
