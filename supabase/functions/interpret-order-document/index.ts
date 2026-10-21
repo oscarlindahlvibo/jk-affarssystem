@@ -83,7 +83,7 @@ Deno.serve(async (request) => {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Vihem-Ai-Key": VIHEM_AI_CLIENT_KEY },
       body: JSON.stringify(upstreamBody),
-      signal: AbortSignal.timeout(110000),
+      signal: AbortSignal.timeout(57000),
     });
     const payload = await upstream.json().catch(() => ({ error: "Ogiltigt svar från AI-tjänsten." }));
     return json(payload, upstream.status, origin);
