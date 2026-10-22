@@ -3,6 +3,7 @@ import { useState } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { SystemNoticeBanner } from "./SystemNoticeBanner";
 import { useStore } from "../../data/store";
 
 const TITLE_BY_PATH: { pattern: string; title: string }[] = [
@@ -54,6 +55,7 @@ export function AppLayout() {
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar title={title} onMenuClick={() => setSidebarOpen(true)} />
+        <SystemNoticeBanner />
         <main className="min-w-0 flex-1 p-4 sm:p-6">
           {dataError && (
             <div className="mb-4 flex items-start justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
