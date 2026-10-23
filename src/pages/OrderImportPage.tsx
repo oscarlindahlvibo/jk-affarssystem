@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router-dom";
-import { Upload, FileText, CheckCircle2, AlertTriangle, ArrowLeft, ArrowRight, Loader2, Plus } from "lucide-react";
+import { Upload, CheckCircle2, AlertTriangle, ArrowLeft, ArrowRight, Loader2, Plus } from "lucide-react";
 import { useStore } from "../data/store";
 import { Panel } from "../components/ui/Panel";
 import { Button } from "../components/ui/Button";
 import { LtcGroupCard } from "../components/import/LtcGroupCard";
 import { extractPdfRows, parseLtcOrder, rowsToText } from "../lib/ltcParse";
 import { isUppdragslista, parseUppdragslista } from "../lib/uppdragslista";
-import { MOCK_LTC_ORDER } from "../data/ltcMockOrder";
 import { nextProjectNumber } from "../components/projects/NewProjectModal";
 import { usePermissions } from "../lib/usePermissions";
 import { canonicalCustomerName, normalizeCustomerName } from "../lib/importLogic";
@@ -297,14 +296,6 @@ export function OrderImportPage() {
       if (!parsing && !aiOffer && !aiRunning && event.dataTransfer.files.length > 0) void handleFiles(event.dataTransfer.files);
     },
   };
-
-  function useExample() {
-    setParseErrors([]);
-    const sheet: LtcSheet = { id: crypto.randomUUID(), file: null, fileName: "Exempeldata (LTC-blad Holtab)", parsed: MOCK_LTC_ORDER, previewUrl: null };
-    setSheets([sheet]);
-    setGroups(addSheetsToGroups([], [sheet], ctx));
-    setStep(2);
-  }
 
   function updateGroup(id: string, patch: Partial<LtcGroup>) {
     setGroups((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)));
@@ -650,13 +641,6 @@ export function OrderImportPage() {
               );
             })()}
             {parseErrors.map((message) => <p key={message} className="text-sm text-red-600">{message}</p>)}
-            <div className="flex items-center gap-3 text-xs text-slate-400">
-              <div className="h-px flex-1 bg-border" /> eller <div className="h-px flex-1 bg-border" />
-            </div>
-            <button onClick={useExample} className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-white py-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
-              <FileText size={16} className="text-orange-500" />
-              Använd exempeldata (LTC-blad Holtab)
-            </button>
           </div>
           <div className="mt-4 flex items-start gap-2 rounded-lg bg-slate-50 p-4 text-xs text-slate-500">
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
