@@ -55,3 +55,12 @@ describe("distinctPageIndexes", () => {
     expect(distinctPageIndexes([sheet("58806"), "", sheet("58806"), "  "])).toEqual([0, 1, 3]);
   });
 });
+
+describe("leveranstid från AI", () => {
+  const order = { ...mapAiOrderToParsed({ documentNumber: "58806", deliveryTime: "06:45", items: [] } as never), items: [] };
+  it("tas med när den är en giltig tid", () => {
+    expect(order.deliveryTime).toBe("06:45");
+    expect(mapAiOrderToParsed({ documentNumber: "1", deliveryTime: "sen", items: [] } as never).deliveryTime).toBeNull();
+    expect(mapAiOrderToParsed({ documentNumber: "1", items: [] } as never).deliveryTime).toBeNull();
+  });
+});

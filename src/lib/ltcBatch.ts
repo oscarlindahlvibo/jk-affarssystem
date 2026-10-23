@@ -180,7 +180,7 @@ export function buildGroup(sheets: LtcSheet[], ctx: LtcContext): LtcGroup {
     loadingDate: order.loadingDate ?? "",
     loadingTime: "",
     deliveryDate: order.deliveryDate ?? "",
-    deliveryTime: "",
+    deliveryTime: sheets.map((s) => s.parsed.deliveryTime).find(Boolean) ?? "",
     deliveryTerms: uniqueJoin(sheets.map((s) => s.parsed.deliveryTerms), " + "),
     transportType: suggestedTransportType(items),
     supplierId: "",
@@ -210,6 +210,7 @@ export function addSheetsToGroups(groups: LtcGroup[], newSheets: LtcSheet[], ctx
             sheetIds: [...g.sheetIds, sheet.id],
             items: [...g.items, ...sheet.parsed.items.map((item) => ({ ...item, include: true, sheetId: sheet.id }))],
             deliveryTerms: uniqueJoin([group.deliveryTerms, sheet.parsed.deliveryTerms], " + "),
+            deliveryTime: group.deliveryTime || sheet.parsed.deliveryTime || "",
             loadingDate: group.loadingDate || sheet.parsed.loadingDate || "",
           }
         : g

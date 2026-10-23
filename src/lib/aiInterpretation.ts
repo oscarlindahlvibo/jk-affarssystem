@@ -62,6 +62,7 @@ export function mapAiOrderToParsed(order: AiOrder, rawText = ""): ParsedLtcOrder
     deliveryPostnr: order.deliveryPostnr ?? null,
     deliveryCity: order.deliveryCity ?? null,
     deliveryTerms: order.deliveryTerms ?? null,
+    deliveryTime: /^\d{2}:\d{2}$/.test(order.deliveryTime ?? "") ? order.deliveryTime : null,
     loadingCompany: order.loadingCompany ?? null,
     deliveryCompany: order.deliveryCompany ?? null,
     senderCountry: order.senderCountry ?? null,

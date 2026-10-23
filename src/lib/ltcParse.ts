@@ -44,6 +44,8 @@ export interface ParsedLtcOrder {
   deliveryCompany?: string | null;
   senderCountry?: string | null;
   deliveryCountry?: string | null;
+  // Planerad lossningstid (HH:MM), t.ex. från AI-tolkning när leveransanvisningen anger en tid.
+  deliveryTime?: string | null;
   items: ParsedLtcItem[];
   rawText: string;
 }
