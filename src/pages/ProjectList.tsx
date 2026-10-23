@@ -14,6 +14,7 @@ import { PROJECT_PRIORITIES, PROJECT_STATUSES, type Project, type ProjectPriorit
 import { effectiveProjectPriority } from "../lib/projectPriority";
 import { PRIORITY_STYLES, STATUS_STYLES } from "../lib/status";
 import { isInWeek } from "../lib/week";
+import { initialFilters, isQuickFilter, writeFilterPrefs } from "../lib/projectListFilters";
 
 type QuickFilter =
   | "alla"
@@ -233,21 +234,25 @@ export function ProjectList() {
   const canEdit = permissions.can("projects", "edit");
 
   const urlSearch = searchParams.get("sok") ?? "";
-  const [searchState, setSearchState] = useState({ urlSearch, value: urlSearch });
+  const filterParam = searchParams.get("filter") as QuickFilter | null;
+  const urlFilter = isQuickFilter(filterParam) ? filterParam : null;
+  const [initial] = useState(() => initialFilters(typeof window === "undefined" ? null : window.sessionStorage, urlFilter, urlSearch));
+  const [searchState, setSearchState] = useState({ urlSearch, value: urlSearch || initial.search });
   const search = searchState.urlSearch === urlSearch ? searchState.value : urlSearch;
   const setSearch = (value: string) => setSearchState({ urlSearch, value });
-  const [status, setStatus] = useState("");
-  const [customerId, setCustomerId] = useState("");
-  const [responsible, setResponsible] = useState("");
-  const [measurement, setMeasurement] = useState<"" | "finns" | "saknas">("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [showClosed, setShowClosed] = useState(false);
+  const [status, setStatus] = useState(initial.status);
+  const [customerId, setCustomerId] = useState(initial.customerId);
+  const [responsible, setResponsible] = useState(initial.responsible);
+  const [measurement, setMeasurement] = useState<"" | "finns" | "saknas">(initial.measurement);
+  const [dateFrom, setDateFrom] = useState(initial.dateFrom);
+  const [showClosed, setShowClosed] = useState(initial.showClosed);
   const [sortKey, setSortKey] = useState<SortKey | null>(() => readSortPreference().key);
   const [sortDirection, setSortDirection] = useState<SortDirection>(() => readSortPreference().direction);
-  const filterParam = searchParams.get("filter") as QuickFilter | null;
-  const [quickFilter, setQuickFilter] = useState<QuickFilter>(
-    filterParam && QUICK_FILTERS.some((f) => f.key === filterParam) ? filterParam : "alla"
-  );
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>(initial.quickFilter);
+
+  useEffect(() => {
+    writeFilterPrefs(typeof window === "undefined" ? null : window.sessionStorage, { quickFilter, status, customerId, responsible, measurement, dateFrom, showClosed, search });
+  }, [quickFilter, status, customerId, responsible, measurement, dateFrom, showClosed, search]);
 
   useEffect(() => {
     if (!sortKey) return;
