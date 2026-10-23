@@ -19,6 +19,8 @@ export function LtcGroupCard({
   profiles,
   onChange,
   onMoveSheet,
+  onReinterpret,
+  reinterpretingId,
 }: {
   index: number;
   groupCount: number;
@@ -32,6 +34,9 @@ export function LtcGroupCard({
   profiles: Profile[];
   onChange: (patch: Partial<LtcGroup>) => void;
   onMoveSheet: (sheetId: string, target: string) => void;
+  // Tolka om ett blad med AI (även om det har läsbar text). Debiteras enligt gällande villkor.
+  onReinterpret?: (sheetId: string) => void;
+  reinterpretingId?: string | null;
 }) {
   const [open, setOpen] = useState(index === 0 && groupCount <= 3);
   const includedCount = group.items.filter((i) => i.include).length;
@@ -91,6 +96,17 @@ export function LtcGroupCard({
                     {sheet.previewUrl && (
                       <button type="button" className="text-xs font-medium text-orange-600 hover:text-orange-700" onClick={() => onChange({ previewSheetId: sheet.id })}>
                         Visa
+                      </button>
+                    )}
+                    {onReinterpret && sheet.file && !sheet.ai && (
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-sky-700 hover:text-sky-800 disabled:opacity-50"
+                        disabled={Boolean(reinterpretingId)}
+                        title="Läs om bladet med AI. Ersätter de uppgifter som lästs ur dokumentet."
+                        onClick={() => onReinterpret(sheet.id)}
+                      >
+                        {reinterpretingId === sheet.id ? "Tolkar med AI…" : "Tolka om med AI"}
                       </button>
                     )}
                     {(allGroups.length > 1 || sheets.length > 1) && (

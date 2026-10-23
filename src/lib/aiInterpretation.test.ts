@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { estimateAiCost, mapAiOrderToParsed, needsAiFallback } from "./aiInterpretation";
+import { distinctPageIndexes, estimateAiCost, mapAiOrderToParsed, needsAiFallback } from "./aiInterpretation";
 import type { PdfRow } from "./ltcParse";
 
 const row = (...texts: string[]): PdfRow => texts.map((str, i) => ({ x: i * 10, str }));
@@ -38,5 +38,20 @@ describe("AI-tolkning som fallback", () => {
   it("räknar kostnaden per sida exkl. moms, moms och totalt", () => {
     expect(estimateAiCost(2, { price_per_page: 5, vat_rate: 25 })).toEqual({ exVat: 10, vat: 2.5, total: 12.5 });
     expect(estimateAiCost(3, { price_per_page: 4.99, vat_rate: 25 })).toEqual({ exVat: 14.97, vat: 3.74, total: 18.71 });
+  });
+});
+
+describe("distinctPageIndexes", () => {
+  const sheet = (docNo: string, extra = "") =>
+    `FRAKTSEDEL TRANSPORTINSTRUKTION Transportföretag Tabergs Åkeri AB Godsavsändare Eksjöhus Bostad Entreprenad AB Galoppstigen 2 57595 EKSJÖ Godsmottagare Väsby 34 15196 Enhörna Fraktsedel nr ${docNo} Utskrivningsdatum 2026-10-27 Modul 14 L 6,35 B 395 H 340 ${extra}`;
+
+  it("hoppar över kopior av samma sida men behåller första", () => {
+    expect(distinctPageIndexes([sheet("58806", "Sida 1(4) Avsändarens blad"), sheet("58806", "Sida 2(4) Viktigt synlig avvikelse anmäls (7) dagar"), sheet("58806", "Sida 3(4)")])).toEqual([0]);
+  });
+  it("behåller sidor med annat dokumentnummer även om layouten är lika", () => {
+    expect(distinctPageIndexes([sheet("58806"), sheet("58807")])).toEqual([0, 1]);
+  });
+  it("skickar alltid sidor utan textlager", () => {
+    expect(distinctPageIndexes([sheet("58806"), "", sheet("58806"), "  "])).toEqual([0, 1, 3]);
   });
 });

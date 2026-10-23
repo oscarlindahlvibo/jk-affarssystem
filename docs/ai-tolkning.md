@@ -36,3 +36,13 @@ Status: byggt och testat lokalt. Inte driftsatt. Kräver att VI-HEM-sidan (gren 
 ## Begränsningar
 - Läser bilder av sidorna (högst 10 sidor, ca 1400 px bredd). Mycket dåliga skanningar kan ge ofullständiga resultat; då fyller man i manuellt.
 - Flera ordrar i samma dokument (uppdragslista) kan tolkas, men noggrannheten är lägre än för textläsning. Granska alltid.
+
+## AI-tolkning även för dokument med text
+
+Den vanliga textläsningen klarar LTC-blad men inte alla format (t.ex. fraktsedlar där kolumnerna hamnar i fel ordning). Användaren kan därför välja AI även när PDF:en har läsbar text:
+
+- **Före inläsning:** kryssrutan *Tolka dokumenten med AI, även när de har läsbar text* under uppladdningsrutan. Då går alla släppta dokument via AI (efter samma besked och bekräftelse). Väljer användaren *Fortsätt utan AI* läses dokumenten med den vanliga textläsningen.
+- **Efter inläsning:** knappen *Tolka om med AI* vid varje blad i steg 2. Efter bekräftelse ersätts bladets uppgifter (och uppgifter användaren ändrat för det bladet) med AI:ns tolkning. Misslyckas den ändras ingenting och ingen debitering sker.
+- **Läge:** val av AI på dokument med text körs i högkvalitetsläge (`accuracy: "high"`): bilderna läses direkt av bildmodellen med OCR-texten som stöd, i stället för att OCR-texten tolkas av den billigare textmodellen.
+- **Kopior hoppas över:** sidor som är kopior av en tidigare sida (samma identifierande tal och i princip samma text, t.ex. en fraktsedel i fyra exemplar) skickas inte, så de debiteras inte. Sidor utan textlager skickas alltid. Antalet visas i beskedet.
+- VI-HEM slår ihop ordrar med samma dokumentnummer och leveransadress samt godsrader med samma typ, och omvandlar mått som uppenbart är centimeter/millimeter till meter.

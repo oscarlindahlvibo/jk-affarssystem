@@ -98,17 +98,61 @@ export async function countPdfPages(file: File): Promise<number> {
   return pages;
 }
 
+// Sidor som är kopior av en tidigare sida (t.ex. en fraktsedel i flera exemplar för avsändare, mottagare och transportör)
+// behöver inte tolkas igen. Två sidor räknas som samma när all text i princip överlappar och alla identifierande tal
+// (dokumentnummer, telefonnummer, mått m.m.) är exakt desamma. Sidor utan textlager kan inte jämföras och skickas alltid.
+export function distinctPageIndexes(pageTexts: string[]): number[] {
+  const signature = (text: string) => {
+    const tokens = text.toLowerCase().split(/\s+/).map((t) => t.replace(/[^\p{L}\p{N}]/gu, "")).filter(Boolean);
+    return { all: new Set(tokens), ids: new Set(tokens.filter((t) => /\d/.test(t) && t.length >= 3)) };
+  };
+  const kept: { index: number; all: Set<string>; ids: Set<string> }[] = [];
+  const result: number[] = [];
+  pageTexts.forEach((text, index) => {
+    if (text.trim().length < 40) { result.push(index); return; }
+    const sig = signature(text);
+    const duplicate = kept.some((other) => {
+      if (other.ids.size !== sig.ids.size || [...sig.ids].some((id) => !other.ids.has(id))) return false;
+      const shared = [...sig.all].filter((t) => other.all.has(t)).length;
+      return shared / Math.min(sig.all.size, other.all.size) >= 0.8;
+    });
+    if (!duplicate) { kept.push({ index, ...sig }); result.push(index); }
+  });
+  return result;
+}
+
+// Räknar sidorna och väljer vilka som behöver skickas (1-baserade sidnummer).
+export async function analyzePdfForAi(file: File): Promise<{ total: number; send: number[] }> {
+  const lib = await pdfjs();
+  const task = lib.getDocument({ data: await file.arrayBuffer() });
+  try {
+    const doc = await task.promise;
+    const texts: string[] = [];
+    for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
+      const page = await doc.getPage(pageNumber);
+      const content = await page.getTextContent();
+      texts.push(content.items.map((item) => ("str" in item ? item.str : "")).join(" "));
+      page.cleanup();
+    }
+    return { total: doc.numPages, send: distinctPageIndexes(texts).map((index) => index + 1) };
+  } finally {
+    await task.destroy();
+  }
+}
+
 // Renderar sidorna till JPEG (ca 1400 px bredd) – tillräckligt för OCR men litet nog för anropet.
-export async function renderPdfPages(file: File, maxPages = MAX_AI_PAGES): Promise<AiPageImage[]> {
+// pageNumbers (1-baserade) väljer vilka sidor som renderas; utan den renderas alla.
+export async function renderPdfPages(file: File, maxPages = MAX_AI_PAGES, pageNumbers?: number[]): Promise<AiPageImage[]> {
   const lib = await pdfjs();
   const task = lib.getDocument({ data: await file.arrayBuffer() });
   const doc = await task.promise;
-  if (doc.numPages > maxPages) {
+  const wanted = pageNumbers ?? Array.from({ length: doc.numPages }, (_, i) => i + 1);
+  if (wanted.length > maxPages) {
     await task.destroy();
-    throw new Error(`Dokumentet har ${doc.numPages} sidor (högst ${maxPages} kan AI-tolkas).`);
+    throw new Error(`Dokumentet har ${wanted.length} sidor (högst ${maxPages} kan AI-tolkas).`);
   }
   const images: AiPageImage[] = [];
-  for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
+  for (const pageNumber of wanted) {
     const page = await doc.getPage(pageNumber);
     const base = page.getViewport({ scale: 1 });
     const viewport = page.getViewport({ scale: Math.min(2.2, 1400 / base.width) });
@@ -159,9 +203,10 @@ export async function fetchAiQuote(): Promise<AiQuote> {
 }
 
 // requestId ska vara stabilt per dokument och försök, så ett omförsök efter nätverksfel aldrig debiteras två gånger.
-export async function interpretWithAi(file: File, pages: AiPageImage[], requestId: string): Promise<AiInterpretResult> {
+// accuracy "high": bildmodellen läser sidorna direkt (när användaren själv valt AI eller vill ha en om-tolkning).
+export async function interpretWithAi(file: File, pages: AiPageImage[], requestId: string, accuracy: "standard" | "high" = "standard"): Promise<AiInterpretResult> {
   const result = await call<AiInterpretResult & { ok: boolean }>({
-    action: "interpret", request_id: requestId, file_name: file.name, file_sha256: await sha256OfFile(file), pages,
+    action: "interpret", request_id: requestId, file_name: file.name, file_sha256: await sha256OfFile(file), pages, accuracy,
   });
   return { ...result, orders: result.orders ?? [], warnings: result.warnings ?? [] };
 }

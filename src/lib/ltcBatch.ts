@@ -210,6 +210,23 @@ export function addSheetsToGroups(groups: LtcGroup[], newSheets: LtcSheet[], ctx
   return next;
 }
 
+// Tar bort blad (och deras godsrader) ur grupperna, t.ex. när ett blad tolkas om med AI. Färdiga grupper lämnas orörda.
+export function removeSheetsFromGroups(groups: LtcGroup[], sheetIds: string[]): LtcGroup[] {
+  const removed = new Set(sheetIds);
+  return groups
+    .map((g) =>
+      g.done || !g.sheetIds.some((id) => removed.has(id))
+        ? g
+        : {
+            ...g,
+            sheetIds: g.sheetIds.filter((id) => !removed.has(id)),
+            items: g.items.filter((i) => !removed.has(i.sheetId)),
+            previewSheetId: g.previewSheetId && removed.has(g.previewSheetId) ? g.sheetIds.find((id) => !removed.has(id)) ?? null : g.previewSheetId,
+          }
+    )
+    .filter((g) => g.done || g.sheetIds.length > 0);
+}
+
 // Flyttar ett blad (med dess godsrader) till en annan grupp, eller till en egen ny grupp.
 export function moveSheet(
   groups: LtcGroup[],

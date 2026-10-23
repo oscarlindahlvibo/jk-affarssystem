@@ -72,6 +72,7 @@ Deno.serve(async (request) => {
       file_name: body.file_name,
       file_sha256: body.file_sha256,
       pages: body.pages,
+      accuracy: body.accuracy === "high" ? "high" : "standard",
       // Vem som begärde tolkningen syns i underlaget som kunden får.
       user_ref: `${profile.full_name} (${profile.email})`,
       source: "jk-affarssystem",
