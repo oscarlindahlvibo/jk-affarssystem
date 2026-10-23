@@ -203,8 +203,9 @@ export async function fetchAiQuote(): Promise<AiQuote> {
 }
 
 // requestId ska vara stabilt per dokument och försök, så ett omförsök efter nätverksfel aldrig debiteras två gånger.
-// accuracy "high": bildmodellen läser sidorna direkt (när användaren själv valt AI eller vill ha en om-tolkning).
-export async function interpretWithAi(file: File, pages: AiPageImage[], requestId: string, accuracy: "standard" | "high" = "standard"): Promise<AiInterpretResult> {
+// accuracy "high" (standard): bildmodellen läser sidorna direkt. Utan textlager är OCR-texten ofta felaktig och med textlager har
+// användaren själv valt AI för att den vanliga läsningen inte räckte, så den billigare textmodellen ger för ofta fel.
+export async function interpretWithAi(file: File, pages: AiPageImage[], requestId: string, accuracy: "standard" | "high" = "high"): Promise<AiInterpretResult> {
   const result = await call<AiInterpretResult & { ok: boolean }>({
     action: "interpret", request_id: requestId, file_name: file.name, file_sha256: await sha256OfFile(file), pages, accuracy,
   });

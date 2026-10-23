@@ -144,6 +144,14 @@ export function newGroupId() {
   return `grp-${Date.now().toString(36)}-${groupCounter}`;
 }
 
+// Kontakt vid lossning visas även när mottagaren bara anges med adress (utan företagsnamn).
+export function unloadingContactLabel(contact: string | null | undefined, company: string | null | undefined): string {
+  const name = contact?.trim() ?? "";
+  const firm = company?.trim() ?? "";
+  if (name && firm) return `${name} (${firm})`;
+  return name || firm;
+}
+
 export function buildGroup(sheets: LtcSheet[], ctx: LtcContext): LtcGroup {
   const first = sheets[0];
   const order = first.parsed;
@@ -167,8 +175,8 @@ export function buildGroup(sheets: LtcSheet[], ctx: LtcContext): LtcGroup {
     unloadingPlace,
     loadingCompany: order.loadingCompany ?? order.senderCompany ?? "",
     unloadingCompany: order.deliveryCompany ?? order.recipientCompany ?? "",
-    unloadingContactName: order.recipientCompany ? `${order.recipientContact ?? ""} (${order.recipientCompany})`.trim() : "",
-    unloadingContactPhone: order.recipientCompany ? order.recipientMobile ?? order.recipientPhone ?? "" : "",
+    unloadingContactName: unloadingContactLabel(order.recipientContact, order.recipientCompany),
+    unloadingContactPhone: order.recipientMobile ?? order.recipientPhone ?? "",
     loadingDate: order.loadingDate ?? "",
     loadingTime: "",
     deliveryDate: order.deliveryDate ?? "",

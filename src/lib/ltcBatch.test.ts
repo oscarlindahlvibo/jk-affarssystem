@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { removeSheetsFromGroups, type LtcGroup } from "./ltcBatch";
+import { removeSheetsFromGroups, unloadingContactLabel, type LtcGroup } from "./ltcBatch";
 
 describe("removeSheetsFromGroups", () => {
   const group = (id: string, sheetIds: string[], done = false) =>
@@ -18,5 +18,14 @@ describe("removeSheetsFromGroups", () => {
   it("lämnar färdiga grupper orörda", () => {
     const done = group("g1", ["a"], true);
     expect(removeSheetsFromGroups([done], ["a"])).toEqual([done]);
+  });
+});
+
+describe("unloadingContactLabel", () => {
+  it("visar kontakten även utan företagsnamn", () => {
+    expect(unloadingContactLabel("Ulf (byggledare)", null)).toBe("Ulf (byggledare)");
+    expect(unloadingContactLabel("Anders", "Falköpings Mejeri")).toBe("Anders (Falköpings Mejeri)");
+    expect(unloadingContactLabel(null, "Falköpings Mejeri")).toBe("Falköpings Mejeri");
+    expect(unloadingContactLabel(undefined, undefined)).toBe("");
   });
 });

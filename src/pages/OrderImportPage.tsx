@@ -216,7 +216,7 @@ export function OrderImportPage() {
       try {
         const images = await renderPdfPages(candidate.file, aiOffer.quote.max_pages_per_request, candidate.pageNumbers);
         if (!aiRequestIds.current.has(candidate.id)) aiRequestIds.current.set(candidate.id, crypto.randomUUID());
-        const result = await interpretWithAi(candidate.file, images, aiRequestIds.current.get(candidate.id)!, candidate.chosen ? "high" : "standard");
+        const result = await interpretWithAi(candidate.file, images, aiRequestIds.current.get(candidate.id)!);
         if (result.billed) billedPages += result.pages;
         const previewUrl = trackPreview(candidate.file);
         for (const order of result.orders) toAdd.push({ id: crypto.randomUUID(), file: candidate.file, fileName: candidate.file.name, parsed: mapAiOrderToParsed(order, result.raw_text ?? ""), previewUrl, ai: true });
