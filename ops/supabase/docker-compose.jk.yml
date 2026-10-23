@@ -58,6 +58,11 @@ services:
       # AI-tolkning av orderblad utan textlager via VI-HEM (se docs/ai-tolkning.md). Båda måste sättas, annars är funktionen avstängd.
       VIHEM_AI_URL: ${VIHEM_AI_URL:-}
       VIHEM_AI_CLIENT_KEY: ${VIHEM_AI_CLIENT_KEY:-}
+      MAIL_TRANSPORT: ${MAIL_TRANSPORT:-smtp}
+      GRAPH_TENANT_ID: ${GRAPH_TENANT_ID:-}
+      GRAPH_CLIENT_ID: ${GRAPH_CLIENT_ID:-}
+      GRAPH_CLIENT_SECRET: ${GRAPH_CLIENT_SECRET:-}
+      GRAPH_SENDER: ${GRAPH_SENDER:-}
     logging: *default-logging
 
   db:

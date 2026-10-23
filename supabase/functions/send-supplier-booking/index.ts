@@ -1,12 +1,8 @@
-import nodemailer from "npm:nodemailer@6.9.16";
+import { mailConfigured, sendMail } from "../_shared/mail.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const SMTP_HOST = Deno.env.get("SMTP_HOST") ?? "";
-const SMTP_PORT = Number(Deno.env.get("SMTP_PORT") ?? "587");
-const SMTP_USER = Deno.env.get("SMTP_USER") ?? "";
-const SMTP_PASS = Deno.env.get("SMTP_PASS") ?? "";
 const FROM_EMAIL = Deno.env.get("SUPPLIER_BOOKING_FROM_EMAIL") ?? "system@utskick.jkprojekt.se";
 const FROM_NAME = Deno.env.get("SUPPLIER_BOOKING_FROM_NAME") ?? "JK Projektlogistik Bokning";
 const REPLY_TO_EMAIL = Deno.env.get("SUPPLIER_BOOKING_REPLY_TO_EMAIL") ?? "bokning@jkprojekt.se";
@@ -160,7 +156,7 @@ Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(origin) });
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405, origin);
   if (origin && !ALLOWED_ORIGINS.has(origin)) return json({ error: "Origin not allowed" }, 403, origin);
-  if (!SUPABASE_URL || !ANON_KEY || !SERVICE_ROLE_KEY || !SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
+  if (!SUPABASE_URL || !ANON_KEY || !SERVICE_ROLE_KEY || !mailConfigured()) {
     return json({ error: "Bokningsutskick är inte konfigurerat på servern." }, 503, origin);
   }
 
@@ -200,13 +196,6 @@ Deno.serve(async (request) => {
     });
     if (!projectUpdate.ok) throw new Error("Could not update primary supplier");
 
-    const transport = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_PORT === 465,
-      requireTLS: SMTP_PORT !== 465,
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-    });
     const dispatches: DbRow[] = [];
     for (const supplierId of supplierIds) {
       const supplier = suppliers.find((item) => item.id === supplierId)!;
@@ -217,15 +206,16 @@ Deno.serve(async (request) => {
       let errorMessage: string | null = null;
       try {
         if (addresses.length === 0 || addresses.some((address) => !validEmail(address))) throw new Error("Leverantören saknar en giltig e-postadress.");
-        const result = await transport.sendMail({
-          from: { name: FROM_NAME, address: FROM_EMAIL },
+        const result = await sendMail({
+          fromName: FROM_NAME,
+          fromAddress: FROM_EMAIL,
           replyTo: REPLY_TO_EMAIL,
           to: addresses,
           subject: content.subject,
           text: content.text,
           html: content.html,
         });
-        externalMessageId = result.messageId ?? null;
+        externalMessageId = result.messageId;
       } catch (error) {
         status = "failed";
         errorMessage = error instanceof Error ? error.message.slice(0, 500) : "Okänt e-postfel";

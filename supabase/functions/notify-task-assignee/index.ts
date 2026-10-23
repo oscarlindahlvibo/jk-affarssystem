@@ -1,13 +1,9 @@
-import nodemailer from "npm:nodemailer@6.9.16";
+import { mailConfigured, sendMail } from "../_shared/mail.ts";
 import { sendUserPush } from "../_shared/webPush.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const SMTP_HOST = Deno.env.get("SMTP_HOST") ?? "";
-const SMTP_PORT = Number(Deno.env.get("SMTP_PORT") ?? "587");
-const SMTP_USER = Deno.env.get("SMTP_USER") ?? "";
-const SMTP_PASS = Deno.env.get("SMTP_PASS") ?? "";
 const FROM_EMAIL = Deno.env.get("TASK_NOTIFICATION_FROM_EMAIL") ?? "system@utskick.jkprojekt.se";
 const APP_URL = "https://projekt.jkprojekt.se";
 const ALLOWED_ORIGINS = new Set([APP_URL, "http://127.0.0.1:5173", "http://localhost:5173"]);
@@ -81,18 +77,17 @@ Deno.serve(async (request) => {
         body: String(task.task).slice(0, 200), url: `/projekt/${project.id}`, tag: `jk-task-${task.id}`,
       });
     } catch { console.error("Task push delivery failed"); }
-    if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return json({ ok: false, push: pushResult, error: "Arbetsordern sparades, men e-posttjänsten är inte konfigurerad." }, 200, origin);
+    if (!mailConfigured()) return json({ ok: false, push: pushResult, error: "Arbetsordern sparades, men e-posttjänsten är inte konfigurerad." }, 200, origin);
     if (!assignee?.email) return json({ error: "Den ansvariga saknar e-postadress." }, 422, origin);
 
     const subject = `Ny arbetsorder: ${task.task} (${project.project_number})`;
     const projectUrl = `${APP_URL}/projekt/${project.id}`;
     const text = `Hej ${assignee.full_name},\n\nDu har fått en arbetsorder i JK Projektsystem.\n\nProjekt: ${project.project_number} – ${project.name}\nUppgift: ${task.task}\nKategori: ${task.category}\nDeadline: ${date(task.deadline)}\nSträcka: ${task.route_section || "–"}\nInstruktion: ${task.description || "–"}\n\nÖppna projektet: ${projectUrl}\n`;
     const html = `<!doctype html><html><body style="font-family:Arial,sans-serif;color:#172033;background:#f8fafc;margin:0"><div style="max-width:620px;margin:auto;padding:24px"><div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden"><div style="background:#0f1b30;color:#fff;padding:20px 24px"><strong>JK Projektlogistik</strong><div style="color:#fdba74;margin-top:4px">Ny arbetsorder</div></div><div style="padding:24px"><p>Hej ${esc(assignee.full_name)},</p><p>Du har fått en arbetsorder i JK Projektsystem.</p><table style="width:100%;border-collapse:collapse"><tr><td style="padding:7px;color:#64748b">Projekt</td><td style="padding:7px;font-weight:600">${esc(project.project_number)} – ${esc(project.name)}</td></tr><tr><td style="padding:7px;color:#64748b">Uppgift</td><td style="padding:7px;font-weight:600">${esc(task.task)}</td></tr><tr><td style="padding:7px;color:#64748b">Kategori</td><td style="padding:7px">${esc(task.category)}</td></tr><tr><td style="padding:7px;color:#64748b">Deadline</td><td style="padding:7px">${esc(date(task.deadline))}</td></tr><tr><td style="padding:7px;color:#64748b">Sträcka</td><td style="padding:7px">${esc(task.route_section || "–")}</td></tr><tr><td style="padding:7px;color:#64748b">Instruktion</td><td style="padding:7px">${esc(task.description || "–")}</td></tr></table><p style="margin-top:24px"><a href="${esc(projectUrl)}" style="display:inline-block;background:#f97316;color:#fff;text-decoration:none;padding:11px 16px;border-radius:7px;font-weight:600">Öppna projektet</a></p></div></div></div></body></html>`;
-    const transport = nodemailer.createTransport({ host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_PORT === 465, requireTLS: SMTP_PORT !== 465, auth: { user: SMTP_USER, pass: SMTP_PASS } });
     let status = "sent", messageId: string | null = null, errorMessage: string | null = null;
     try {
-      const result = await transport.sendMail({ from: { name: "JK Projektlogistik System", address: FROM_EMAIL }, to: String(assignee.email), subject, text, html });
-      messageId = result.messageId ?? null;
+      const result = await sendMail({ fromName: "JK Projektlogistik System", fromAddress: FROM_EMAIL, to: [String(assignee.email)], subject, text, html });
+      messageId = result.messageId;
     } catch (error) {
       status = "failed";
       errorMessage = error instanceof Error ? error.message.slice(0, 500) : "Okänt e-postfel";
