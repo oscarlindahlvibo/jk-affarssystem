@@ -47,8 +47,8 @@ Deno.serve(async (request) => {
     if (!project) return json({ ok: true, skipped: "project-missing" });
     if (note && isInitialNote(String(note.date), String(project.created_at))) return json({ ok: true, skipped: "initial-note" });
 
-    const customer = (await rows(`customers?id=eq.${project.customer_id}&select=name`))[0];
-    const message = projectEventMessage(event.type, { ...project, customer: customer ? String(customer.name) : null } as never, note as never);
+    const customer = (await rows(`customers?id=eq.${project.customer_id}&select=company_name`))[0];
+    const message = projectEventMessage(event.type, { ...project, customer: customer ? String(customer.company_name) : null } as never, note as never);
     const roles = NOTIFIED_ROLES.map((role) => `"${role}"`).join(",");
     const recipients = (await rows(`profiles?org_id=eq.${project.org_id}&status=eq.aktiv&role=in.(${roles})&select=id,full_name,email`))
       .filter((profile) => profile.id !== event.actor);
