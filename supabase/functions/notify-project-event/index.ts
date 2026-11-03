@@ -1,4 +1,5 @@
 import { mailConfigured, sendMail } from "../_shared/mail.ts";
+import { addInboxNotifications } from "../_shared/inbox.ts";
 import { sendUserPush } from "../_shared/webPush.ts";
 import { NOTIFIED_ROLES, isInitialNote, parseProjectEvent, projectChangeMessage, projectEventMessage } from "../_shared/projectEvents.ts";
 
@@ -69,6 +70,11 @@ Deno.serve(async (request) => {
     const detail = message.lines ? `${project.name}\n${message.lines.join("\n")}` : message.body;
     const text = `${message.title}\n\n${detail}\n\nÖppna projektet: ${APP_URL}${url}\n`;
     const html = `<!doctype html><html><body style="font-family:Arial,sans-serif;color:#172033;background:#f8fafc;margin:0"><div style="max-width:620px;margin:auto;padding:24px"><div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden"><div style="background:#0f1b30;color:#fff;padding:20px 24px"><strong>JK Projektlogistik</strong><div style="color:#fdba74;margin-top:4px">${esc(message.title)}</div></div><div style="padding:24px"><p>${esc(message.lines ? project.name : message.body)}</p>${message.lines ? `<ul>${message.lines.map((line) => `<li>${esc(line)}</li>`).join("")}</ul>` : ""}<p style="margin-top:24px"><a href="${esc(APP_URL + url)}" style="display:inline-block;background:#f97316;color:#fff;text-decoration:none;padding:11px 16px;border-radius:7px;font-weight:600">Öppna projektet</a></p></div></div></div></body></html>`;
+
+    await addInboxNotifications(recipients.map((recipient) => ({
+      org_id: String(project.org_id), user_id: String(recipient.id), kind: event.type, title: message.title,
+      body: message.lines ? `${project.name} · ${message.lines.join(" · ")}` : message.body, url, project_id: String(project.id),
+    })));
 
     let pushed = 0, mailed = 0;
     for (const recipient of recipients) {

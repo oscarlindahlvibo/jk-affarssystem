@@ -1,4 +1,5 @@
 import { mailConfigured, sendMail } from "../_shared/mail.ts";
+import { addInboxNotifications } from "../_shared/inbox.ts";
 import { sendUserPush } from "../_shared/webPush.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -68,6 +69,11 @@ Deno.serve(async (request) => {
     const assignees = await rows(`/rest/v1/profiles?id=eq.${encodeURIComponent(String(task.assignee_id))}&org_id=eq.${encodeURIComponent(String(sender.org_id))}&status=eq.aktiv&select=id,full_name,email`);
     const assignee = assignees[0];
     if (!assignee) return json({ error: "Den ansvariga är inte aktiv i bolaget." }, 422, origin);
+
+    await addInboxNotifications([{
+      org_id: String(project.org_id), user_id: String(assignee.id), kind: "task", title: `Ny arbetsorder · ${project.project_number}`,
+      body: String(task.task).slice(0, 200), url: `/projekt/${project.id}`, project_id: String(project.id),
+    }]);
 
     // A push failure must not prevent the existing email notification.
     let pushResult = { sent: 0, failed: 0, configured: false };

@@ -1,6 +1,6 @@
 import { Menu } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
-import { TaskNotifications } from "./TaskNotifications";
+import { NotificationBell } from "./NotificationBell";
 import { AttendanceChip } from "./AttendanceChip";
 
 export function Topbar({ title, onMenuClick }: { title: string; onMenuClick: () => void }) {
@@ -15,7 +15,7 @@ export function Topbar({ title, onMenuClick }: { title: string; onMenuClick: () 
       <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-4">
         <AttendanceChip />
         <GlobalSearch />
-        <TaskNotifications />
+        <NotificationBell />
       </div>
     </header>
   );
