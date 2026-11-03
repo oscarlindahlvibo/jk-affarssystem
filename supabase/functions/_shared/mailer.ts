@@ -24,8 +24,10 @@ export type MailEnv = { get(name: string): string | undefined };
 export type SmtpSender = (message: MailMessage, env: MailEnv) => Promise<{ messageId: string | null }>;
 
 export class MailError extends Error {
-  constructor(message: string, readonly definite: boolean) {
+  readonly definite: boolean;
+  constructor(message: string, definite: boolean) {
     super(message);
+    this.definite = definite;
   }
 }
 
