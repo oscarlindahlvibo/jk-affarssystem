@@ -10,7 +10,7 @@ import { usePermissions } from "../../lib/usePermissions";
 import { useGoogleDrive } from "../../lib/googleDriveContext";
 import { uploadFileToDrive, deleteFileFromDrive } from "../../lib/googleDrive";
 import { generateShippingDocument, shippingDocumentFileName, type ShippingDocumentKind } from "../../lib/shippingDocuments";
-import { isSupabaseConfigured, supabase } from "../../lib/supabase";
+import { isSupabaseConfigured } from "../../lib/supabase";
 import {
   deleteCentralDriveFile,
   isCentralDriveEnabled,
@@ -81,33 +81,8 @@ export function DocumentsSection({ project, documents }: { project: Project; doc
       return;
     }
 
-    if (isSupabaseConfigured && supabase) {
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const storagePath = `${projectId}/${crypto.randomUUID()}-${safeName}`;
-      const uploaded = await supabase.storage.from("project-documents").upload(storagePath, file, {
-        contentType: file.type || "application/octet-stream",
-        upsert: false,
-      });
-      if (uploaded.error) throw new Error(`Filen kunde inte laddas upp: ${uploaded.error.message}`);
-      const signed = await supabase.storage.from("project-documents").createSignedUrl(storagePath, 60 * 60);
-      if (signed.error) {
-        await supabase.storage.from("project-documents").remove([storagePath]);
-        throw new Error(`Dokumentlänken kunde inte skapas: ${signed.error.message}`);
-      }
-      addDocument(projectId, {
-        file_name: file.name,
-        file_type: file.name.split(".").pop() ?? "fil",
-        category: documentCategory,
-        storage_path: storagePath,
-        file_url: signed.data.signedUrl,
-        file_size: file.size,
-        uploaded_at: new Date().toISOString(),
-        uploaded_by: currentProfile?.full_name ?? "Okänd",
-        visibility: "internal",
-        comment,
-      });
-      return;
-    }
+    // Filer lagras bara i Google Drive, aldrig på servern.
+    if (isSupabaseConfigured) throw new Error("Google Drive är inte aktiverat, så filen kan inte sparas. Kontakta administratören.");
 
     addDocument(projectId, {
       file_name: file.name,
@@ -167,13 +142,6 @@ export function DocumentsSection({ project, documents }: { project: Project; doc
         await deleteFileFromDrive(token, doc.drive_file_id);
       } catch {
         // Filen kan redan vara borttagen i Drive – ta bort referensen ändå.
-      }
-    }
-    if (doc.storage_path && !doc.storage_path.startsWith("drive:") && isSupabaseConfigured && supabase) {
-      const removed = await supabase.storage.from("project-documents").remove([doc.storage_path]);
-      if (removed.error) {
-        setUploadError(`Filen kunde inte tas bort: ${removed.error.message}`);
-        return;
       }
     }
     deleteDocument(projectId, doc.id);

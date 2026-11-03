@@ -26,7 +26,6 @@ import type { Project } from "../types";
 import { SupplierBookingModal } from "../components/projects/SupplierBookingModal";
 import { Modal } from "../components/ui/Modal";
 import { deleteCentralDriveFile, isCentralDriveEnabled } from "../lib/centralDrive";
-import { isSupabaseConfigured, supabase } from "../lib/supabase";
 
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -163,13 +162,6 @@ export function ProjectDetail() {
     try {
       for (const document of project.documents ?? []) {
         if (document.drive_file_id && isCentralDriveEnabled) await deleteCentralDriveFile(document.drive_file_id);
-      }
-      const storagePaths = (project.documents ?? [])
-        .map((document) => document.storage_path)
-        .filter((path): path is string => Boolean(path && !path.startsWith("drive:")));
-      if (storagePaths.length > 0 && isSupabaseConfigured && supabase) {
-        const removed = await supabase.storage.from("project-documents").remove(storagePaths);
-        if (removed.error) throw new Error(`Dokumentfilerna kunde inte tas bort: ${removed.error.message}`);
       }
       await deleteProject(project.id);
       navigate("/projekt", { replace: true });

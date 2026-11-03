@@ -71,17 +71,6 @@ export async function loadLiveStoreData(): Promise<LiveStoreData> {
   const locationRows = (locations.data ?? []) as Location[];
   const cargoRows = (cargo.data ?? []) as CargoItem[];
   const documentRows = (documents.data ?? []) as Array<ProjectDocument & { uploaded_by_name?: string | null }>;
-  const storageDocuments = documentRows.filter((row) => row.storage_path && !row.storage_path.startsWith("drive:"));
-  const signedUrls = new Map<string, string>();
-  if (storageDocuments.length > 0) {
-    const signed = await db.storage
-      .from("project-documents")
-      .createSignedUrls(storageDocuments.map((row) => row.storage_path as string), 60 * 60);
-    assertResult(signed.error, "Kunde inte skapa dokumentlänkar");
-    for (const item of signed.data ?? []) {
-      if (item.path && item.signedUrl) signedUrls.set(item.path, item.signedUrl);
-    }
-  }
   const noteRows = (notes.data ?? []) as ProjectNote[];
   const taskRows = (tasks.data ?? []) as ProjectTask[];
   const projectSupplierRows = (projectSuppliers.data ?? []) as Array<{ project_id: string; supplier_id: string; is_primary: boolean }>;
@@ -110,7 +99,6 @@ export async function loadLiveStoreData(): Promise<LiveStoreData> {
         .map((row) => ({
           ...row,
           uploaded_by: row.uploaded_by_name ?? row.uploaded_by ?? "Okänd",
-          file_url: row.storage_path ? signedUrls.get(row.storage_path) ?? row.file_url : row.file_url,
         })),
       notes: noteRows.filter((row) => row.project_id === project.id),
       tasks: taskRows.filter((row) => row.project_id === project.id),

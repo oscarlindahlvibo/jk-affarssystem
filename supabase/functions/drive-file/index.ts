@@ -124,26 +124,42 @@ async function driveFetch(path: string, init: RequestInit = {}) {
   });
 }
 
-async function projectFor(identity: Identity, projectId: string, write: boolean) {
-  if (write && (identity.type !== "internal" || !["admin", "projektledare"].includes(identity.role ?? ""))) return null;
+const isManager = (identity: Identity) => identity.type === "internal" && ["admin", "projektledare"].includes(identity.role ?? "");
+const isAdminIdentity = (identity: Identity) => identity.type === "internal" && identity.role === "admin";
+
+async function projectFor(identity: Identity, projectId: string, write: boolean, customerMayWrite = false) {
+  if (write && !isManager(identity) && !(customerMayWrite && identity.type === "customer")) return null;
   const response = await supabaseApi(
-    `/rest/v1/projects?id=eq.${encodeURIComponent(projectId)}&org_id=eq.${encodeURIComponent(identity.org_id)}&select=id,project_number,name,customer_id`
+    `/rest/v1/projects?id=eq.${encodeURIComponent(projectId)}&org_id=eq.${encodeURIComponent(identity.org_id)}&select=id,project_number,name,customer_id,booking_approval_status`
   );
   const rows = response.ok ? await response.json() : [];
   const project = Array.isArray(rows) ? rows[0] : null;
   if (!project) return null;
-  if (identity.type === "customer" && project.customer_id !== identity.customer_id) return null;
+  if (identity.type === "customer") {
+    if (project.customer_id !== identity.customer_id) return null;
+    if (write && ["Väntar på godkännande", "Avvisad"].includes(project.booking_approval_status)) return null;
+  }
   return project;
 }
 
+// Bibliotekets filer kan läsas av all personal i bolaget, aldrig av kunder.
+async function libraryFileFor(identity: Identity, fileId: string) {
+  if (identity.type !== "internal") return null;
+  const response = await supabaseApi(
+    `/rest/v1/folder_files?drive_file_id=eq.${encodeURIComponent(fileId)}&org_id=eq.${encodeURIComponent(identity.org_id)}&select=id,file_name,folder_id`
+  );
+  const rows = response.ok ? await response.json() : [];
+  return Array.isArray(rows) ? rows[0] ?? null : null;
+}
+
 async function documentFor(identity: Identity, fileId: string, write: boolean) {
-  if (write && (identity.type !== "internal" || !["admin", "projektledare"].includes(identity.role ?? ""))) return null;
+  if (write && !isManager(identity)) return null;
   const response = await supabaseApi(
     `/rest/v1/documents?drive_file_id=eq.${encodeURIComponent(fileId)}&select=id,project_id,file_name,visibility`
   );
   const rows = response.ok ? await response.json() : [];
   const document = Array.isArray(rows) ? rows[0] : null;
-  if (!document) return null;
+  if (!document) return write ? null : await libraryFileFor(identity, fileId);
   const project = await projectFor(identity, document.project_id, write);
   if (!project) return null;
   if (identity.type === "customer" && document.visibility !== "customer") return null;
@@ -154,30 +170,143 @@ function escapeDriveQuery(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
-async function ensureProjectFolder(project: { id: string; project_number: string; name: string }) {
+const PROJECTS_FOLDER_NAME = "Projekt";
+const FOLDER_MIME = "application/vnd.google-apps.folder";
+
+async function findFolder(appProperty: string, value: string) {
   const query = encodeURIComponent(
-    `'${SHARED_DRIVE_ID}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false and appProperties has { key='jkProjectId' and value='${escapeDriveQuery(project.id)}' }`
+    `mimeType='${FOLDER_MIME}' and trashed=false and appProperties has { key='${appProperty}' and value='${escapeDriveQuery(value)}' }`
   );
   const list = await driveFetch(
-    `/drive/v3/files?q=${query}&corpora=drive&driveId=${encodeURIComponent(SHARED_DRIVE_ID)}&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id)&pageSize=1`
+    `/drive/v3/files?q=${query}&corpora=drive&driveId=${encodeURIComponent(SHARED_DRIVE_ID)}&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name,parents)&pageSize=1`
   );
   if (!list.ok) throw new Error(`Could not search Google Drive (${list.status})`);
-  const listed = await list.json();
-  if (listed.files?.[0]?.id) return listed.files[0].id as string;
+  return ((await list.json()).files?.[0] ?? null) as { id: string; name: string; parents?: string[] } | null;
+}
 
-  const name = `${project.project_number} - ${project.name}`.slice(0, 180);
+async function createFolder(name: string, parentId: string, appProperties: Record<string, string>) {
   const created = await driveFetch("/drive/v3/files?supportsAllDrives=true&fields=id", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name,
-      mimeType: "application/vnd.google-apps.folder",
-      parents: [SHARED_DRIVE_ID],
-      appProperties: { jkProjectId: project.id },
-    }),
+    body: JSON.stringify({ name: name.slice(0, 180), mimeType: FOLDER_MIME, parents: [parentId], appProperties }),
   });
-  if (!created.ok) throw new Error(`Could not create project folder (${created.status})`);
+  if (!created.ok) throw new Error(`Could not create folder (${created.status})`);
   return (await created.json()).id as string;
+}
+
+async function projectsRootFolder() {
+  const found = await findFolder("jkRoot", "projects");
+  return found?.id ?? await createFolder(PROJECTS_FOLDER_NAME, SHARED_DRIVE_ID, { jkRoot: "projects" });
+}
+
+// Projektets mapp heter projektnumret och ligger i mappen "Projekt". Äldre mappar (projektnummer + namn i rotmappen)
+// flyttas och döps om första gången de används.
+async function ensureProjectFolder(project: { id: string; project_number: string; name: string }, createIfMissing = true) {
+  const root = await projectsRootFolder();
+  const existing = await findFolder("jkProjectId", project.id);
+  if (existing) {
+    if (!existing.parents?.includes(root) || existing.name !== project.project_number) {
+      const moved = await driveFetch(
+        `/drive/v3/files/${existing.id}?supportsAllDrives=true&fields=id&addParents=${root}&removeParents=${encodeURIComponent((existing.parents ?? []).join(","))}`,
+        { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: project.project_number }) }
+      );
+      if (!moved.ok) throw new Error(`Could not move project folder (${moved.status})`);
+    }
+    return existing.id;
+  }
+  if (!createIfMissing) return null;
+  return await createFolder(project.project_number, root, { jkProjectId: project.id });
+}
+
+async function uploadToDrive(file: File, folderId: string, appProperties: Record<string, string>) {
+  const metadata = { name: file.name, parents: [folderId], appProperties };
+  const boundary = `jk_${crypto.randomUUID()}`;
+  const body = new Blob([
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`,
+    `--${boundary}\r\nContent-Type: ${file.type || "application/octet-stream"}\r\n\r\n`,
+    file,
+    `\r\n--${boundary}--`,
+  ]);
+  const uploaded = await driveFetch(
+    "/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink",
+    { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body }
+  );
+  const payload = await uploaded.json().catch(() => null);
+  if (!uploaded.ok || !payload?.id) return null;
+  return payload as { id: string; webViewLink: string };
+}
+
+async function trashDriveItem(id: string) {
+  const response = await driveFetch(`/drive/v3/files/${encodeURIComponent(id)}?supportsAllDrives=true&fields=id,trashed`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ trashed: true }),
+  });
+  return response.ok || response.status === 404;
+}
+
+async function dbRows(path: string) {
+  const response = await supabaseApi(`/rest/v1/${path}`);
+  return response.ok ? await response.json() as Record<string, unknown>[] : [];
+}
+
+async function folderFor(identity: Identity, folderId: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(folderId)) return null;
+  return (await dbRows(`document_folders?id=eq.${folderId}&org_id=eq.${encodeURIComponent(identity.org_id)}&select=id,name,parent_id,drive_folder_id`))[0] ?? null;
+}
+
+// Mappåtgärder i dokumentbiblioteket (bara admin): skapa, döp om, ta bort och samla projektmappar.
+async function libraryAction(identity: Identity, body: Record<string, unknown>, origin: string | null) {
+  if (!isAdminIdentity(identity)) return json({ error: "Bara administratörer kan hantera mappar." }, 403, origin);
+  const action = String(body.action ?? "");
+  const name = typeof body.name === "string" ? body.name.replace(/[\\/]/g, " ").replace(/\s+/g, " ").trim() : "";
+
+  if (action === "create_folder") {
+    if (!name || name.length > 120) return json({ error: "Mappen behöver ett namn (högst 120 tecken)." }, 400, origin);
+    let parent = null as Record<string, unknown> | null;
+    if (body.parent_id) {
+      parent = await folderFor(identity, String(body.parent_id));
+      if (!parent) return json({ error: "Överliggande mapp hittades inte." }, 404, origin);
+    }
+    if (!parent && name.toLowerCase() === PROJECTS_FOLDER_NAME.toLowerCase()) return json({ error: "Namnet Projekt är reserverat för projektmapparna." }, 409, origin);
+    const driveId = await createFolder(name, parent ? String(parent.drive_folder_id) : SHARED_DRIVE_ID, { jkLibrary: "1" });
+    const insert = await supabaseApi("/rest/v1/document_folders", {
+      method: "POST", headers: { Prefer: "return=representation" },
+      body: JSON.stringify({ org_id: identity.org_id, parent_id: parent?.id ?? null, name, drive_folder_id: driveId, created_by: identity.id }),
+    });
+    if (!insert.ok) {
+      await trashDriveItem(driveId);
+      return json({ error: insert.status === 409 ? "Det finns redan en mapp med det namnet." : "Mappen kunde inte sparas." }, insert.status === 409 ? 409 : 500, origin);
+    }
+    return json((await insert.json())[0], 201, origin);
+  }
+
+  const folder = await folderFor(identity, String(body.id ?? ""));
+  if (action === "rename_folder") {
+    if (!folder || !name || name.length > 120) return json({ error: "Ogiltigt mappnamn." }, 400, origin);
+    const patched = await supabaseApi(`/rest/v1/document_folders?id=eq.${folder.id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+    if (!patched.ok) return json({ error: patched.status === 409 ? "Det finns redan en mapp med det namnet." : "Mappen kunde inte döpas om." }, patched.status === 409 ? 409 : 500, origin);
+    await driveFetch(`/drive/v3/files/${encodeURIComponent(String(folder.drive_folder_id))}?supportsAllDrives=true&fields=id`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
+    });
+    return json({ ok: true }, 200, origin);
+  }
+  if (action === "delete_folder") {
+    if (!folder) return json({ error: "Mappen hittades inte." }, 404, origin);
+    if (!await trashDriveItem(String(folder.drive_folder_id))) return json({ error: "Mappen kunde inte flyttas till Google Drives papperskorg." }, 502, origin);
+    await supabaseApi(`/rest/v1/document_folders?id=eq.${folder.id}`, { method: "DELETE" });
+    return json({ ok: true }, 200, origin);
+  }
+  if (action === "organize_projects") {
+    const ids = [...new Set((await dbRows(`documents?select=project_id&drive_file_id=not.is.null&limit=2000`)).map((row) => String(row.project_id)))];
+    let moved = 0;
+    for (const id of ids) {
+      const project = await projectFor(identity, id, true);
+      if (project && await ensureProjectFolder(project, false)) moved++;
+    }
+    return json({ ok: true, projects: moved }, 200, origin);
+  }
+  return json({ error: "Okänd åtgärd." }, 400, origin);
 }
 
 Deno.serve(async (request) => {
@@ -207,43 +336,57 @@ Deno.serve(async (request) => {
       return new Response(response.body, { status: 200, headers });
     }
 
+    if (request.method === "POST" && (request.headers.get("content-type") ?? "").includes("application/json")) {
+      return await libraryAction(identity, await request.json().catch(() => ({})), origin);
+    }
+
     if (request.method === "POST") {
       const form = await request.formData();
       const file = form.get("file");
       const projectId = String(form.get("project_id") ?? "");
-      if (!(file instanceof File) || !projectId) return json({ error: "File and project are required" }, 400, origin);
-      const project = await projectFor(identity, projectId, true);
+      const libraryFolderId = String(form.get("folder_id") ?? "");
+      if (!(file instanceof File) || (!projectId && !libraryFolderId)) return json({ error: "File and project are required" }, 400, origin);
+
+      if (libraryFolderId) {
+        if (!isAdminIdentity(identity)) return json({ error: "Bara administratörer kan ladda upp till mappar." }, 403, origin);
+        const folder = await folderFor(identity, libraryFolderId);
+        if (!folder) return json({ error: "Mappen hittades inte." }, 404, origin);
+        const uploaded = await uploadToDrive(file, String(folder.drive_folder_id), { jkLibraryFolderId: String(folder.id) });
+        if (!uploaded) return json({ error: "Filen kunde inte sparas i Google Drive." }, 502, origin);
+        const insert = await supabaseApi("/rest/v1/folder_files", {
+          method: "POST", headers: { Prefer: "return=representation" },
+          body: JSON.stringify({
+            org_id: identity.org_id, folder_id: folder.id, file_name: file.name, file_type: file.name.split(".").pop() ?? "fil",
+            file_size: file.size, drive_file_id: uploaded.id, uploaded_by: identity.id,
+            uploaded_by_name: String(form.get("uploaded_by_name") ?? "").slice(0, 120) || null,
+          }),
+        });
+        if (!insert.ok) {
+          await trashDriveItem(uploaded.id);
+          return json({ error: "Filen kunde inte registreras." }, 500, origin);
+        }
+        return json((await insert.json())[0], 201, origin);
+      }
+
+      const project = await projectFor(identity, projectId, true, true);
       if (!project) return json({ error: "Project not found or access denied" }, 404, origin);
-      const folderId = await ensureProjectFolder(project);
-      const metadata = { name: file.name, parents: [folderId], appProperties: { jkProjectId: projectId } };
-      const boundary = `jk_${crypto.randomUUID()}`;
-      const body = new Blob([
-        `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`,
-        `--${boundary}\r\nContent-Type: ${file.type || "application/octet-stream"}\r\n\r\n`,
-        file,
-        `\r\n--${boundary}--`,
-      ]);
-      const uploaded = await driveFetch(
-        "/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink",
-        { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body }
-      );
-      const payload = await uploaded.json().catch(() => null);
-      if (!uploaded.ok || !payload?.id) return json({ error: "Filen kunde inte sparas i Google Drive." }, 502, origin);
-      return json({ id: payload.id, webViewLink: payload.webViewLink }, 201, origin);
+      const folderId = await ensureProjectFolder(project) as string;
+      const uploaded = await uploadToDrive(file, folderId, { jkProjectId: projectId });
+      if (!uploaded) return json({ error: "Filen kunde inte sparas i Google Drive." }, 502, origin);
+      return json({ id: uploaded.id, webViewLink: uploaded.webViewLink }, 201, origin);
     }
 
     if (request.method === "DELETE" && fileId) {
+      const libraryFile = await libraryFileFor(identity, fileId);
+      if (libraryFile) {
+        if (!isAdminIdentity(identity)) return json({ error: "Bara administratörer kan ta bort filer." }, 403, origin);
+        if (!await trashDriveItem(fileId)) return json({ error: "Filen kunde inte flyttas till Google Drives papperskorg." }, 502, origin);
+        await supabaseApi(`/rest/v1/folder_files?id=eq.${libraryFile.id}`, { method: "DELETE" });
+        return new Response(null, { status: 204, headers: corsHeaders(origin) });
+      }
       const document = await documentFor(identity, fileId, true);
       if (!document) return json({ error: "Document not found or access denied" }, 404, origin);
-      const deleted = await driveFetch(
-        `/drive/v3/files/${encodeURIComponent(fileId)}?supportsAllDrives=true&fields=id,trashed`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ trashed: true }),
-        }
-      );
-      if (!deleted.ok && deleted.status !== 404) return json({ error: "Filen kunde inte flyttas till Google Drives papperskorg." }, 502, origin);
+      if (!await trashDriveItem(fileId)) return json({ error: "Filen kunde inte flyttas till Google Drives papperskorg." }, 502, origin);
       return new Response(null, { status: 204, headers: corsHeaders(origin) });
     }
 

@@ -61,6 +61,7 @@ export interface CustomerShippingDocumentInput {
   storage_path: string | null;
   file_url: string | null;
   file_size: number | null;
+  drive_file_id?: string | null;
   comment: string | null;
 }
 

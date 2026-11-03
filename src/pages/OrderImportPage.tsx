@@ -12,7 +12,7 @@ import { usePermissions } from "../lib/usePermissions";
 import { canonicalCustomerName, normalizeCustomerName } from "../lib/importLogic";
 import { useAuth } from "../lib/auth";
 import { isCentralDriveEnabled, uploadCentralDriveFile } from "../lib/centralDrive";
-import { isSupabaseConfigured, supabase } from "../lib/supabase";
+import { isSupabaseConfigured } from "../lib/supabase";
 import {
   analyzePdfForAi, fetchAiQuote, interpretWithAi, mapAiOrderToParsed, needsAiFallback, renderPdfPages, type AiQuote,
 } from "../lib/aiInterpretation";
@@ -326,17 +326,8 @@ export function OrderImportPage() {
       storagePath = `drive:${uploaded.id}`;
       fileUrl = uploaded.webViewLink;
       driveFileId = uploaded.id;
-    } else if (isSupabaseConfigured && supabase) {
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      storagePath = `${projectId}/${crypto.randomUUID()}-${safeName}`;
-      const uploaded = await supabase.storage.from("project-documents").upload(storagePath, file, {
-        contentType: file.type || "application/pdf",
-        upsert: false,
-      });
-      if (uploaded.error) throw new Error(uploaded.error.message);
-      const signed = await supabase.storage.from("project-documents").createSignedUrl(storagePath, 60 * 60);
-      if (signed.error) throw new Error(signed.error.message);
-      fileUrl = signed.data.signedUrl;
+    } else if (isSupabaseConfigured) {
+      throw new Error("Google Drive är inte aktiverat, så filen kan inte sparas. Kontakta administratören.");
     } else {
       fileUrl = URL.createObjectURL(file);
     }

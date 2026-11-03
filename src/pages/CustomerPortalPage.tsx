@@ -28,7 +28,8 @@ import { CustomerFreightCalculatorPanel } from "../components/customers/Customer
 import { formatDateAndTime, formatDateTime } from "../lib/format";
 import { calculateRouteDistance } from "../lib/routeDistance";
 import { generateShippingDocument, shippingDocumentFileName, type ShippingDocumentKind } from "../lib/shippingDocuments";
-import { isSupabaseConfigured, supabase } from "../lib/supabase";
+import { isSupabaseConfigured } from "../lib/supabase";
+import { isCentralDriveEnabled, uploadCentralDriveFile } from "../lib/centralDrive";
 import { PROJECT_STATUSES, type BookingApprovalStatus, type Project, type TransportType } from "../types";
 
 const TRANSPORT_TYPES: TransportType[] = ["Specialtransport", "Maskintransport", "Krantransport", "Styckegods", "Container", "Annat"];
@@ -132,19 +133,14 @@ export function CustomerPortalPage() {
       const file = new File([blob], fileName, { type: "application/pdf" });
       let storagePath: string | null = null;
       let fileUrl: string | null = null;
-      if (isSupabaseConfigured && supabase) {
-        const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
-        storagePath = `${project.id}/${crypto.randomUUID()}-${safeName}`;
-        const uploaded = await supabase.storage.from("project-documents").upload(storagePath, file, {
-          contentType: "application/pdf",
-          upsert: false,
-        });
-        if (uploaded.error) throw new Error(`Dokumentet kunde inte laddas upp: ${uploaded.error.message}`);
-        const signed = await supabase.storage.from("project-documents").createSignedUrl(storagePath, 60 * 60);
-        if (signed.error) throw new Error(`Dokumentlänken kunde inte skapas: ${signed.error.message}`);
-        fileUrl = signed.data.signedUrl;
-      } else {
-        fileUrl = URL.createObjectURL(file);
+      let driveFileId: string | null = null;
+      if (isSupabaseConfigured) {
+        // Dokumentet lagras i Google Drive (projektets mapp), aldrig på servern.
+        if (!isCentralDriveEnabled) throw new Error("Dokumentet kan inte sparas just nu. Kontakta JK Projektlogistik.");
+        const uploaded = await uploadCentralDriveFile(file, project.id);
+        storagePath = `drive:${uploaded.id}`;
+        driveFileId = uploaded.id;
+        fileUrl = uploaded.webViewLink;
       }
       await addCustomerShippingDocument(project.id, {
         file_name: fileName,
@@ -153,12 +149,15 @@ export function CustomerPortalPage() {
         storage_path: storagePath,
         file_url: fileUrl,
         file_size: file.size,
+        drive_file_id: driveFileId,
         comment: kind === "cmr" ? "Genererad CMR av kund i kundportalen." : "Genererad fraktsedel av kund i kundportalen.",
       });
+      const localUrl = URL.createObjectURL(file);
       const link = document.createElement("a");
-      link.href = fileUrl;
+      link.href = localUrl;
       link.download = fileName;
       link.click();
+      window.setTimeout(() => URL.revokeObjectURL(localUrl), 10000);
     } catch (err) {
       setDocError(err instanceof Error ? err.message : "Dokumentet kunde inte skapas.");
     } finally {
