@@ -22,7 +22,9 @@ export function validPushEndpoint(value: unknown): value is string {
     return endpoint.protocol === "https:" && !endpoint.username && !endpoint.password && !endpoint.port
       && (endpoint.hostname === "fcm.googleapis.com"
         || endpoint.hostname === "updates.push.services.mozilla.com"
-        || endpoint.hostname.endsWith(".push.apple.com"));
+        || endpoint.hostname.endsWith(".push.apple.com")
+        // Microsoft Edge (Windows) använder Windows Push Notification Service.
+        || endpoint.hostname.endsWith(".notify.windows.com"));
   } catch { return false; }
 }
 

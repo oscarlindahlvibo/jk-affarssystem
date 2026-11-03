@@ -11,10 +11,10 @@ function assert(value: unknown, message: string) {
 }
 
 Deno.test("push endpoints reject private hosts and lookalike service domains", () => {
-  for (const endpoint of ["http://fcm.googleapis.com/x", "https://127.0.0.1/x", "https://localhost/x", "https://fcm.googleapis.com.attacker.test/x", "https://user:pass@web.push.apple.com/x", "https://web.push.apple.com:444/x"]) {
+  for (const endpoint of ["http://fcm.googleapis.com/x", "https://127.0.0.1/x", "https://localhost/x", "https://fcm.googleapis.com.attacker.test/x", "https://user:pass@web.push.apple.com/x", "https://web.push.apple.com:444/x", "https://notify.windows.com.attacker.test/x", "https://evilnotify.windows.com.test/x", "http://wns2-par02p.notify.windows.com/w/?token=x"]) {
     assert(!validPushEndpoint(endpoint), `Accepted unsafe endpoint: ${endpoint}`);
   }
-  for (const endpoint of ["https://fcm.googleapis.com/fcm/send/example", "https://web.push.apple.com/example", "https://updates.push.services.mozilla.com/wpush/v2/example"]) {
+  for (const endpoint of ["https://fcm.googleapis.com/fcm/send/example", "https://web.push.apple.com/example", "https://updates.push.services.mozilla.com/wpush/v2/example", "https://wns2-par02p.notify.windows.com/w/?token=abc"]) {
     assert(validPushEndpoint(endpoint), `Rejected push service: ${endpoint}`);
   }
 });

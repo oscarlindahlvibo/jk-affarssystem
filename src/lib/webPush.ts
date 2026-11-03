@@ -13,7 +13,12 @@ export function needsHomeScreenInstall() {
 async function callPush(body: object) {
   if (!supabase) throw new Error("Pushnotiser kräver inloggning i det skarpa systemet.");
   const { data, error } = await supabase.functions.invoke("push-subscriptions", { body });
-  if (error || data?.error) throw new Error(data?.error ?? "Kunde inte ansluta till notistjänsten. Försök igen.");
+  if (error) {
+    // Vid HTTP-fel ligger serverns felmeddelande i svaret, inte i data.
+    const detail = await (error as { context?: Response }).context?.json?.().catch(() => null);
+    throw new Error(detail?.error ?? "Kunde inte ansluta till notistjänsten. Försök igen.");
+  }
+  if (data?.error) throw new Error(data.error);
   return data;
 }
 
