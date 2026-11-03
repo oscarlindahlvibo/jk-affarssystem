@@ -194,9 +194,13 @@ async function createFolder(name: string, parentId: string, appProperties: Recor
   return (await created.json()).id as string;
 }
 
+let projectsRootCache: string | null = null;
+
 async function projectsRootFolder() {
+  if (projectsRootCache) return projectsRootCache;
   const found = await findFolder("jkRoot", "projects");
-  return found?.id ?? await createFolder(PROJECTS_FOLDER_NAME, SHARED_DRIVE_ID, { jkRoot: "projects" });
+  projectsRootCache = found?.id ?? await createFolder(PROJECTS_FOLDER_NAME, SHARED_DRIVE_ID, { jkRoot: "projects" });
+  return projectsRootCache;
 }
 
 // Projektets mapp heter projektnumret och ligger i mappen "Projekt". Äldre mappar (projektnummer + namn i rotmappen)
@@ -300,9 +304,13 @@ async function libraryAction(identity: Identity, body: Record<string, unknown>, 
   if (action === "organize_projects") {
     const ids = [...new Set((await dbRows(`documents?select=project_id&drive_file_id=not.is.null&limit=2000`)).map((row) => String(row.project_id)))];
     let moved = 0;
-    for (const id of ids) {
-      const project = await projectFor(identity, id, true);
-      if (project && await ensureProjectFolder(project, false)) moved++;
+    await projectsRootFolder();
+    for (let i = 0; i < ids.length; i += 6) {
+      const results = await Promise.all(ids.slice(i, i + 6).map(async (id) => {
+        const project = await projectFor(identity, id, true);
+        return Boolean(project && await ensureProjectFolder(project, false));
+      }));
+      moved += results.filter(Boolean).length;
     }
     return json({ ok: true, projects: moved }, 200, origin);
   }
