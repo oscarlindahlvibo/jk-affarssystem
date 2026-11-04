@@ -62,7 +62,7 @@ Deno.serve(async (request) => {
       message = projectEventMessage(event.type, info, note as never);
     }
     const roles = NOTIFIED_ROLES.map((role) => `"${role}"`).join(",");
-    const recipients = (await rows(`profiles?org_id=eq.${project.org_id}&status=eq.aktiv&role=in.(${roles})&select=id,full_name,email`))
+    const recipients = (await rows(`profiles?org_id=eq.${project.org_id}&status=eq.aktiv&role=in.(${roles})&select=id,full_name,email,notify_push,notify_email`))
       .filter((profile) => profile.id !== event.actor);
 
     const url = `/projekt/${project.id}`;
@@ -80,11 +80,12 @@ Deno.serve(async (request) => {
     for (const recipient of recipients) {
       let delivered = 0;
       try {
-        delivered = (await sendUserPush(String(recipient.id), String(project.org_id), { ...message, url, tag })).sent;
+        // Push och e-post kan stängas av per person; inkorgen (klockan) fylls alltid.
+        if (recipient.notify_push !== false) delivered = (await sendUserPush(String(recipient.id), String(project.org_id), { ...message, url, tag })).sent;
       } catch { console.error("Project event push failed"); }
       pushed += delivered;
       // E-post bara till den som inte nåddes med push (ingen app installerad), så ingen får dubbla notiser.
-      if (delivered === 0 && recipient.email && mailConfigured()) {
+      if (delivered === 0 && recipient.notify_email !== false && recipient.email && mailConfigured()) {
         try {
           await sendMail({ fromName: "JK Projektlogistik System", fromAddress: FROM_EMAIL, to: [String(recipient.email)], subject: message.title, text, html });
           mailed++;

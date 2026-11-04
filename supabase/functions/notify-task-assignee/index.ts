@@ -66,7 +66,7 @@ Deno.serve(async (request) => {
     const project = projects[0];
     if (!project) return json({ error: "Projektet hittades inte." }, 404, origin);
     if (task.status === "Klar" || ["Levererad", "Avbokad", "Fakturerad"].includes(String(project.status)) || project.invoice_status === "Fakturerad") return json({ ok: true, skipped: true }, 200, origin);
-    const assignees = await rows(`/rest/v1/profiles?id=eq.${encodeURIComponent(String(task.assignee_id))}&org_id=eq.${encodeURIComponent(String(sender.org_id))}&status=eq.aktiv&select=id,full_name,email`);
+    const assignees = await rows(`/rest/v1/profiles?id=eq.${encodeURIComponent(String(task.assignee_id))}&org_id=eq.${encodeURIComponent(String(sender.org_id))}&status=eq.aktiv&select=id,full_name,email,notify_push,notify_email`);
     const assignee = assignees[0];
     if (!assignee) return json({ error: "Den ansvariga är inte aktiv i bolaget." }, 422, origin);
 
@@ -78,11 +78,13 @@ Deno.serve(async (request) => {
     // A push failure must not prevent the existing email notification.
     let pushResult = { sent: 0, failed: 0, configured: false };
     try {
-      pushResult = await sendUserPush(String(assignee.id), String(project.org_id), {
+      if (assignee.notify_push !== false) pushResult = await sendUserPush(String(assignee.id), String(project.org_id), {
         title: `Ny arbetsorder · ${project.project_number}`,
         body: String(task.task).slice(0, 200), url: `/projekt/${project.id}`, tag: `jk-task-${task.id}`,
       });
     } catch { console.error("Task push delivery failed"); }
+    // E-post kan stängas av per person; arbetsordern finns ändå i klockan.
+    if (assignee.notify_email === false) return json({ ok: true, push: pushResult, emailOff: true }, 200, origin);
     if (!mailConfigured()) return json({ ok: false, push: pushResult, error: "Arbetsordern sparades, men e-posttjänsten är inte konfigurerad." }, 200, origin);
     if (!assignee?.email) return json({ error: "Den ansvariga saknar e-postadress." }, 422, origin);
 

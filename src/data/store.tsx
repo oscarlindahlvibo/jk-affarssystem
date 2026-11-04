@@ -145,7 +145,7 @@ interface StoreShape {
   // Personal/användarhantering (admin-only, se lib/permissions.ts)
   invitePersonnel: (data: { full_name: string; email: string; role: UserRole }) => Promise<{ ok: boolean; reason?: string; profile?: Profile }>;
   inviteCustomerUser: (data: { customer_id: string; contact_person_id: string | null; full_name: string; email: string }) => Promise<{ ok: boolean; reason?: string; user?: CustomerUser }>;
-  updatePersonnel: (id: string, patch: Partial<Pick<Profile, "full_name" | "email" | "role">>) => { ok: boolean; reason?: string };
+  updatePersonnel: (id: string, patch: Partial<Pick<Profile, "full_name" | "email" | "role" | "notify_push" | "notify_email">>) => { ok: boolean; reason?: string };
   deactivatePersonnel: (id: string) => { ok: boolean; reason?: string };
   reactivatePersonnel: (id: string) => { ok: boolean; reason?: string };
 }

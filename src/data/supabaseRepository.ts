@@ -46,7 +46,7 @@ export async function loadLiveStoreData(): Promise<LiveStoreData> {
       db.from("contact_persons").select("*").order("name"),
       db.from("projects").select("*").order("created_at", { ascending: false }),
       db.from("suppliers").select("*").order("company_name"),
-      db.from("profiles").select("id, org_id, full_name, email, role, status, initials, invited_at").order("full_name"),
+      db.from("profiles").select("id, org_id, full_name, email, role, status, initials, invited_at, notify_push, notify_email").order("full_name"),
       db.from("customer_users").select("id, org_id, customer_id, contact_person_id, full_name, email, status, initials, invited_at").order("full_name"),
       db.from("contact_submissions").select("*").order("created_at", { ascending: false }),
       db.from("locations").select("*").order("order_index"),

@@ -87,6 +87,8 @@ export function PersonnelPage() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className="status-pill bg-navy-900/5 text-navy-900">{ROLE_LABELS[p.role]}</span>
                 <span className={`status-pill ${STATUS_BADGE[p.status]}`}>{USER_STATUS_LABELS[p.status]}</span>
+                {p.notify_push === false && <span className="status-pill bg-slate-100 text-slate-500">Push av</span>}
+                {p.notify_email === false && <span className="status-pill bg-slate-100 text-slate-500">E-post av</span>}
               </div>
             </div>
           ))}
@@ -118,7 +120,11 @@ export function PersonnelPage() {
                   <span className="status-pill bg-navy-900/5 text-navy-900">{ROLE_LABELS[p.role]}</span>
                 </td>
                 <td className="py-3">
-                  <span className={`status-pill ${STATUS_BADGE[p.status]}`}>{USER_STATUS_LABELS[p.status]}</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className={`status-pill ${STATUS_BADGE[p.status]}`}>{USER_STATUS_LABELS[p.status]}</span>
+                    {p.notify_push === false && <span className="status-pill bg-slate-100 text-slate-500">Push av</span>}
+                    {p.notify_email === false && <span className="status-pill bg-slate-100 text-slate-500">E-post av</span>}
+                  </div>
                 </td>
                 <td className="py-3">
                   <div className="flex items-center justify-end gap-3">
@@ -254,9 +260,11 @@ function EditModal({
 }: {
   profile: Profile;
   onClose: () => void;
-  onSave: (patch: { full_name: string; email: string; role: UserRole }) => void;
+  onSave: (patch: { full_name: string; email: string; role: UserRole; notify_push: boolean; notify_email: boolean }) => void;
 }) {
   const [fullName, setFullName] = useState(profile.full_name);
+  const [notifyPush, setNotifyPush] = useState(profile.notify_push !== false);
+  const [notifyEmail, setNotifyEmail] = useState(profile.notify_email !== false);
   const [email, setEmail] = useState(profile.email);
   const [role, setRole] = useState<UserRole>(profile.role);
 
@@ -265,7 +273,7 @@ function EditModal({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          onSave({ full_name: fullName, email, role });
+          onSave({ full_name: fullName, email, role, notify_push: notifyPush, notify_email: notifyEmail });
         }}
         className="space-y-4"
       >
@@ -283,6 +291,18 @@ function EditModal({
           </select>
           <p className="mt-1.5 text-xs text-slate-500">{ROLE_DESCRIPTIONS[role]}</p>
         </Field>
+        <fieldset className="space-y-2 rounded-lg border border-border p-3">
+          <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Notiser</legend>
+          <label className="flex items-start gap-2 text-sm text-slate-700">
+            <input type="checkbox" className="mt-0.5" checked={notifyPush} onChange={(e) => setNotifyPush(e.target.checked)} />
+            <span>Pushnotiser i telefon och webbläsare</span>
+          </label>
+          <label className="flex items-start gap-2 text-sm text-slate-700">
+            <input type="checkbox" className="mt-0.5" checked={notifyEmail} onChange={(e) => setNotifyEmail(e.target.checked)} />
+            <span>E-postnotiser</span>
+          </label>
+          <p className="text-xs text-slate-500">Är båda avstängda hamnar alla notiser bara i listan under klockan i appen.</p>
+        </fieldset>
         <div className="flex justify-end gap-2 border-t border-border pt-4">
           <Button type="button" variant="secondary" onClick={onClose}>Avbryt</Button>
           <Button type="submit">Spara ändringar</Button>

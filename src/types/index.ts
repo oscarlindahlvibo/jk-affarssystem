@@ -305,6 +305,9 @@ export interface Profile {
   status: UserStatus;
   initials: string;
   invited_at?: string;
+  // Saknas = på. Av betyder att personen inte får push respektive e-post; notiserna syns alltid i klockan.
+  notify_push?: boolean;
+  notify_email?: boolean;
 }
 
 export type CustomerUserStatus = "aktiv" | "inbjuden" | "inaktiverad";
