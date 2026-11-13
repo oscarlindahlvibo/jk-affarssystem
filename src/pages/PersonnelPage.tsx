@@ -20,6 +20,7 @@ export function PersonnelPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editing, setEditing] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [created, setCreated] = useState<{ name: string; email: string; password: string } | null>(null);
 
   const sorted = [...profiles].sort((a, b) => a.full_name.localeCompare(b.full_name));
 
@@ -166,11 +167,34 @@ export function PersonnelPage() {
         onClose={() => setInviteOpen(false)}
         onInvite={async (data) => {
           const result = await invitePersonnel(data);
-          if (result.ok) setInviteOpen(false);
-          else setError(result.reason ?? null);
+          if (result.ok) {
+            setInviteOpen(false);
+            if (result.password) setCreated({ name: data.full_name, email: data.email, password: result.password });
+          } else setError(result.reason ?? null);
           return result.ok;
         }}
       />
+
+      {created && (
+        <Modal open onClose={() => setCreated(null)} title="Användaren är skapad">
+          <div className="space-y-4">
+            <p className="text-sm text-slate-700">
+              <span className="font-medium">{created.name}</span> ({created.email}) är aktiv och kan logga in direkt.
+            </p>
+            <div>
+              <div className="text-xs font-medium text-slate-500">Lösenord</div>
+              <div className="mt-1 flex items-center gap-2">
+                <code className="flex-1 rounded-md border border-border bg-slate-50 px-3 py-2 text-base tracking-wide select-all">{created.password}</code>
+                <Button type="button" variant="secondary" onClick={() => { void navigator.clipboard?.writeText(created.password).catch(() => undefined); }}>Kopiera</Button>
+              </div>
+            </div>
+            <p className="text-xs text-amber-700">Lösenordet visas bara nu och kan inte hämtas senare. Skicka det säkert till användaren.</p>
+            <div className="flex justify-end border-t border-border pt-4">
+              <Button type="button" onClick={() => setCreated(null)}>Klar</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {editing && (
         <EditModal
@@ -195,12 +219,13 @@ function InviteModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onInvite: (data: { full_name: string; email: string; role: UserRole }) => Promise<boolean>;
+  onInvite: (data: { full_name: string; email: string; role: UserRole; create_with_password: boolean }) => Promise<boolean>;
 }) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<UserRole>("projektledare");
   const [sending, setSending] = useState(false);
+  const [withPassword, setWithPassword] = useState(true);
 
   function handleClose() {
     setFullName("");
@@ -216,7 +241,7 @@ function InviteModal({
           e.preventDefault();
           if (!fullName.trim() || !email.trim()) return;
           setSending(true);
-          const sent = await onInvite({ full_name: fullName.trim(), email: email.trim(), role });
+          const sent = await onInvite({ full_name: fullName.trim(), email: email.trim(), role, create_with_password: withPassword });
           setSending(false);
           if (sent) {
             setFullName("");
@@ -240,13 +265,18 @@ function InviteModal({
           </select>
           <p className="mt-1.5 text-xs text-slate-500">{ROLE_DESCRIPTIONS[role]}</p>
         </Field>
-        <p className="text-xs text-slate-500">
-          Användaren skapas med status <span className="font-medium">Inbjuden</span> och kan logga in när kontot har
-          aktiverats.
-        </p>
+        <label className="flex items-start gap-2 text-sm text-slate-700">
+          <input type="checkbox" className="mt-0.5" checked={withPassword} onChange={(e) => setWithPassword(e.target.checked)} />
+          <span>
+            Skapa direkt med genererat lösenord
+            <span className="block text-xs text-slate-500">
+              Användaren blir aktiv direkt, utan e-postbekräftelse. Lösenordet visas en gång efteråt. Avmarkera för att i stället skicka en inbjudan med e-post.
+            </span>
+          </span>
+        </label>
         <div className="flex justify-end gap-2 border-t border-border pt-4">
           <Button type="button" variant="secondary" onClick={handleClose} disabled={sending}>Avbryt</Button>
-          <Button type="submit" disabled={sending}>{sending ? "Skickar..." : "Skicka inbjudan"}</Button>
+          <Button type="submit" disabled={sending}>{sending ? "Skapar..." : withPassword ? "Skapa användare" : "Skicka inbjudan"}</Button>
         </div>
       </form>
     </Modal>

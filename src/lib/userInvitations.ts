@@ -1,7 +1,7 @@
 import type { CarrierUser, CustomerUser, Profile, UserRole } from "../types";
 import { supabase } from "./supabase";
 
-type InviteResult<T> = { ok: true; user: T } | { ok: false; reason: string };
+type InviteResult<T> = { ok: true; user: T; password?: string } | { ok: false; reason: string };
 
 function invitationError(error: unknown, fallback: string) {
   if (error && typeof error === "object") {
@@ -22,13 +22,14 @@ export async function invitePersonnelAccount(data: {
   full_name: string;
   email: string;
   role: UserRole;
+  create_with_password?: boolean;
 }): Promise<InviteResult<Profile>> {
   if (!supabase) return { ok: false, reason: "Supabase är inte konfigurerat." };
   const { data: response, error } = await supabase.functions.invoke("invite-user", {
     body: { account_type: "internal", ...data },
   });
   if (error) return { ok: false, reason: await invitationError(error, "Inbjudan kunde inte skickas.") };
-  return { ok: true, user: response.user as Profile };
+  return { ok: true, user: response.user as Profile, password: typeof response.password === "string" ? response.password : undefined };
 }
 
 export async function inviteCustomerAccount(data: {

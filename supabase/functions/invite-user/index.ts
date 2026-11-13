@@ -13,6 +13,8 @@ type InviteRequest = {
   customer_id?: string;
   supplier_id?: string;
   contact_person_id?: string | null;
+  // Bara för interna konton: skapa direkt med genererat lösenord, utan e-postbekräftelse.
+  create_with_password?: boolean;
 };
 
 function corsHeaders(origin: string | null) {
@@ -42,6 +44,18 @@ async function api(path: string, init: RequestInit = {}) {
       ...(init.headers ?? {}),
     },
   });
+}
+
+const PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+function generatePassword(length = 14) {
+  const limit = 256 - (256 % PASSWORD_ALPHABET.length);
+  let out = "";
+  while (out.length < length) {
+    for (const byte of crypto.getRandomValues(new Uint8Array(length * 2))) {
+      if (byte < limit && out.length < length) out += PASSWORD_ALPHABET[byte % PASSWORD_ALPHABET.length];
+    }
+  }
+  return out;
 }
 
 function initials(name: string) {
@@ -173,20 +187,34 @@ Deno.serve(async (request) => {
     };
   }
 
-  const inviteResponse = await api(
-    `/auth/v1/invite?redirect_to=${encodeURIComponent(`${APP_URL}/set-password`)}`,
-    {
+  const withPassword = accountType === "internal" && body.create_with_password === true;
+  const password = withPassword ? generatePassword() : null;
+  if (withPassword) profilePayload = { ...profilePayload, status: "aktiv" };
+
+  const inviteResponse = withPassword
+    ? await api("/auth/v1/admin/users", {
       method: "POST",
       body: JSON.stringify({
         email,
-        data: { full_name: fullName, account_type: accountType, org_id: admin.org_id },
+        password,
+        email_confirm: true,
+        user_metadata: { full_name: fullName, account_type: accountType, org_id: admin.org_id },
       }),
-    }
-  );
+    })
+    : await api(
+      `/auth/v1/invite?redirect_to=${encodeURIComponent(`${APP_URL}/set-password`)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          data: { full_name: fullName, account_type: accountType, org_id: admin.org_id },
+        }),
+      }
+    );
   const invitedUser = await inviteResponse.json().catch(() => null);
   if (!inviteResponse.ok || !invitedUser?.id) {
-    console.error("Auth invitation failed", inviteResponse.status, invitedUser);
-    return json({ error: "Inbjudan kunde inte skickas. Kontrollera e-postinställningarna." }, 502, origin);
+    console.error("Auth invitation failed", inviteResponse.status);
+    return json({ error: withPassword ? "Kontot kunde inte skapas." : "Inbjudan kunde inte skickas. Kontrollera e-postinställningarna." }, 502, origin);
   }
 
   const table = accountType === "internal" ? "profiles" : accountType === "carrier" ? "carrier_users" : "customer_users";
@@ -206,6 +234,7 @@ Deno.serve(async (request) => {
     {
       ok: true,
       user: { id: invitedUser.id, account_type: accountType, full_name: fullName, email, ...profilePayload },
+      ...(password ? { password } : {}),
     },
     201,
     origin

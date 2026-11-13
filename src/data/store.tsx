@@ -143,7 +143,7 @@ interface StoreShape {
   getContactsByCustomer: (customerId: string) => ContactPerson[];
   getProjectsByCustomer: (customerId: string) => Project[];
   // Personal/användarhantering (admin-only, se lib/permissions.ts)
-  invitePersonnel: (data: { full_name: string; email: string; role: UserRole }) => Promise<{ ok: boolean; reason?: string; profile?: Profile }>;
+  invitePersonnel: (data: { full_name: string; email: string; role: UserRole; create_with_password?: boolean }) => Promise<{ ok: boolean; reason?: string; profile?: Profile; password?: string }>;
   inviteCustomerUser: (data: { customer_id: string; contact_person_id: string | null; full_name: string; email: string }) => Promise<{ ok: boolean; reason?: string; user?: CustomerUser }>;
   updatePersonnel: (id: string, patch: Partial<Pick<Profile, "full_name" | "email" | "role" | "notify_push" | "notify_email">>) => { ok: boolean; reason?: string };
   deactivatePersonnel: (id: string) => { ok: boolean; reason?: string };
@@ -1127,7 +1127,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const result = await invitePersonnelAccount(data);
         if (!result.ok) return result;
         setAllProfiles((prev) => [result.user, ...prev]);
-        return { ok: true, profile: result.user };
+        return { ok: true, profile: result.user, password: result.password };
       }
       if (allProfiles.some((profile) => profile.email.toLowerCase() === data.email.toLowerCase())) return { ok: false, reason: "Det finns redan en användare med den e-postadressen." };
       const profile = personnel.addProfile({ ...data, org_id: orgId });
