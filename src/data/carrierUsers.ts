@@ -36,21 +36,21 @@ export function useCarrierUsers(supplierId: string | null, orgId: string) {
   }, [load]);
 
   const invite = useCallback(
-    async (data: { full_name: string; email: string }) => {
+    async (data: { full_name: string; email: string; create_with_password?: boolean }) => {
       if (!supplierId) return { ok: false as const, reason: "Ingen leverantör vald." };
       setError(null);
       if (isSupabaseConfigured) {
         const result = await inviteCarrierAccount({ supplier_id: supplierId, ...data });
         if (!result.ok) return result;
         setUsers((prev) => [result.user, ...prev]);
-        return { ok: true as const };
+        return { ok: true as const, password: result.password };
       }
       const all = readJson<CarrierUser[]>(KEY, mockCarrierUsers);
       if (all.some((u) => u.email.toLowerCase() === data.email.toLowerCase())) return { ok: false as const, reason: "Det finns redan en användare med den e-postadressen." };
       const user: CarrierUser = { id: `ca${Date.now()}`, org_id: orgId, supplier_id: supplierId, ...data, status: "inbjuden", initials: initials(data.full_name), invited_at: new Date().toISOString() };
       window.localStorage.setItem(KEY, JSON.stringify([user, ...all]));
       setUsers((prev) => [user, ...prev]);
-      return { ok: true as const };
+      return { ok: true as const, password: undefined };
     },
     [orgId, supplierId]
   );
@@ -73,5 +73,10 @@ export function useCarrierUsers(supplierId: string | null, orgId: string) {
     []
   );
 
-  return { users, error, invite, setStatus };
+  // Servern aktiverar en inbjuden användare när ett nytt lösenord genereras.
+  const markActive = useCallback((id: string) => {
+    setUsers((prev) => prev.map((u) => (u.id === id && u.status === "inbjuden" ? { ...u, status: "aktiv" } : u)));
+  }, []);
+
+  return { users, error, invite, setStatus, markActive };
 }
