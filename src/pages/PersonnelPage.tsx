@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Plus, UserX, UserCheck, Pencil } from "lucide-react";
+import { Plus, UserX, UserCheck, Pencil, KeyRound } from "lucide-react";
+import { resetPersonnelPassword } from "../lib/userInvitations";
+import { isSupabaseConfigured } from "../lib/supabase";
 import { useStore } from "../data/store";
 import { useAuth } from "../lib/auth";
 import { Panel } from "../components/ui/Panel";
@@ -20,7 +22,23 @@ export function PersonnelPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editing, setEditing] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [created, setCreated] = useState<{ name: string; email: string; password: string } | null>(null);
+  const [created, setCreated] = useState<{ name: string; email: string; password: string; reset?: boolean } | null>(null);
+  const [resetting, setResetting] = useState<Profile | null>(null);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  async function handleReset(profile: Profile, mode: "generate" | "email") {
+    setResetBusy(true);
+    const result = await resetPersonnelPassword(profile.id, mode);
+    setResetBusy(false);
+    if (!result.ok) {
+      setError(result.reason);
+      return;
+    }
+    setResetting(null);
+    if (mode === "generate" && result.password) setCreated({ name: profile.full_name, email: profile.email, password: result.password, reset: true });
+    else setNotice(`En länk för att välja nytt lösenord har skickats till ${profile.email}.`);
+  }
 
   const sorted = [...profiles].sort((a, b) => a.full_name.localeCompare(b.full_name));
 
@@ -72,6 +90,11 @@ export function PersonnelPage() {
                   <button onClick={() => setEditing(p)} title="Redigera" className="text-slate-400 hover:text-orange-600">
                     <Pencil size={15} />
                   </button>
+                  {isSupabaseConfigured && p.status !== "inaktiverad" && (
+                    <button onClick={() => setResetting(p)} title="Nytt lösenord" className="text-slate-400 hover:text-orange-600">
+                      <KeyRound size={15} />
+                    </button>
+                  )}
                   {p.status === "inaktiverad" ? (
                     <button onClick={() => handleReactivate(p.id)} title="Aktivera" className="text-slate-400 hover:text-green-600">
                       <UserCheck size={15} />
@@ -132,6 +155,11 @@ export function PersonnelPage() {
                     <button onClick={() => setEditing(p)} title="Redigera" className="text-slate-400 hover:text-orange-600">
                       <Pencil size={15} />
                     </button>
+                    {isSupabaseConfigured && p.status !== "inaktiverad" && (
+                      <button onClick={() => setResetting(p)} title="Nytt lösenord" className="text-slate-400 hover:text-orange-600">
+                        <KeyRound size={15} />
+                      </button>
+                    )}
                     {p.status === "inaktiverad" ? (
                       <button onClick={() => handleReactivate(p.id)} title="Aktivera" className="text-slate-400 hover:text-green-600">
                         <UserCheck size={15} />
@@ -175,11 +203,39 @@ export function PersonnelPage() {
         }}
       />
 
+      {notice && (
+        <Modal open onClose={() => setNotice(null)} title="Länk skickad">
+          <div className="space-y-4">
+            <p className="text-sm text-slate-700">{notice}</p>
+            <div className="flex justify-end border-t border-border pt-4"><Button type="button" onClick={() => setNotice(null)}>Klar</Button></div>
+          </div>
+        </Modal>
+      )}
+
+      {resetting && (
+        <Modal open onClose={() => !resetBusy && setResetting(null)} title={`Nytt lösenord – ${resetting.full_name}`}>
+          <div className="space-y-4">
+            <p className="text-sm text-slate-700">Välj hur {resetting.full_name} ska få ett nytt lösenord. Det gamla slutar gälla direkt när du genererar ett nytt.</p>
+            <div className="space-y-2">
+              <Button type="button" className="w-full" disabled={resetBusy} onClick={() => void handleReset(resetting, "generate")}>
+                {resetBusy ? "Arbetar..." : "Generera nytt lösenord och visa det"}
+              </Button>
+              <Button type="button" variant="secondary" className="w-full" disabled={resetBusy} onClick={() => void handleReset(resetting, "email")}>
+                Skicka länk till {resetting.email}
+              </Button>
+            </div>
+            <div className="flex justify-end border-t border-border pt-4">
+              <Button type="button" variant="secondary" disabled={resetBusy} onClick={() => setResetting(null)}>Avbryt</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {created && (
-        <Modal open onClose={() => setCreated(null)} title="Användaren är skapad">
+        <Modal open onClose={() => setCreated(null)} title={created.reset ? "Nytt lösenord" : "Användaren är skapad"}>
           <div className="space-y-4">
             <p className="text-sm text-slate-700">
-              <span className="font-medium">{created.name}</span> ({created.email}) är aktiv och kan logga in direkt.
+              <span className="font-medium">{created.name}</span> ({created.email}) {created.reset ? "har fått ett nytt lösenord och kan logga in direkt." : "är aktiv och kan logga in direkt."}
             </p>
             <div>
               <div className="text-xs font-medium text-slate-500">Lösenord</div>

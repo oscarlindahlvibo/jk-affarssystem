@@ -58,3 +58,15 @@ export async function inviteCarrierAccount(data: {
   if (error) return { ok: false, reason: await invitationError(error, "Inbjudan kunde inte skickas.") };
   return { ok: true, user: response.user as CarrierUser };
 }
+
+export async function resetPersonnelPassword(
+  userId: string,
+  mode: "generate" | "email"
+): Promise<{ ok: true; password?: string } | { ok: false; reason: string }> {
+  if (!supabase) return { ok: false, reason: "Supabase är inte konfigurerat." };
+  const { data: response, error } = await supabase.functions.invoke("invite-user", {
+    body: { action: "reset_password", user_id: userId, mode },
+  });
+  if (error) return { ok: false, reason: await invitationError(error, "Åtgärden misslyckades.") };
+  return { ok: true, password: typeof response?.password === "string" ? response.password : undefined };
+}

@@ -15,6 +15,10 @@ type InviteRequest = {
   contact_person_id?: string | null;
   // Bara för interna konton: skapa direkt med genererat lösenord, utan e-postbekräftelse.
   create_with_password?: boolean;
+  // Befintlig personal: nytt lösenord (generate = visas för admin, email = återställningslänk per e-post).
+  action?: "reset_password";
+  user_id?: string;
+  mode?: "generate" | "email";
 };
 
 function corsHeaders(origin: string | null) {
@@ -107,6 +111,43 @@ Deno.serve(async (request) => {
     body = await request.json();
   } catch {
     return json({ error: "Invalid request body" }, 400, origin);
+  }
+
+  if (body.action === "reset_password") {
+    const userId = body.user_id ?? "";
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) return json({ error: "Ogiltig användare" }, 400, origin);
+    if (body.mode !== "generate" && body.mode !== "email") return json({ error: "Ogiltigt läge" }, 400, origin);
+    const targetResponse = await api(`/rest/v1/profiles?id=eq.${userId}&org_id=eq.${encodeURIComponent(admin.org_id)}&select=id,email,status,full_name`);
+    const targets = targetResponse.ok ? await targetResponse.json() : [];
+    const target = Array.isArray(targets) ? targets[0] : null;
+    if (!target) return json({ error: "Användaren hittades inte." }, 404, origin);
+    if (target.status === "inaktiverad") return json({ error: "Användaren är inaktiverad. Aktivera kontot först." }, 409, origin);
+
+    if (body.mode === "email") {
+      const recover = await api(`/auth/v1/recover?redirect_to=${encodeURIComponent(`${APP_URL}/set-password`)}`, {
+        method: "POST",
+        body: JSON.stringify({ email: target.email }),
+      });
+      if (!recover.ok) {
+        console.error("Password recovery mail failed", recover.status);
+        return json({ error: "Länken kunde inte skickas. Kontrollera e-postinställningarna." }, 502, origin);
+      }
+      return json({ ok: true, mode: "email", email: target.email }, 200, origin);
+    }
+
+    const newPassword = generatePassword();
+    const update = await api(`/auth/v1/admin/users/${userId}`, {
+      method: "PUT",
+      body: JSON.stringify({ password: newPassword, email_confirm: true }),
+    });
+    if (!update.ok) {
+      console.error("Password reset failed", update.status);
+      return json({ error: "Lösenordet kunde inte ändras." }, 502, origin);
+    }
+    if (target.status === "inbjuden") {
+      await api(`/rest/v1/profiles?id=eq.${userId}`, { method: "PATCH", body: JSON.stringify({ status: "aktiv" }) });
+    }
+    return json({ ok: true, mode: "generate", password: newPassword, status: "aktiv" }, 200, origin);
   }
 
   const accountType = body.account_type;
