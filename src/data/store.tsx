@@ -144,7 +144,8 @@ interface StoreShape {
   getProjectsByCustomer: (customerId: string) => Project[];
   // Personal/användarhantering (admin-only, se lib/permissions.ts)
   invitePersonnel: (data: { full_name: string; email: string; role: UserRole; create_with_password?: boolean }) => Promise<{ ok: boolean; reason?: string; profile?: Profile; password?: string }>;
-  inviteCustomerUser: (data: { customer_id: string; contact_person_id: string | null; full_name: string; email: string }) => Promise<{ ok: boolean; reason?: string; user?: CustomerUser }>;
+  inviteCustomerUser: (data: { customer_id: string; contact_person_id: string | null; full_name: string; email: string; create_with_password?: boolean }) => Promise<{ ok: boolean; reason?: string; user?: CustomerUser; password?: string }>;
+  markAccountActive: (id: string) => void;
   updatePersonnel: (id: string, patch: Partial<Pick<Profile, "full_name" | "email" | "role" | "notify_push" | "notify_email">>) => { ok: boolean; reason?: string };
   deactivatePersonnel: (id: string) => { ok: boolean; reason?: string };
   reactivatePersonnel: (id: string) => { ok: boolean; reason?: string };
@@ -1144,7 +1145,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const result = await inviteCustomerAccount(data);
         if (!result.ok) return result;
         setAllCustomerUsers((prev) => [result.user, ...prev]);
-        return { ok: true, user: result.user };
+        return { ok: true, user: result.user, password: result.password };
       }
       if (allCustomerUsers.some((user) => user.email.toLowerCase() === data.email.toLowerCase())) {
         return { ok: false, reason: "Det finns redan en användare med den e-postadressen." };
@@ -1163,6 +1164,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     [allCustomerUsers, orgId, role]
   );
+
+  // När servern aktiverar ett konto (nytt lösenord på en inbjuden användare) speglas det i listorna.
+  const markAccountActive: StoreShape["markAccountActive"] = useCallback((id) => {
+    setAllProfiles((prev) => prev.map((profile) => profile.id === id && profile.status === "inbjuden" ? { ...profile, status: "aktiv" } : profile));
+    setAllCustomerUsers((prev) => prev.map((user) => user.id === id && user.status === "inbjuden" ? { ...user, status: "aktiv" } : user));
+  }, []);
 
   const updatePersonnel: StoreShape["updatePersonnel"] = useCallback(
     (id, patch) => {
@@ -1264,6 +1271,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       getProjectsByCustomer,
       invitePersonnel,
       inviteCustomerUser,
+      markAccountActive,
       updatePersonnel,
       deactivatePersonnel,
       reactivatePersonnel,
@@ -1325,6 +1333,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       getProjectsByCustomer,
       invitePersonnel,
       inviteCustomerUser,
+      markAccountActive,
       updatePersonnel,
       deactivatePersonnel,
       reactivatePersonnel,

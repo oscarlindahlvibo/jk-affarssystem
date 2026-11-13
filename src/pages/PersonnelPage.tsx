@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Plus, UserX, UserCheck, Pencil, KeyRound } from "lucide-react";
-import { resetPersonnelPassword } from "../lib/userInvitations";
+import { GeneratedPasswordModal, NoticeModal, ResetPasswordModal, type GeneratedPassword } from "../components/users/PasswordDialogs";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { useStore } from "../data/store";
 import { useAuth } from "../lib/auth";
@@ -17,28 +17,14 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 export function PersonnelPage() {
-  const { profiles, invitePersonnel, updatePersonnel, deactivatePersonnel, reactivatePersonnel } = useStore();
+  const { profiles, invitePersonnel, updatePersonnel, deactivatePersonnel, reactivatePersonnel, markAccountActive } = useStore();
   const { currentProfile } = useAuth();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editing, setEditing] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [created, setCreated] = useState<{ name: string; email: string; password: string; reset?: boolean } | null>(null);
+  const [created, setCreated] = useState<GeneratedPassword | null>(null);
   const [resetting, setResetting] = useState<Profile | null>(null);
-  const [resetBusy, setResetBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-
-  async function handleReset(profile: Profile, mode: "generate" | "email") {
-    setResetBusy(true);
-    const result = await resetPersonnelPassword(profile.id, mode);
-    setResetBusy(false);
-    if (!result.ok) {
-      setError(result.reason);
-      return;
-    }
-    setResetting(null);
-    if (mode === "generate" && result.password) setCreated({ name: profile.full_name, email: profile.email, password: result.password, reset: true });
-    else setNotice(`En länk för att välja nytt lösenord har skickats till ${profile.email}.`);
-  }
 
   const sorted = [...profiles].sort((a, b) => a.full_name.localeCompare(b.full_name));
 
@@ -203,54 +189,17 @@ export function PersonnelPage() {
         }}
       />
 
-      {notice && (
-        <Modal open onClose={() => setNotice(null)} title="Länk skickad">
-          <div className="space-y-4">
-            <p className="text-sm text-slate-700">{notice}</p>
-            <div className="flex justify-end border-t border-border pt-4"><Button type="button" onClick={() => setNotice(null)}>Klar</Button></div>
-          </div>
-        </Modal>
-      )}
-
+      {notice && <NoticeModal title="Länk skickad" message={notice} onClose={() => setNotice(null)} />}
       {resetting && (
-        <Modal open onClose={() => !resetBusy && setResetting(null)} title={`Nytt lösenord – ${resetting.full_name}`}>
-          <div className="space-y-4">
-            <p className="text-sm text-slate-700">Välj hur {resetting.full_name} ska få ett nytt lösenord. Det gamla slutar gälla direkt när du genererar ett nytt.</p>
-            <div className="space-y-2">
-              <Button type="button" className="w-full" disabled={resetBusy} onClick={() => void handleReset(resetting, "generate")}>
-                {resetBusy ? "Arbetar..." : "Generera nytt lösenord och visa det"}
-              </Button>
-              <Button type="button" variant="secondary" className="w-full" disabled={resetBusy} onClick={() => void handleReset(resetting, "email")}>
-                Skicka länk till {resetting.email}
-              </Button>
-            </div>
-            <div className="flex justify-end border-t border-border pt-4">
-              <Button type="button" variant="secondary" disabled={resetBusy} onClick={() => setResetting(null)}>Avbryt</Button>
-            </div>
-          </div>
-        </Modal>
+        <ResetPasswordModal
+          target={resetting}
+          onClose={() => setResetting(null)}
+          onError={(reason) => { setResetting(null); setError(reason); }}
+          onEmailed={(message) => { setResetting(null); setNotice(message); }}
+          onGenerated={(info) => { markAccountActive(resetting.id); setResetting(null); setCreated(info); }}
+        />
       )}
-
-      {created && (
-        <Modal open onClose={() => setCreated(null)} title={created.reset ? "Nytt lösenord" : "Användaren är skapad"}>
-          <div className="space-y-4">
-            <p className="text-sm text-slate-700">
-              <span className="font-medium">{created.name}</span> ({created.email}) {created.reset ? "har fått ett nytt lösenord och kan logga in direkt." : "är aktiv och kan logga in direkt."}
-            </p>
-            <div>
-              <div className="text-xs font-medium text-slate-500">Lösenord</div>
-              <div className="mt-1 flex items-center gap-2">
-                <code className="flex-1 rounded-md border border-border bg-slate-50 px-3 py-2 text-base tracking-wide select-all">{created.password}</code>
-                <Button type="button" variant="secondary" onClick={() => { void navigator.clipboard?.writeText(created.password).catch(() => undefined); }}>Kopiera</Button>
-              </div>
-            </div>
-            <p className="text-xs text-amber-700">Lösenordet visas bara nu och kan inte hämtas senare. Skicka det säkert till användaren.</p>
-            <div className="flex justify-end border-t border-border pt-4">
-              <Button type="button" onClick={() => setCreated(null)}>Klar</Button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      {created && <GeneratedPasswordModal info={created} onClose={() => setCreated(null)} />}
 
       {editing && (
         <EditModal

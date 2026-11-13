@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Phone, Mail, Globe, MapPin, Plus, Star, Pencil, ChevronRight, Trash2, UserPlus } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Globe, MapPin, Plus, Star, Pencil, ChevronRight, Trash2, UserPlus, KeyRound } from "lucide-react";
 import { useStore } from "../data/store";
 import { Panel } from "../components/ui/Panel";
 import { Button } from "../components/ui/Button";
@@ -8,13 +8,15 @@ import { StatusBadge } from "../components/ui/StatusBadge";
 import { Modal } from "../components/ui/Modal";
 import { Field, inputClass } from "../components/ui/Field";
 import { formatDateAndTime } from "../lib/format";
+import { isSupabaseConfigured } from "../lib/supabase";
 import { usePermissions } from "../lib/usePermissions";
+import { GeneratedPasswordModal, NoticeModal, ResetPasswordModal, type GeneratedPassword } from "../components/users/PasswordDialogs";
 import { CustomerRatesPanel } from "../components/reports/CustomerRatesPanel";
 
 export function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getCustomer, getContactsByCustomer, getProjectsByCustomer, updateCustomer, deleteCustomer, addContactPerson, customerUsers, inviteCustomerUser } = useStore();
+  const { getCustomer, getContactsByCustomer, getProjectsByCustomer, updateCustomer, deleteCustomer, addContactPerson, customerUsers, inviteCustomerUser, markAccountActive } = useStore();
   const permissions = usePermissions();
   const canEditCustomer = permissions.can("customers", "edit");
   const canDeleteCustomer = permissions.can("customers", "delete");
@@ -26,6 +28,9 @@ export function CustomerDetail() {
   const [contactOpen, setContactOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [created, setCreated] = useState<GeneratedPassword | null>(null);
+  const [resetting, setResetting] = useState<{ id: string; full_name: string; email: string } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [showClosedProjects, setShowClosedProjects] = useState(false);
 
   if (!customer) {
@@ -185,8 +190,17 @@ export function CustomerDetail() {
             <ul className="space-y-2">
               {portalUsers.map((user) => (
                 <li key={user.id} className="rounded-lg border border-border p-3">
-                  <div className="text-sm font-medium text-slate-800">{user.full_name}</div>
-                  <div className="break-all text-xs text-slate-500">{user.email}</div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-slate-800">{user.full_name}</div>
+                      <div className="break-all text-xs text-slate-500">{user.email}</div>
+                    </div>
+                    {canInviteCustomer && isSupabaseConfigured && user.status !== "inaktiverad" && (
+                      <button onClick={() => setResetting(user)} title="Nytt lösenord" className="shrink-0 text-slate-400 hover:text-orange-600">
+                        <KeyRound size={15} />
+                      </button>
+                    )}
+                  </div>
                   <span className={`mt-2 inline-flex status-pill ${user.status === "aktiv" ? "bg-green-100 text-green-700" : user.status === "inbjuden" ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-500"}`}>
                     {user.status === "aktiv" ? "Aktiv" : user.status === "inbjuden" ? "Inbjuden" : "Inaktiverad"}
                   </span>
@@ -233,9 +247,22 @@ export function CustomerDetail() {
           }
           setInviteError(null);
           setInviteOpen(false);
+          if (result.password) setCreated({ name: data.full_name, email: data.email, password: result.password });
           return true;
         }}
       />
+
+      {notice && <NoticeModal title="Länk skickad" message={notice} onClose={() => setNotice(null)} />}
+      {resetting && (
+        <ResetPasswordModal
+          target={resetting}
+          onClose={() => setResetting(null)}
+          onError={(reason) => { setResetting(null); setInviteError(reason); }}
+          onEmailed={(message) => { setResetting(null); setNotice(message); }}
+          onGenerated={(info) => { markAccountActive(resetting.id); setResetting(null); setCreated(info); }}
+        />
+      )}
+      {created && <GeneratedPasswordModal info={created} onClose={() => setCreated(null)} />}
     </div>
   );
 }
@@ -249,12 +276,13 @@ function CustomerInviteModal({
   open: boolean;
   contacts: ReturnType<typeof useStore>["contactPersons"];
   onClose: () => void;
-  onInvite: (data: { contact_person_id: string | null; full_name: string; email: string }) => Promise<boolean>;
+  onInvite: (data: { contact_person_id: string | null; full_name: string; email: string; create_with_password: boolean }) => Promise<boolean>;
 }) {
   const [contactId, setContactId] = useState("");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
+  const [withPassword, setWithPassword] = useState(true);
 
   function selectContact(id: string) {
     setContactId(id);
@@ -272,7 +300,7 @@ function CustomerInviteModal({
         onSubmit={async (event) => {
           event.preventDefault();
           setSending(true);
-          const sent = await onInvite({ contact_person_id: contactId || null, full_name: fullName.trim(), email: email.trim() });
+          const sent = await onInvite({ contact_person_id: contactId || null, full_name: fullName.trim(), email: email.trim(), create_with_password: withPassword });
           setSending(false);
           if (sent) {
             setContactId("");
@@ -295,10 +323,19 @@ function CustomerInviteModal({
         <Field label="E-post *">
           <input required type="email" className={inputClass} value={email} onChange={(event) => setEmail(event.target.value)} />
         </Field>
+        {isSupabaseConfigured && (
+          <label className="flex items-start gap-2 text-sm text-slate-700">
+            <input type="checkbox" className="mt-0.5" checked={withPassword} onChange={(event) => setWithPassword(event.target.checked)} />
+            <span>
+              Skapa direkt med genererat lösenord
+              <span className="block text-xs text-slate-500">Kunden blir aktiv direkt, utan e-postbekräftelse. Lösenordet visas en gång efteråt. Avmarkera för att i stället skicka en inbjudan med e-post.</span>
+            </span>
+          </label>
+        )}
         <p className="text-xs text-slate-500">Användaren får endast åtkomst till det här företagets projekt och kundsynliga information.</p>
         <div className="flex justify-end gap-2 border-t border-border pt-4">
           <Button type="button" variant="secondary" onClick={onClose} disabled={sending}>Avbryt</Button>
-          <Button type="submit" disabled={sending}>{sending ? "Skickar..." : "Skicka inbjudan"}</Button>
+          <Button type="submit" disabled={sending}>{sending ? "Arbetar..." : withPassword ? "Skapa användare" : "Skicka inbjudan"}</Button>
         </div>
       </form>
     </Modal>

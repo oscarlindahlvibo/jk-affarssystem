@@ -13,7 +13,7 @@ type InviteRequest = {
   customer_id?: string;
   supplier_id?: string;
   contact_person_id?: string | null;
-  // Bara för interna konton: skapa direkt med genererat lösenord, utan e-postbekräftelse.
+  // Skapa direkt med genererat lösenord, utan e-postbekräftelse (aktiv direkt).
   create_with_password?: boolean;
   // Befintlig personal: nytt lösenord (generate = visas för admin, email = återställningslänk per e-post).
   action?: "reset_password";
@@ -117,9 +117,13 @@ Deno.serve(async (request) => {
     const userId = body.user_id ?? "";
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) return json({ error: "Ogiltig användare" }, 400, origin);
     if (body.mode !== "generate" && body.mode !== "email") return json({ error: "Ogiltigt läge" }, 400, origin);
-    const targetResponse = await api(`/rest/v1/profiles?id=eq.${userId}&org_id=eq.${encodeURIComponent(admin.org_id)}&select=id,email,status,full_name`);
-    const targets = targetResponse.ok ? await targetResponse.json() : [];
-    const target = Array.isArray(targets) ? targets[0] : null;
+    let target: { id: string; email: string; status: string } | null = null;
+    let targetTable = "profiles";
+    for (const table of ["profiles", "customer_users", "carrier_users"]) {
+      const targetResponse = await api(`/rest/v1/${table}?id=eq.${userId}&org_id=eq.${encodeURIComponent(admin.org_id)}&select=id,email,status`);
+      const targets = targetResponse.ok ? await targetResponse.json() : [];
+      if (Array.isArray(targets) && targets[0]) { target = targets[0]; targetTable = table; break; }
+    }
     if (!target) return json({ error: "Användaren hittades inte." }, 404, origin);
     if (target.status === "inaktiverad") return json({ error: "Användaren är inaktiverad. Aktivera kontot först." }, 409, origin);
 
@@ -145,7 +149,7 @@ Deno.serve(async (request) => {
       return json({ error: "Lösenordet kunde inte ändras." }, 502, origin);
     }
     if (target.status === "inbjuden") {
-      await api(`/rest/v1/profiles?id=eq.${userId}`, { method: "PATCH", body: JSON.stringify({ status: "aktiv" }) });
+      await api(`/rest/v1/${targetTable}?id=eq.${userId}`, { method: "PATCH", body: JSON.stringify({ status: "aktiv" }) });
     }
     return json({ ok: true, mode: "generate", password: newPassword, status: "aktiv" }, 200, origin);
   }
@@ -228,7 +232,7 @@ Deno.serve(async (request) => {
     };
   }
 
-  const withPassword = accountType === "internal" && body.create_with_password === true;
+  const withPassword = body.create_with_password === true;
   const password = withPassword ? generatePassword() : null;
   if (withPassword) profilePayload = { ...profilePayload, status: "aktiv" };
 

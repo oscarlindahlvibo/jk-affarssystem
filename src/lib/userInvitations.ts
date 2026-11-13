@@ -37,13 +37,14 @@ export async function inviteCustomerAccount(data: {
   contact_person_id: string | null;
   full_name: string;
   email: string;
+  create_with_password?: boolean;
 }): Promise<InviteResult<CustomerUser>> {
   if (!supabase) return { ok: false, reason: "Supabase är inte konfigurerat." };
   const { data: response, error } = await supabase.functions.invoke("invite-user", {
     body: { account_type: "customer", ...data },
   });
   if (error) return { ok: false, reason: await invitationError(error, "Inbjudan kunde inte skickas.") };
-  return { ok: true, user: response.user as CustomerUser };
+  return { ok: true, user: response.user as CustomerUser, password: typeof response.password === "string" ? response.password : undefined };
 }
 
 export async function inviteCarrierAccount(data: {
@@ -59,7 +60,7 @@ export async function inviteCarrierAccount(data: {
   return { ok: true, user: response.user as CarrierUser };
 }
 
-export async function resetPersonnelPassword(
+export async function resetAccountPassword(
   userId: string,
   mode: "generate" | "email"
 ): Promise<{ ok: true; password?: string } | { ok: false; reason: string }> {
